@@ -1,143 +1,138 @@
 'use client';
 import Link from 'next/link';
-import { PageWrapper } from '@/components/ui/PageWrapper';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { BottomNav } from '@/components/ui/BottomNav';
 import { mockUser, mockTrekkingen, mockLeden } from '@/lib/mock-data';
 
-const navItems = [
-  { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
-  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
-  { href: '/ranglijst', icon: '📈', label: 'Ranglijst' },
-  { href: '/kas', icon: '💰', label: 'Kas' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
-];
-
 export default function DashboardPage() {
-  const lasteTrekking = mockTrekkingen[0];
-
   return (
-    <PageWrapper>
-      {/* Header */}
-      <div className="px-6 pt-[max(16px,env(safe-area-inset-top))] pb-5">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[12px] font-semibold text-[#4a9eff] tracking-[0.5px]">Goedemorgen 👋</span>
-          <Link href="/profiel">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4a9eff] to-[#2070cc] flex items-center justify-center text-lg border-2 border-[rgba(74,158,255,0.3)]">👩‍🦱</div>
-          </Link>
-        </div>
-        <h1 className="font-serif text-[32px] tracking-[-1px]">{mockUser.naam.split(' ')[0]}</h1>
-      </div>
-
-      {/* Pot hero card */}
-      <div className="px-5 mb-5">
-        <div className="bg-gradient-to-br from-[#1a3a5c] to-[#0f2438] border border-[rgba(74,158,255,0.22)] rounded-[22px] p-6 relative overflow-hidden">
-          <div className="absolute top-[-50px] right-[-50px] w-[200px] h-[200px] bg-[radial-gradient(circle,rgba(74,158,255,0.15)_0%,transparent_70%)] rounded-full" />
-          <div className="text-[12px] font-semibold tracking-[1.5px] uppercase text-[#4a9eff] mb-2">💰 Huidige pot</div>
-          <div className="font-serif text-[56px] tracking-[-2px] leading-none mb-1">€1.247</div>
-          <div className="text-[13px] text-[#7a9ab8] mb-5">Seizoen 2026 · Ronde 22 · 17 deelnemers</div>
-          <div className="flex gap-3">
-            <Link href="/betalen" className="flex-1 bg-gradient-to-br from-[#4a9eff] to-[#2070cc] text-white rounded-[14px] py-[14px] text-[14px] font-semibold text-center shadow-[0_6px_20px_rgba(74,158,255,0.3)]">
-              💳 Betaal €4
-            </Link>
-            <Link href="/trekkingen" className="flex-1 bg-[rgba(255,255,255,0.08)] border border-[rgba(74,158,255,0.2)] text-white rounded-[14px] py-[14px] text-[14px] font-semibold text-center">
-              🎱 Trekkingen
+    <>
+      <div className="bg-grid" />
+      <div className="page">
+        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.5px' }}>Goedemorgen 👋</span>
+            <Link href="/profiel">
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#4a9eff,#2070cc)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: '2px solid rgba(74,158,255,0.3)' }}>👩‍🦱</div>
             </Link>
           </div>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, lineHeight: 1.1 }}>{mockUser.naam.split(' ')[0]}</div>
         </div>
-      </div>
 
-      {/* Betaalstatus */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Betaalstatus</div>
-        <Card className="p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[12px] bg-[#0d2a1a] flex items-center justify-center text-[18px]">✅</div>
-          <div className="flex-1">
-            <div className="text-[14px] font-semibold">Ronde 22 — €4,00</div>
-            <div className="text-[12px] text-[#7a9ab8]">Betaald · 30 mei 2026 · iDEAL</div>
+        {/* Pot hero */}
+        <div style={{ margin: '0 20px 16px' }}>
+          <div style={{ background: 'linear-gradient(135deg,#1a3a5c 0%,#0f2438 100%)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 20, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
+            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>💰 Huidige pot</div>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>€1.247</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Seizoen 2026 · Ronde 22 · 17 deelnemers</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💳 Betaal €4</Link>
+              <Link href="/trekkingen" style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(74,158,255,0.2)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>🎱 Trekkingen</Link>
+            </div>
           </div>
-          <Badge variant="green">Betaald</Badge>
-        </Card>
-      </div>
-
-      {/* Stats */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Dit seizoen</div>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { icon: '🎯', value: '3.4', label: 'Gem. goed', color: 'text-[#4a9eff]' },
-            { icon: '🏆', value: '3×', label: 'Gewonnen', color: 'text-[#f0c060]' },
-            { icon: '💶', value: '€75', label: 'Verdiend', color: 'text-[#34c97a]' },
-            { icon: '📊', value: '#2', label: 'Positie', color: 'text-[#4a9eff]' },
-          ].map((s) => (
-            <Card key={s.label} className="p-4">
-              <div className="text-[18px] mb-2">{s.icon}</div>
-              <div className={`font-serif text-[26px] tracking-[-0.8px] ${s.color}`}>{s.value}</div>
-              <div className="text-[11px] text-[#7a9ab8] mt-1">{s.label}</div>
-            </Card>
-          ))}
         </div>
-      </div>
 
-      {/* Laatste trekking */}
-      <div className="px-5 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8]">Laatste trekking</div>
-          <Link href="/trekkingen" className="text-[13px] text-[#4a9eff] font-medium">Alle →</Link>
-        </div>
-        <Link href="/trekkingen/21">
-          <Card variant="gold" className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[13px] font-semibold">Ronde 21 · 24 mei</span>
-              <Badge variant="gold">🏆 Winnaar</Badge>
+        {/* Betaalstatus */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div className="section-title">Betaalstatus</div>
+          <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✅</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Ronde 22 — €4,00</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Betaald · 30 mei 2026 · iDEAL</div>
             </div>
-            <div className="flex gap-2 flex-wrap mb-3">
-              {lasteTrekking.nummers.map(n => (
-                <div key={n} className="w-9 h-9 rounded-full bg-[#1a2f45] border border-[rgba(74,158,255,0.2)] flex items-center justify-center text-[12px] font-bold">{n}</div>
-              ))}
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f0c060] to-[#d4a030] text-[#0d1b2a] flex items-center justify-center text-[11px] font-bold">B·12</div>
-            </div>
-            <div className="text-[13px] text-[#7a9ab8]">Jenny Smit · 4 goed · Jij: 3 goed</div>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Deelnemers betaalstatus */}
-      <div className="px-5 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8]">Deelnemers ronde 22</div>
-          <Link href="/leden" className="text-[13px] text-[#4a9eff] font-medium">Alle →</Link>
+            <span className="badge badge-green">Betaald</span>
+          </div>
         </div>
-        <Card className="p-4">
-          <div className="flex flex-wrap gap-2">
-            {mockLeden.slice(0, 6).map((lid, i) => (
-              <div key={lid.id} className="relative">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg border-2 ${i < 4 ? 'border-[#34c97a]' : 'border-[#ffaa33]'}`}
-                  style={{ background: '#1a2f45' }}>
-                  {['👩‍🦱','👩','👨','👩‍🦰','🧔','👦'][i]}
-                </div>
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-[#0d1b2a] ${i < 4 ? 'bg-[#34c97a]' : 'bg-[#ffaa33]'}`} />
+
+        {/* Stats */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div className="section-title">Dit seizoen</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { icon: '🎯', value: '3.4', label: 'Gem. goed', color: 'var(--accent)' },
+              { icon: '🏆', value: '3×', label: 'Gewonnen', color: 'var(--gold)' },
+              { icon: '💶', value: '€75', label: 'Verdiend', color: 'var(--success)' },
+              { icon: '📊', value: '#2', label: 'Positie', color: 'var(--accent)' },
+            ].map(s => (
+              <div key={s.label} className="card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 18, marginBottom: 8 }}>{s.icon}</div>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.8, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{s.label}</div>
               </div>
             ))}
-            <div className="w-10 h-10 rounded-full bg-[#132233] border border-[rgba(74,158,255,0.13)] flex items-center justify-center text-[11px] font-semibold text-[#7a9ab8]">+11</div>
           </div>
-          <div className="mt-3 text-[12px] text-[#7a9ab8]">14 betaald · 3 open · sluiting vrijdag</div>
-        </Card>
+        </div>
+
+        {/* Laatste trekking */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>Laatste trekking</div>
+            <Link href="/trekkingen" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
+          </div>
+          <Link href="/trekkingen/21" style={{ textDecoration: 'none' }}>
+            <div style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.08) 0%,var(--surface) 100%)', border: '1px solid rgba(240,192,96,0.2)', borderRadius: 18, padding: '16px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>Ronde 21 · 24 mei</span>
+                <span className="badge badge-gold">🏆 Winnaar</span>
+              </div>
+              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
+                {[6,16,19,23,24,31].map(n => (
+                  <div key={n} className="bal bal-normal" style={{ width: 34, height: 34, fontSize: 12 }}>{n}</div>
+                ))}
+                <div className="bal bal-bonus" style={{ width: 34, height: 34, fontSize: 11 }}>B·12</div>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)' }}>Jenny Smit · 4 goed · Jij: 3 goed</div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Deelnemers */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>Deelnemers ronde 22</div>
+            <Link href="/leden" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
+          </div>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {['👩‍🦱','👩','👨','👩‍🦰','🧔','👦'].map((e, i) => (
+                <div key={i} style={{ position: 'relative' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, border: `2px solid ${i < 4 ? 'var(--success)' : 'var(--warning)'}` }}>{e}</div>
+                  <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: '50%', background: i < 4 ? 'var(--success)' : 'var(--warning)', border: '2px solid var(--navy)' }} />
+                </div>
+              ))}
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>+11</div>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>14 betaald · 3 open · sluiting vrijdag</div>
+          </div>
+        </div>
+
+        {/* Volgende ronde */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 28 }}>⏰</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Volgende trekking morgen</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Zaterdag 31 mei 2026 · Ronde 22</div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Volgende ronde */}
-      <div className="px-5 mb-6">
-        <Card variant="warning" className="p-4 flex items-center gap-3">
-          <div className="text-[28px]">⏰</div>
-          <div>
-            <div className="text-[14px] font-semibold">Volgende trekking morgen</div>
-            <div className="text-[12px] text-[#7a9ab8]">Zaterdag 31 mei 2026 · Ronde 22</div>
-          </div>
-        </Card>
-      </div>
-
-      <BottomNav items={navItems} />
-    </PageWrapper>
+      <nav className="bottom-nav">
+        {[
+          { href: '/dashboard', icon: '🏠', label: 'Dashboard', active: true },
+          { href: '/trekkingen', icon: '🎱', label: 'Trekkingen', active: false },
+          { href: '/ranglijst', icon: '📈', label: 'Ranglijst', active: false },
+          { href: '/kas', icon: '💰', label: 'Kas', active: false },
+          { href: '/profiel', icon: '👤', label: 'Profiel', active: false },
+        ].map(item => (
+          <Link key={item.href} href={item.href} className={`nav-item ${item.active ? 'active' : ''}`}>
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label">{item.label}</span>
+            <span className="nav-dot" />
+          </Link>
+        ))}
+      </nav>
+    </>
   );
 }

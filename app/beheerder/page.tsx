@@ -1,12 +1,8 @@
 'use client';
 import Link from 'next/link';
-import { PageWrapper } from '@/components/ui/PageWrapper';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { BottomNav } from '@/components/ui/BottomNav';
 
-const navItems = [
-  { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
+const NAV = [
+  { href: '/beheerder', icon: '🏠', label: 'Dashboard', active: true },
   { href: '/leden', icon: '👥', label: 'Leden' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
@@ -15,88 +11,89 @@ const navItems = [
 
 export default function BeheerderPage() {
   return (
-    <PageWrapper>
-      <div className="px-6 pt-[max(16px,env(safe-area-inset-top))] pb-5">
-        <div className="text-[12px] text-[#f0c060] font-semibold tracking-[0.5px] mb-1">👑 Beheerder</div>
-        <h1 className="font-serif text-[32px] tracking-[-1px] mb-1">Dashboard</h1>
-        <div className="inline-flex items-center gap-1 bg-[#2a2010] border border-[rgba(240,192,96,0.3)] text-[#f0c060] text-[11px] font-semibold px-[10px] py-1 rounded-full">⚙️ Systeembeheer</div>
-      </div>
+    <>
+      <div className="bg-grid" />
+      <div className="page">
+        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px' }}>
+          <div style={{ fontSize: 12, color: 'var(--gold)', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 2 }}>👑 Beheerder</div>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, marginBottom: 6 }}>Dashboard</div>
+          <span className="badge badge-gold">⚙️ Systeembeheer</span>
+        </div>
 
-      {/* Systeem overzicht */}
-      <div className="px-5 mb-5">
-        <div className="bg-gradient-to-br from-[#2a1c00] to-[#0d1b2a] border border-[rgba(240,192,96,0.18)] rounded-[22px] p-5 relative overflow-hidden">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-2 h-2 rounded-full bg-[#34c97a] animate-pulse" />
-            <span className="text-[12px] font-semibold tracking-[1.5px] uppercase text-[#f0c060]">Systeem operationeel</span>
+        {/* Systeem overzicht */}
+        <div style={{ margin: '0 20px 16px' }}>
+          <div style={{ background: 'linear-gradient(135deg,#2a1c00,#0d1b2a)', border: '1px solid rgba(240,192,96,0.18)', borderRadius: 22, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', animation: 'pulse 2s ease infinite' }} />
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--gold)' }}>Systeem operationeel</span>
+            </div>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, letterSpacing: -0.5, marginBottom: 16 }}>LottoClub 2026</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+              {[['17','Actieve leden'],['22','Huidige ronde'],['€1.247','Pot']].map(([v,l]) => (
+                <div key={l} style={{ background: 'rgba(240,192,96,0.08)', border: '1px solid rgba(240,192,96,0.12)', borderRadius: 12, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--gold)' }}>{v}</div>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{l}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="font-serif text-[28px] tracking-[-0.5px] mb-4">LottoClub 2026</div>
-          <div className="grid grid-cols-3 gap-3">
-            {[['17','Actieve leden'],['22','Huidige ronde'],['€1.247','Pot']].map(([v,l]) => (
-              <div key={l} className="bg-[rgba(240,192,96,0.08)] border border-[rgba(240,192,96,0.12)] rounded-[12px] p-3 text-center">
-                <div className="text-[17px] font-bold text-[#f0c060]">{v}</div>
-                <div className="text-[10px] text-[#7a9ab8] mt-0.5">{l}</div>
-              </div>
+        </div>
+
+        {/* Snelle acties */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div className="section-title">Snelle acties</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[{icon:'🎱',label:'Trekking invoeren',href:'/trekkingen',bg:'var(--accent-soft)'},{icon:'👥',label:'Leden beheren',href:'/leden',bg:'var(--gold-soft)'},{icon:'💰',label:'Kasboek',href:'/kas',bg:'var(--success-soft)'},{icon:'⚙️',label:'Instellingen',href:'/beheerder/admin',bg:'var(--purple-soft)'}].map(a => (
+              <Link key={a.label} href={a.href} style={{ textDecoration: 'none' }}>
+                <div style={{ background: a.bg, border: '1px solid var(--border)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>{a.icon}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)' }}>{a.label}</span>
+                </div>
+              </Link>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Acties */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Snelle acties</div>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { icon: '🎱', label: 'Trekking invoeren', href: '/trekkingen', color: 'bg-[#1e3a5f]' },
-            { icon: '👥', label: 'Leden beheren', href: '/leden', color: 'bg-[#2a2010]' },
-            { icon: '💰', label: 'Kasboek', href: '/kas', color: 'bg-[#0d2a1a]' },
-            { icon: '⚙️', label: 'Instellingen', href: '/beheerder/admin', color: 'bg-[#1e1535]' },
-          ].map((a) => (
-            <Link key={a.label} href={a.href}>
-              <div className={`${a.color} border border-[rgba(74,158,255,0.13)] rounded-[16px] p-4 flex items-center gap-3`}>
-                <span className="text-[24px]">{a.icon}</span>
-                <span className="text-[14px] font-semibold">{a.label}</span>
+        {/* Alerts */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div className="section-title">Vereist aandacht</div>
+          {[{icon:'⚠️',title:'3 leden niet betaald',sub:'Ronde 22 · Sluiting vrijdag'},{icon:'📷',title:'2 betaalbewijzen wachten',sub:'Rob de Vries, Els Bakker'}].map(a => (
+            <div key={a.title} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+              <span style={{ fontSize: 20 }}>{a.icon}</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{a.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{a.sub}</div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
+
+        {/* Seizoen */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <div className="section-title">Seizoen 2026</div>
+          <div style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.08),var(--surface))', border: '1px solid rgba(240,192,96,0.2)', borderRadius: 18, padding: '16px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Seizoen 2026</span>
+              <span className="badge badge-green">● Actief</span>
+            </div>
+            <div style={{ display: 'flex', gap: 16 }}>
+              {[['22','Rondes'],['17','Leden'],['€1.247','Pot']].map(([v,l]) => (
+                <div key={l}><div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold)' }}>{v}</div><div style={{ fontSize: 11, color: 'var(--muted)' }}>{l}</div></div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Alerts */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Vereist aandacht</div>
-        <Card variant="warning" className="p-4 mb-[10px] flex items-start gap-3">
-          <span className="text-[20px]">⚠️</span>
-          <div>
-            <div className="text-[14px] font-semibold mb-1">3 leden niet betaald</div>
-            <div className="text-[12px] text-[#7a9ab8]">Ronde 22 · Sluiting vrijdag</div>
-          </div>
-        </Card>
-        <Card variant="warning" className="p-4 flex items-start gap-3">
-          <span className="text-[20px]">📷</span>
-          <div>
-            <div className="text-[14px] font-semibold mb-1">2 betaalbewijzen wachten</div>
-            <div className="text-[12px] text-[#7a9ab8]">Rob de Vries, Els Bakker</div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Seizoen */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Seizoen 2026</div>
-        <Card variant="gold" className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[15px] font-semibold">Seizoen 2026</span>
-            <Badge variant="green">● Actief</Badge>
-          </div>
-          <div className="flex gap-4">
-            {[['22','Rondes'],['17','Leden'],['€1.247','Pot']].map(([v,l]) => (
-              <div key={l}><div className="text-[15px] font-semibold text-[#f0c060]">{v}</div><div className="text-[11px] text-[#7a9ab8]">{l}</div></div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      <BottomNav items={navItems} accentColor="gold" />
-    </PageWrapper>
+      <nav className="bottom-nav">
+        {NAV.map(item => (
+          <Link key={item.href} href={item.href} className={`nav-item ${'active' in item && item.active ? 'active' : ''}`}>
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label" style={'active' in item && item.active ? { color: 'var(--gold)' } : {}}>{item.label}</span>
+            <span className="nav-dot" style={{ background: 'var(--gold)' }} />
+          </Link>
+        ))}
+      </nav>
+    </>
   );
 }

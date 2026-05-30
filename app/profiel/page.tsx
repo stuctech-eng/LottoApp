@@ -1,132 +1,127 @@
 'use client';
 import Link from 'next/link';
-import { PageWrapper } from '@/components/ui/PageWrapper';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { BottomNav } from '@/components/ui/BottomNav';
-import { TicketCard } from '@/components/lotto/TicketCard';
 import { mockUser } from '@/lib/mock-data';
 
-const navItems = [
+const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/ranglijst', icon: '📈', label: 'Ranglijst' },
   { href: '/kas', icon: '💰', label: 'Kas' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
+  { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
 ];
 
 export default function ProfielPage() {
   return (
-    <PageWrapper>
-      {/* Hero */}
-      <div className="bg-gradient-to-b from-[#1a3a5c] to-[#0d1b2a] px-6 pt-[max(16px,env(safe-area-inset-top))] pb-7">
-        <Link href="/dashboard" className="w-9 h-9 rounded-[11px] bg-[rgba(255,255,255,0.08)] border border-[rgba(74,158,255,0.13)] flex items-center justify-center text-lg mb-5">←</Link>
-        <div className="flex items-start gap-4">
-          <div className="relative flex-shrink-0">
-            <div className="w-[72px] h-[72px] rounded-full bg-gradient-to-br from-[#4a9eff] to-[#2070cc] flex items-center justify-center text-[30px] border-[3px] border-[rgba(74,158,255,0.3)]">👩‍🦱</div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-[22px] h-[22px] rounded-full bg-[#f0c060] flex items-center justify-center text-[11px] font-bold text-[#0d1b2a] border-2 border-[#0d1b2a]">2</div>
-          </div>
-          <div className="flex-1">
-            <h1 className="font-serif text-[26px] tracking-[-0.5px] mb-1">{mockUser.naam}</h1>
-            <p className="text-[13px] text-[#7a9ab8] mb-2">Lid sinds {mockUser.lidSinds} · 22 rondes</p>
-            <div className="flex gap-2 flex-wrap">
-              <Badge variant="blue">🎱 Lid</Badge>
-              <Badge variant="green">✓ Betaald</Badge>
-              <Badge variant="gold">🏆 #2 Ranglijst</Badge>
+    <>
+      <div className="bg-grid" />
+      <div className="page">
+        {/* Hero */}
+        <div style={{ background: 'linear-gradient(180deg,#1a3a5c 0%,var(--navy) 100%)', padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 28px' }}>
+          <Link href="/dashboard" style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 20, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#4a9eff,#2070cc)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, border: '3px solid rgba(74,158,255,0.3)' }}>👩‍🦱</div>
+              <div style={{ position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: '50%', background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--navy)', border: '2px solid var(--navy)' }}>2</div>
             </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-[10px] mt-6">
-          {[
-            { value: '3×', label: 'Gewonnen', color: 'text-[#f0c060]' },
-            { value: '€75', label: 'Verdiend', color: 'text-[#34c97a]' },
-            { value: '3.4', label: 'Gem. goed', color: 'text-white' },
-            { value: '48', label: 'Punten', color: 'text-white' },
-          ].map((s) => (
-            <div key={s.label} className="bg-[rgba(255,255,255,0.05)] border border-[rgba(74,158,255,0.13)] rounded-[13px] p-3 text-center">
-              <div className={`text-[18px] font-bold tracking-[-0.5px] ${s.color}`}>{s.value}</div>
-              <div className="text-[10px] text-[#7a9ab8] mt-0.5">{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="h-6" />
-
-      {/* Tickets */}
-      <div className="px-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8]">Lotto tickets</div>
-          <span className="text-[13px] text-[#4a9eff] font-medium cursor-pointer">Bewerken</span>
-        </div>
-        {mockUser.tickets.map((ticket, i) => (
-          <TicketCard key={ticket.naam} ticket={ticket} index={i} />
-        ))}
-      </div>
-
-      {/* Betaalstatus */}
-      <div className="px-5 mb-6">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Betaalstatus ronde 22</div>
-        <Link href="/betalen">
-          <Card className="p-4 flex items-center gap-3">
-            <div className="w-[42px] h-[42px] rounded-[13px] bg-[#0d2a1a] flex items-center justify-center text-[19px]">✅</div>
-            <div className="flex-1">
-              <div className="text-[14px] font-semibold">Ronde 22 — €4,00</div>
-              <div className="text-[12px] text-[#7a9ab8]">30 mei 2026 · 11:43 · iDEAL</div>
-            </div>
-            <Badge variant="green">Betaald</Badge>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Statistieken */}
-      <div className="px-5 mb-6">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Seizoen statistieken</div>
-        <div className="grid grid-cols-2 gap-[10px]">
-          {[
-            { icon: '🎯', value: '3.4', label: 'Gem. goed per ronde', sub: '↑ Beter dan 68% leden', color: 'text-[#4a9eff]' },
-            { icon: '🏆', value: '5', label: 'Beste resultaat ooit', sub: 'Ronde 14 · 5 goed', color: 'text-[#f0c060]' },
-            { icon: '📊', value: '22', label: 'Deelnames totaal', sub: '', color: 'text-white' },
-            { icon: '💶', value: '€75', label: 'Totaal gewonnen', sub: '', color: 'text-[#34c97a]' },
-            { icon: '🔥', value: '4', label: 'Huidige reeks', sub: '4 rondes ≥3 goed', color: 'text-white' },
-            { icon: '📈', value: '#2', label: 'Positie ranglijst', sub: '↑ Was #3 vorige week', color: 'text-[#4a9eff]' },
-          ].map((s) => (
-            <Card key={s.label} className="p-4">
-              <div className="text-[20px] mb-[10px]">{s.icon}</div>
-              <div className={`font-serif text-[24px] tracking-[-0.8px] ${s.color}`}>{s.value}</div>
-              <div className="text-[11px] text-[#7a9ab8] mt-0.5">{s.label}</div>
-              {s.sub && <div className="text-[11px] text-[#34c97a] mt-1 font-medium">{s.sub}</div>}
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Recente resultaten */}
-      <div className="px-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8]">Recente resultaten</div>
-          <Link href="/trekkingen" className="text-[13px] text-[#4a9eff] font-medium">Alle →</Link>
-        </div>
-        {[
-          { datum: '24 mei', nummers: [6,16,19,23,24,31], hits: [6,19,31], score: '3 goed 🥈' },
-          { datum: '17 mei', nummers: [10,12,15,27,34,40], hits: [10,15,34,40], score: '4 goed 🥇' },
-          { datum: '10 mei', nummers: [3,11,22,28,31,38], hits: [31], score: '1 goed' },
-        ].map((r) => (
-          <Link key={r.datum} href="/trekkingen/21">
-            <Card className="p-[14px_16px] flex items-center gap-3 mb-2">
-              <span className="text-[12px] text-[#7a9ab8] w-14 flex-shrink-0">{r.datum}</span>
-              <div className="flex gap-1 flex-1 flex-wrap">
-                {r.nummers.map(n => (
-                  <div key={n} className={`w-[26px] h-[26px] rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${r.hits.includes(n) ? 'bg-gradient-to-br from-[#4a9eff] to-[#2070cc] text-white' : 'bg-[#1a2f45] text-[#7a9ab8] border border-[rgba(74,158,255,0.13)]'}`}>{n}</div>
-                ))}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, letterSpacing: -0.5, marginBottom: 4 }}>{mockUser.naam}</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Lid sinds {mockUser.lidSinds} · 22 rondes</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <span className="badge badge-blue">🎱 Lid</span>
+                <span className="badge badge-green">✓ Betaald</span>
+                <span className="badge badge-gold">🏆 #2</span>
               </div>
-              <span className="text-[13px] font-semibold whitespace-nowrap">{r.score}</span>
-            </Card>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 20 }}>
+            {[['3×','Gewonnen','var(--gold)'],['€75','Verdiend','var(--success)'],['3.4','Gem. goed','var(--white)'],['48','Punten','var(--white)']].map(([v,l,c]) => (
+              <div key={l} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 13, padding: '11px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: c, letterSpacing: -0.5 }}>{v}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ height: 20 }} />
+
+        {/* Tickets */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>Lotto tickets</div>
+            <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, cursor: 'pointer' }}>Bewerken</span>
+          </div>
+          {mockUser.tickets.map((ticket, i) => (
+            <div key={ticket.naam} className="card" style={{ padding: '16px 18px', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>🎱 {ticket.naam}</span>
+                <span className={`badge ${i===0?'badge-blue':'badge-gold'}`}>{i===0?'Hoofdticket':'Extra'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {ticket.nummers.map(n => {
+                  const hot = [10,19,8,44].includes(n);
+                  return <div key={n} style={{ width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, background: hot ? 'var(--gold-soft)' : 'var(--navy-mid)', border: `1.5px solid ${hot ? 'rgba(240,192,96,0.4)' : 'var(--border)'}`, color: hot ? 'var(--gold)' : 'var(--white)' }}>{n}</div>;
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Statistieken */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">Seizoen statistieken</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[
+              { icon:'🎯', value:'3.4', label:'Gem. goed per ronde', sub:'↑ Beter dan 68% leden', color:'var(--accent)' },
+              { icon:'🏆', value:'5', label:'Beste resultaat ooit', sub:'Ronde 14 · 5 goed', color:'var(--gold)' },
+              { icon:'📊', value:'22', label:'Deelnames totaal', sub:'', color:'var(--white)' },
+              { icon:'💶', value:'€75', label:'Totaal gewonnen', sub:'', color:'var(--success)' },
+              { icon:'🔥', value:'4', label:'Huidige reeks', sub:'4 rondes ≥3 goed', color:'var(--white)' },
+              { icon:'📈', value:'#2', label:'Positie ranglijst', sub:'↑ Was #3 vorige week', color:'var(--accent)' },
+            ].map(s => (
+              <div key={s.label} className="card" style={{ padding: 14 }}>
+                <div style={{ fontSize: 20, marginBottom: 8 }}>{s.icon}</div>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, letterSpacing: -0.8, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{s.label}</div>
+                {s.sub && <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4, fontWeight: 500 }}>{s.sub}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recente resultaten */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>Recente resultaten</div>
+            <Link href="/trekkingen" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
+          </div>
+          {[
+            { datum:'24 mei', nummers:[6,16,19,23,24,31], hits:[6,19,31], score:'3 goed 🥈' },
+            { datum:'17 mei', nummers:[10,12,15,27,34,40], hits:[10,15,34,40], score:'4 goed 🥇' },
+            { datum:'10 mei', nummers:[3,11,22,28,31,38], hits:[31], score:'1 goed' },
+          ].map(r => (
+            <Link key={r.datum} href="/trekkingen/21" style={{ textDecoration: 'none' }}>
+              <div className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)', width: 52, flexShrink: 0 }}>{r.datum}</span>
+                <div style={{ display: 'flex', gap: 4, flex: 1, flexWrap: 'wrap' }}>
+                  {r.nummers.map(n => <div key={n} style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: r.hits.includes(n) ? 'linear-gradient(135deg,#4a9eff,#2070cc)' : 'var(--navy-mid)', color: r.hits.includes(n) ? 'white' : 'var(--muted)', border: r.hits.includes(n) ? 'none' : '1px solid var(--border)' }}>{n}</div>)}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)', whiteSpace: 'nowrap' }}>{r.score}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <nav className="bottom-nav">
+        {NAV.map(item => (
+          <Link key={item.href} href={item.href} className={`nav-item ${'active' in item && item.active ? 'active' : ''}`}>
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label">{item.label}</span>
+            <span className="nav-dot" />
           </Link>
         ))}
-      </div>
-
-      <BottomNav items={navItems} />
-    </PageWrapper>
+      </nav>
+    </>
   );
 }

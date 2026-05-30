@@ -1,13 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { PageWrapper } from '@/components/ui/PageWrapper';
-import { Card } from '@/components/ui/Card';
-import { BottomNav } from '@/components/ui/BottomNav';
 import { mockUser } from '@/lib/mock-data';
 
-const navItems = [
+const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
-  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen', active: true },
   { href: '/ranglijst', icon: '📈', label: 'Ranglijst' },
   { href: '/kas', icon: '💰', label: 'Kas' },
   { href: '/profiel', icon: '👤', label: 'Profiel' },
@@ -18,102 +15,102 @@ const bonusBal = 12;
 
 export default function TrekkingDetailPage() {
   return (
-    <PageWrapper>
-      {/* Hero */}
-      <div className="bg-gradient-to-b from-[#1a3a5c] to-[#0d1b2a] px-6 pt-[max(16px,env(safe-area-inset-top))] pb-8">
-        <Link href="/trekkingen" className="w-9 h-9 rounded-[11px] bg-[rgba(255,255,255,0.08)] border border-[rgba(74,158,255,0.13)] flex items-center justify-center text-lg mb-5">←</Link>
-        <div className="text-[12px] font-semibold tracking-[1.5px] uppercase text-[#4a9eff] mb-1">Trekking resultaat</div>
-        <h1 className="font-serif text-[32px] tracking-[-0.8px] mb-1">Ronde 21</h1>
-        <p className="text-[14px] text-[#7a9ab8] mb-7">Zaterdag 24 mei 2026 · Nederlandse Lotto</p>
-
-        {/* Ballen */}
-        <div className="flex gap-[10px] flex-wrap mb-5">
-          {getrokken.map((n, i) => (
-            <div key={n} className="w-[52px] h-[52px] rounded-full bg-[#1a2f45] border-2 border-[rgba(74,158,255,0.2)] flex items-center justify-center text-[17px] font-bold"
-              style={{ animation: `ballDrop 0.4s ease ${0.1 + i * 0.1}s both` }}>
-              {n}
+    <>
+      <div className="bg-grid" />
+      <div className="page">
+        {/* Hero */}
+        <div style={{ background: 'linear-gradient(180deg,#1a3a5c 0%,var(--navy) 100%)', padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 28px' }}>
+          <Link href="/trekkingen" style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 20, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
+          <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>Trekking resultaat</div>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -0.8, marginBottom: 4 }}>Ronde 21</div>
+          <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 24 }}>Zaterdag 24 mei 2026 · Nederlandse Lotto</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+            {getrokken.map((n, i) => (
+              <div key={n} className="bal bal-normal" style={{ width: 52, height: 52, fontSize: 17, animation: `ballDrop 0.4s ease ${0.1+i*0.1}s both` }}>{n}</div>
+            ))}
+            <div className="bal bal-bonus" style={{ width: 52, height: 52, fontSize: 13, animation: 'ballDrop 0.4s ease 0.7s both' }}>B·{bonusBal}</div>
+          </div>
+          {/* Winnaar banner */}
+          <div style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.15),rgba(240,192,96,0.05))', border: '1px solid rgba(240,192,96,0.25)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 32 }}>🏆</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 3 }}>Winnaar</div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Jenny Smit</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Formulier A · 4 goed</div>
             </div>
-          ))}
-          <div className="w-[52px] h-[52px] rounded-full bg-gradient-to-br from-[#f0c060] to-[#d4a030] text-[#0d1b2a] flex items-center justify-center text-[13px] font-bold"
-            style={{ animation: 'ballDrop 0.4s ease 0.7s both' }}>
-            B·{bonusBal}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--gold)' }}>€25</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Uitbetaald</div>
+            </div>
           </div>
         </div>
 
-        {/* Winnaar banner */}
-        <div className="bg-[linear-gradient(135deg,rgba(240,192,96,0.15)_0%,rgba(240,192,96,0.05)_100%)] border border-[rgba(240,192,96,0.25)] rounded-[16px] p-4 flex items-center gap-3">
-          <div className="text-[32px]">🏆</div>
-          <div className="flex-1">
-            <div className="text-[11px] font-semibold tracking-[1px] uppercase text-[#f0c060] mb-1">Winnaar</div>
-            <div className="text-[18px] font-bold">Jenny Smit</div>
-            <div className="text-[12px] text-[#7a9ab8] mt-0.5">Formulier A · 4 goed</div>
-          </div>
-          <div className="text-right flex-shrink-0">
-            <div className="text-[22px] font-bold text-[#f0c060]">€25</div>
-            <div className="text-[11px] text-[#7a9ab8]">Uitbetaald</div>
-          </div>
-        </div>
-      </div>
+        <div style={{ height: 20 }} />
 
-      <div className="h-6" />
-
-      {/* Jouw resultaten */}
-      <div className="px-5 mb-6">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Jouw resultaten</div>
-        {mockUser.tickets.map((ticket, ti) => {
-          const hits = ticket.nummers.filter(n => getrokken.includes(n));
-          return (
-            <Card key={ticket.naam} className="p-[18px_20px] mb-[10px]">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[15px] font-semibold">🎱 {ticket.naam}</span>
-                <div className={`text-[13px] font-bold px-[14px] py-[6px] rounded-full ${hits.length >= 3 ? 'bg-[#1e3a5f] text-[#4a9eff] border border-[rgba(74,158,255,0.25)]' : 'bg-[#0f1e2e] text-[#7a9ab8] border border-[rgba(74,158,255,0.13)]'}`}>
-                  {hits.length} goed {hits.length >= 4 ? '🥇' : hits.length >= 3 ? '🥈' : ''}
+        {/* Jouw resultaten */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">Jouw resultaten</div>
+          {mockUser.tickets.map((ticket) => {
+            const hits = ticket.nummers.filter(n => getrokken.includes(n));
+            return (
+              <div key={ticket.naam} className="card" style={{ padding: '16px 18px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>🎱 {ticket.naam}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: hits.length >= 3 ? 'var(--accent-soft)' : 'var(--surface2)', color: hits.length >= 3 ? 'var(--accent)' : 'var(--muted)', border: `1px solid ${hits.length >= 3 ? 'rgba(74,158,255,0.25)' : 'var(--border)'}` }}>
+                    {hits.length} goed {hits.length >= 4 ? '🥇' : hits.length >= 3 ? '🥈' : ''}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {ticket.nummers.map(n => {
+                    const hit = getrokken.includes(n);
+                    return (
+                      <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div className={`bal ${hit ? 'bal-hit' : 'bal-miss'}`} style={{ width: 40, height: 40, fontSize: 14, flexShrink: 0 }}>{n}</div>
+                        <span style={{ fontSize: 14, fontWeight: 500, flex: 1, color: hit ? 'var(--white)' : 'var(--muted)' }}>{n} — {hit ? 'getrokken ✅' : 'niet getrokken'}</span>
+                        <span>{hit ? '✅' : '❌'}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                {ticket.nummers.map(n => {
-                  const hit = getrokken.includes(n);
-                  return (
-                    <div key={n} className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[14px] font-bold flex-shrink-0 ${hit ? 'bg-gradient-to-br from-[#4a9eff] to-[#2070cc] text-white shadow-[0_3px_10px_rgba(74,158,255,0.3)]' : 'bg-[#1a2f45] border border-[rgba(74,158,255,0.13)] text-[#7a9ab8]'}`}>{n}</div>
-                      <span className={`text-[14px] font-medium flex-1 ${hit ? 'text-white' : 'text-[#7a9ab8]'}`}>{n} — {hit ? 'getrokken ✅' : 'niet getrokken'}</span>
-                      <span>{hit ? '✅' : '❌'}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
 
-      {/* Alle spelers */}
-      <div className="px-5 mb-6">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Alle deelnemers</div>
-        {[
-          { pos: '1', emoji: '👩', naam: 'Jenny Smit', ticket: 'Formulier A', hits: [6,19,24,31], score: '4 🏆', isMe: false, posColor: 'text-[#f0c060]' },
-          { pos: '2', emoji: '👩‍🦱', naam: 'Neeltje Visser', ticket: 'Formulier A', hits: [6,19,31], score: '3 🥈', isMe: true, posColor: 'text-[#c0c8d0]' },
-          { pos: '3', emoji: '🧔', naam: 'Peter Janssen', ticket: 'Formulier A', hits: [16,23,31], score: '3 🥉', isMe: false, posColor: 'text-[#c08050]' },
-          { pos: '4', emoji: '👨', naam: 'Jan de Boer', ticket: 'Formulier A', hits: [6,19], score: '2', isMe: false, posColor: 'text-[#7a9ab8]' },
-          { pos: '5', emoji: '👩‍🦰', naam: 'Lisa van Dam', ticket: 'Formulier A', hits: [24], score: '1', isMe: false, posColor: 'text-[#7a9ab8]' },
-        ].map((s) => (
-          <div key={s.naam} className={`rounded-[14px] p-[14px_16px] flex items-center gap-3 mb-2 ${s.isMe ? 'bg-[#1e3a5f] border border-[rgba(74,158,255,0.3)]' : 'bg-[#132233] border border-[rgba(74,158,255,0.13)]'}`}>
-            <span className={`text-[14px] font-bold w-[22px] text-center flex-shrink-0 ${s.posColor}`}>{s.pos}</span>
-            <div className="w-[34px] h-[34px] rounded-full bg-[#1a2f45] flex items-center justify-center text-[14px] flex-shrink-0">{s.emoji}</div>
-            <div className="flex-1">
-              <div className="text-[14px] font-medium text-white">{s.naam}{s.isMe && <span className="text-[12px] text-[#4a9eff] font-normal"> (jij)</span>}</div>
-              <div className="flex gap-1 mt-1">
-                {getrokken.map(n => (
-                  <div key={n} className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${s.hits.includes(n) ? 'bg-gradient-to-br from-[#4a9eff] to-[#2070cc] text-white' : 'bg-[#1a2f45] text-[#7a9ab8] border border-[rgba(74,158,255,0.13)]'}`}>{n}</div>
-                ))}
+        {/* Alle spelers */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <div className="section-title">Alle deelnemers</div>
+          {[
+            { pos:'1', emoji:'👩', naam:'Jenny Smit', hits:[6,19,24,31], score:'4 🏆', isMe:false, posColor:'var(--gold)' },
+            { pos:'2', emoji:'👩‍🦱', naam:'Neeltje Visser', hits:[6,19,31], score:'3 🥈', isMe:true, posColor:'#c0c8d0' },
+            { pos:'3', emoji:'🧔', naam:'Peter Janssen', hits:[16,23,31], score:'3 🥉', isMe:false, posColor:'#c08050' },
+            { pos:'4', emoji:'👨', naam:'Jan de Boer', hits:[6,19], score:'2', isMe:false, posColor:'var(--muted)' },
+            { pos:'5', emoji:'👩‍🦰', naam:'Lisa van Dam', hits:[24], score:'1', isMe:false, posColor:'var(--muted)' },
+          ].map(s => (
+            <div key={s.naam} style={{ background: s.isMe ? 'var(--accent-soft)' : 'var(--surface)', border: `1px solid ${s.isMe ? 'rgba(74,158,255,0.3)' : 'var(--border)'}`, borderRadius: 14, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: s.posColor, width: 22, textAlign: 'center', flexShrink: 0 }}>{s.pos}</span>
+              <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--navy-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>{s.emoji}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{s.naam}{s.isMe && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}> (jij)</span>}</div>
+                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                  {getrokken.map(n => <div key={n} className={`bal ${s.hits.includes(n)?'bal-hit':'bal-miss'}`} style={{ width: 24, height: 24, fontSize: 9 }}>{n}</div>)}
+                </div>
               </div>
+              <span style={{ fontSize: 16, fontWeight: 700 }}>{s.score}</span>
             </div>
-            <span className="text-[16px] font-bold text-white">{s.score}</span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      <BottomNav items={navItems} />
-    </PageWrapper>
+      <nav className="bottom-nav">
+        {NAV.map(item => (
+          <Link key={item.href} href={item.href} className={`nav-item ${'active' in item && item.active ? 'active' : ''}`}>
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label">{item.label}</span>
+            <span className="nav-dot" />
+          </Link>
+        ))}
+      </nav>
+    </>
   );
 }

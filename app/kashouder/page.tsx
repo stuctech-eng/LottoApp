@@ -1,13 +1,9 @@
 'use client';
-import Link from 'next/link';
 import { useState } from 'react';
-import { PageWrapper } from '@/components/ui/PageWrapper';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { BottomNav } from '@/components/ui/BottomNav';
+import Link from 'next/link';
 
-const navItems = [
-  { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
+const NAV = [
+  { href: '/kashouder', icon: '🏠', label: 'Dashboard', active: true },
   { href: '/kas', icon: '📒', label: 'Kasboek' },
   { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
@@ -18,89 +14,96 @@ export default function KashouderPage() {
   const [approved, setApproved] = useState<string[]>([]);
 
   return (
-    <PageWrapper>
-      <div className="px-6 pt-[max(16px,env(safe-area-inset-top))] pb-5">
-        <div className="text-[12px] text-[#34c97a] font-semibold mb-1">⚡ Kashouder</div>
-        <h1 className="font-serif text-[32px] tracking-[-1px] mb-1">Dashboard</h1>
-        <div className="inline-flex items-center gap-1 bg-[#0d2a1a] border border-[rgba(52,201,122,0.25)] text-[#34c97a] text-[11px] font-semibold px-[10px] py-1 rounded-full">💳 Kas beheer</div>
-      </div>
+    <>
+      <div className="bg-grid" />
+      <div className="page">
+        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px' }}>
+          <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 2 }}>⚡ Kashouder</div>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, marginBottom: 6 }}>Dashboard</div>
+          <span className="badge badge-green">💳 Kas beheer</span>
+        </div>
 
-      {/* Kas hero */}
-      <div className="px-5 mb-5">
-        <div className="bg-gradient-to-br from-[#0d2a1a] to-[#0d1b2a] border border-[rgba(52,201,122,0.2)] rounded-[22px] p-6">
-          <div className="text-[12px] font-semibold tracking-[1.5px] uppercase text-[#34c97a] mb-2">💰 Totale pot</div>
-          <div className="font-serif text-[52px] tracking-[-2px] leading-none mb-1">€1.247</div>
-          <div className="text-[13px] text-[#7a9ab8] mb-5">Seizoen 2026 · Ronde 22</div>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/kashouder/financieel">
-              <div className="bg-[rgba(52,201,122,0.1)] border border-[rgba(52,201,122,0.2)] rounded-[13px] p-3 text-center">
-                <div className="text-[16px] font-bold text-[#34c97a]">💸 Uitbetalen</div>
+        {/* Kas hero */}
+        <div style={{ margin: '0 20px 16px' }}>
+          <div style={{ background: 'linear-gradient(135deg,#0d2a1a,#0d1b2a)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 22, padding: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--success)', marginBottom: 6 }}>💰 Totale pot</div>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 48, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>€1.247</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Seizoen 2026 · Ronde 22</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Link href="/kashouder/financieel" style={{ background: 'rgba(52,201,122,0.1)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 13, padding: 12, textAlign: 'center', textDecoration: 'none' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>💸 Uitbetalen</div>
+              </Link>
+              <Link href="/kas" style={{ background: 'rgba(52,201,122,0.1)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 13, padding: 12, textAlign: 'center', textDecoration: 'none' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>📒 Kasboek</div>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Betaalvoortgang */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div className="section-title">Betaalvoortgang ronde 22</div>
+          <div className="card" style={{ padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>14 van 17 leden betaald</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)' }}>82%</span>
+            </div>
+            <div style={{ height: 8, background: 'var(--navy-mid)', borderRadius: 10, overflow: 'hidden', marginBottom: 6 }}>
+              <div style={{ height: '100%', width: '82%', borderRadius: 10, background: 'linear-gradient(90deg,var(--success),#20a050)' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)' }}>
+              <span>€0</span><span>€56 van €68</span><span>€68</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Betaalbewijzen */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>Betaalbewijzen</div>
+            <span style={{ fontSize: 12, background: 'var(--warning-soft)', color: 'var(--warning)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>2 open</span>
+          </div>
+          {[{id:'rob',naam:'Rob de Vries'},{id:'els',naam:'Els Bakker'}].map(b => (
+            !approved.includes(b.id) && (
+              <div key={b.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📷</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{b.naam}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>€4,00 · Ronde 22</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setApproved(a => [...a, b.id])} style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>✓</button>
+                  <button style={{ background: 'var(--error-soft)', color: 'var(--error)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>✕</button>
+                </div>
               </div>
-            </Link>
-            <Link href="/kas">
-              <div className="bg-[rgba(52,201,122,0.1)] border border-[rgba(52,201,122,0.2)] rounded-[13px] p-3 text-center">
-                <div className="text-[16px] font-bold text-[#34c97a]">📒 Kasboek</div>
-              </div>
-            </Link>
+            )
+          ))}
+          {approved.length === 2 && <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--success)', padding: '12px 0' }}>✓ Alle bewijzen verwerkt</div>}
+        </div>
+
+        {/* Openstaand */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <div className="section-title">Openstaand</div>
+          <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👦</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Tim Hoekstra</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€4,00 · Ronde 22</div>
+            </div>
+            <button style={{ background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>🔔 Herinner</button>
           </div>
         </div>
       </div>
 
-      {/* Betaalvoortgang */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Betaalvoortgang ronde 22</div>
-        <Card className="p-[18px_20px]">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[14px] font-semibold">14 van 17 leden betaald</span>
-            <span className="text-[14px] font-bold text-[#34c97a]">82%</span>
-          </div>
-          <div className="h-2 bg-[#1a2f45] rounded-full overflow-hidden mb-2">
-            <div className="h-full rounded-full bg-gradient-to-r from-[#34c97a] to-[#20a050]" style={{ width: '82%' }} />
-          </div>
-          <div className="flex justify-between text-[11px] text-[#7a9ab8]">
-            <span>€0</span><span>€56 van €68</span><span>€68</span>
-          </div>
-        </Card>
-      </div>
-
-      {/* Betaalbewijzen */}
-      <div className="px-5 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8]">Betaalbewijzen</div>
-          <span className="text-[12px] bg-[#2a1c00] text-[#ffaa33] px-[10px] py-[3px] rounded-full font-semibold">2 open</span>
-        </div>
-        {[{ id: 'rob', naam: 'Rob de Vries' }, { id: 'els', naam: 'Els Bakker' }].map(b => (
-          !approved.includes(b.id) && (
-            <Card key={b.id} variant="warning" className="p-4 flex items-center gap-3 mb-[10px]">
-              <div className="w-12 h-12 rounded-[12px] bg-[#2a1c00] flex items-center justify-center text-[22px] flex-shrink-0">📷</div>
-              <div className="flex-1">
-                <div className="text-[14px] font-semibold">{b.naam}</div>
-                <div className="text-[12px] text-[#7a9ab8]">€4,00 · Ronde 22</div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setApproved(a => [...a, b.id])} className="bg-[#34c97a] text-[#0d1b2a] rounded-[10px] px-[14px] py-2 text-[12px] font-bold">✓</button>
-                <button className="bg-[#2a0d0d] text-[#ff5a5a] border border-[rgba(255,90,90,0.2)] rounded-[10px] px-[12px] py-2 text-[12px] font-semibold">✕</button>
-              </div>
-            </Card>
-          )
+      <nav className="bottom-nav">
+        {NAV.map(item => (
+          <Link key={item.href} href={item.href} className={`nav-item ${'active' in item && item.active ? 'active' : ''}`}>
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-label" style={'active' in item && item.active ? { color: 'var(--success)' } : {}}>{item.label}</span>
+            <span className="nav-dot" style={{ background: 'var(--success)' }} />
+          </Link>
         ))}
-        {approved.length === 2 && <div className="text-center text-[13px] text-[#34c97a] py-4">✓ Alle bewijzen verwerkt</div>}
-      </div>
-
-      {/* Openstaand */}
-      <div className="px-5 mb-5">
-        <div className="text-[12px] font-semibold uppercase tracking-[1.5px] text-[#7a9ab8] mb-3">Openstaand</div>
-        <Card variant="warning" className="p-4 flex items-center gap-3">
-          <div className="w-[38px] h-[38px] rounded-full bg-[#2a1c00] flex items-center justify-center text-[16px] flex-shrink-0">👦</div>
-          <div className="flex-1">
-            <div className="text-[14px] font-medium">Tim Hoekstra</div>
-            <div className="text-[11px] text-[#7a9ab8]">€4,00 · Ronde 22</div>
-          </div>
-          <button className="bg-[#2a1c00] text-[#ffaa33] border border-[rgba(255,170,51,0.2)] rounded-[10px] px-3 py-[7px] text-[12px] font-semibold">🔔 Herinner</button>
-        </Card>
-      </div>
-
-      <BottomNav items={navItems} accentColor="green" />
-    </PageWrapper>
+      </nav>
+    </>
   );
 }
