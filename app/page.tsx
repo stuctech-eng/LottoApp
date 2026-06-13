@@ -104,12 +104,11 @@ export default function LoginPage() {
     setBezig(true);
     try {
       await loginWithGoogle();
-      router.push('/dashboard');
+      // Pagina navigeert weg naar Google — geen verdere code hier nodig.
+      // Bij terugkomst pakt de useAuth/redirect-result en de bovenste
+      // useEffect (user && router.push('/dashboard')) het verder op.
     } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        showToast('Google inloggen mislukt', '#ff5a5a');
-      }
-    } finally {
+      showToast('Google inloggen mislukt', '#ff5a5a');
       setBezig(false);
     }
   };

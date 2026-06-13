@@ -6,7 +6,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
@@ -57,6 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       setLoading(false);
     });
+
+    // Verwerk Google redirect resultaat (mobiele Safari)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          ensureUserDoc(result.user);
+        }
+      })
+      .catch((err) => {
+        console.error('Google redirect error:', err);
+      });
+
     return unsub;
   }, []);
 
@@ -80,8 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    await ensureUserDoc(result.user);
+    await signInWithRedirect(auth, provider);
+    // Resultaat wordt afgehandeld in de useEffect via getRedirectResult
   };
 
   const sendMagicLink = async (email: string) => {
