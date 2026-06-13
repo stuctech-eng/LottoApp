@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -12,7 +13,7 @@ const NAV = [
 
 type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'audit';
 
-export default function AdminPage() {
+function AdminPageContent() {
   const [tab, setTab] = useState<Tab>('instellingen');
   const [toggles, setToggles] = useState({ bewijs:true, notif:true, herinner:true, winnaar:true });
 
@@ -166,5 +167,13 @@ export default function AdminPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <ProtectedRoute>
+      <AdminPageContent />
+    </ProtectedRoute>
   );
 }

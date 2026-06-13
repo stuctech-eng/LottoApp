@@ -1,8 +1,9 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { mockUser, mockTrekkingen, mockLeden } from '@/lib/mock-data';
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   return (
     <>
       <div className="bg-grid" />
@@ -134,5 +135,13 @@ export default function DashboardPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardPageContent />
+    </ProtectedRoute>
   );
 }

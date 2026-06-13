@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -13,7 +14,7 @@ const banken = [
   { naam:'Andere bank', emoji:'🏦', bg:'#374151' },
 ];
 
-export default function BetalenPage() {
+function BetalenPageContent() {
   const router = useRouter();
   const [stap, setStap] = useState<Stap>('overzicht');
   const [methode, setMethode] = useState<'ideal'|'bewijs'>('ideal');
@@ -136,5 +137,13 @@ export default function BetalenPage() {
         </>}
       </div>
     </>
+  );
+}
+
+export default function BetalenPage() {
+  return (
+    <ProtectedRoute>
+      <BetalenPageContent />
+    </ProtectedRoute>
   );
 }

@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -10,7 +11,7 @@ const NAV = [
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
-export default function TrekkingPage() {
+function TrekkingPageContent() {
   const [modalOpen, setModalOpen] = useState(false);
 
   return (
@@ -139,5 +140,13 @@ export default function TrekkingPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function TrekkingPage() {
+  return (
+    <ProtectedRoute>
+      <TrekkingPageContent />
+    </ProtectedRoute>
   );
 }

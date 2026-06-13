@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState } from 'react';
 import Link from 'next/link';
 import { mockLeden } from '@/lib/mock-data';
@@ -14,7 +15,7 @@ const NAV = [
 const emojis = ['👩‍🦱','👩','👨','👩‍🦰','🧔','👦','👴'];
 const rolColors: Record<string,string> = { lid:'badge-blue', kashouder:'badge-green', beheerder:'badge-gold' };
 
-export default function LedenPage() {
+function LedenPageContent() {
   const [zoek, setZoek] = useState('');
   const [filter, setFilter] = useState('Alle');
   const gefilterd = mockLeden.filter(l => l.naam.toLowerCase().includes(zoek.toLowerCase()));
@@ -82,5 +83,13 @@ export default function LedenPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function LedenPage() {
+  return (
+    <ProtectedRoute>
+      <LedenPageContent />
+    </ProtectedRoute>
   );
 }

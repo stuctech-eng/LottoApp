@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 
 const NAV = [
@@ -9,7 +10,7 @@ const NAV = [
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
 ];
 
-export default function BeheerderPage() {
+function BeheerderPageContent() {
   return (
     <>
       <div className="bg-grid" />
@@ -95,5 +96,13 @@ export default function BeheerderPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function BeheerderPage() {
+  return (
+    <ProtectedRoute>
+      <BeheerderPageContent />
+    </ProtectedRoute>
   );
 }

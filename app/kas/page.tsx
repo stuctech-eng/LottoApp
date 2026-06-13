@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState } from 'react';
 import Link from 'next/link';
 import { mockKasmutaties } from '@/lib/mock-data';
@@ -14,7 +15,7 @@ const NAV = [
 const typeIcon: Record<string,string> = { inleg:'💳', uitbetaling:'🏆', correctie:'⚖️' };
 const typeBg: Record<string,string> = { inleg:'var(--success-soft)', uitbetaling:'var(--error-soft)', correctie:'var(--warning-soft)' };
 
-export default function KasPage() {
+function KasPageContent() {
   const [tab, setTab] = useState('kasboek');
   const [filter, setFilter] = useState('Alles');
   const mei = mockKasmutaties.filter(m => m.datum.startsWith('2026-05'));
@@ -95,5 +96,13 @@ export default function KasPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function KasPage() {
+  return (
+    <ProtectedRoute>
+      <KasPageContent />
+    </ProtectedRoute>
   );
 }

@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 
 const NAV = [
@@ -9,7 +10,7 @@ const NAV = [
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
-export default function HallOfFamePage() {
+function HallOfFamePageContent() {
   return (
     <>
       <div className="bg-grid" />
@@ -113,5 +114,13 @@ export default function HallOfFamePage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function HallOfFamePage() {
+  return (
+    <ProtectedRoute>
+      <HallOfFamePageContent />
+    </ProtectedRoute>
   );
 }

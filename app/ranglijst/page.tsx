@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 
 const NAV = [
@@ -24,7 +25,7 @@ const posColor = ['var(--gold)', '#c0c8d0', '#c08050'];
 const podiumOrder = [1, 0, 2];
 const podiumH = ['64px', '48px', '36px'];
 
-export default function RanglijstPage() {
+function RanglijstPageContent() {
   return (
     <>
       <div className="bg-grid" />
@@ -97,5 +98,13 @@ export default function RanglijstPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function RanglijstPage() {
+  return (
+    <ProtectedRoute>
+      <RanglijstPageContent />
+    </ProtectedRoute>
   );
 }

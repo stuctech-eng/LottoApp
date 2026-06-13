@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { mockUser } from '@/lib/mock-data';
 
@@ -13,7 +14,7 @@ const NAV = [
 const getrokken = [6, 16, 19, 23, 24, 31];
 const bonusBal = 12;
 
-export default function TrekkingDetailPage() {
+function TrekkingDetailPageContent() {
   return (
     <>
       <div className="bg-grid" />
@@ -112,5 +113,13 @@ export default function TrekkingDetailPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function TrekkingDetailPage() {
+  return (
+    <ProtectedRoute>
+      <TrekkingDetailPageContent />
+    </ProtectedRoute>
   );
 }

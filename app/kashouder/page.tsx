@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState } from 'react';
 import Link from 'next/link';
 
@@ -10,7 +11,7 @@ const NAV = [
   { href: '/leden', icon: '👥', label: 'Leden' },
 ];
 
-export default function KashouderPage() {
+function KashouderPageContent() {
   const [approved, setApproved] = useState<string[]>([]);
 
   return (
@@ -105,5 +106,13 @@ export default function KashouderPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function KashouderPage() {
+  return (
+    <ProtectedRoute>
+      <KashouderPageContent />
+    </ProtectedRoute>
   );
 }

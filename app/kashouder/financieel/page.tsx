@@ -1,4 +1,5 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 
 const NAV = [
@@ -9,7 +10,7 @@ const NAV = [
   { href: '/leden', icon: '👥', label: 'Leden' },
 ];
 
-export default function FinancieelPage() {
+function FinancieelPageContent() {
   return (
     <>
       <div className="bg-grid" />
@@ -78,5 +79,13 @@ export default function FinancieelPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function FinancieelPage() {
+  return (
+    <ProtectedRoute>
+      <FinancieelPageContent />
+    </ProtectedRoute>
   );
 }
