@@ -8,7 +8,19 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { User, Ticket } from './types';
+import { User, Ticket, Rol } from './types';
+
+/**
+ * Normaliseert een rol-waarde uit Firestore: trimt whitespace en
+ * valt terug op 'lid' bij onbekende/lege waarden. Voorkomt dat een
+ * per ongeluk meegekopieerde spatie (bv. "beheerder ") de hele
+ * rol-router laat vasthangen.
+ */
+export function normaliseerRol(raw: unknown): Rol {
+  const waarde = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (waarde === 'kashouder' || waarde === 'beheerder') return waarde;
+  return 'lid';
+}
 
 /**
  * Live-luisteren naar alle gebruikers, gesorteerd op naam.
@@ -30,7 +42,7 @@ export function subscribeAllUsers(
           email: data.email ?? '',
           telefoon: data.telefoon,
           foto: data.foto ?? null,
-          rol: data.rol ?? 'lid',
+          rol: normaliseerRol(data.rol),
           tickets: data.tickets ?? [],
           lidSinds: data.lidSinds ?? null,
           ranglijstPunten: data.ranglijstPunten ?? 0,

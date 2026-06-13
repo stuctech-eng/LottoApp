@@ -18,6 +18,7 @@ import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/fires
 import { auth, db } from './firebase';
 import { User } from './types';
 import { logAudit } from './firestore-audit';
+import { normaliseerRol } from './firestore-users';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -101,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: data.email ?? '',
             telefoon: data.telefoon,
             foto: data.foto ?? null,
-            rol: data.rol ?? 'lid',
+            rol: normaliseerRol(data.rol),
             tickets: data.tickets ?? [],
             lidSinds: data.lidSinds ?? null,
             ranglijstPunten: data.ranglijstPunten ?? 0,
