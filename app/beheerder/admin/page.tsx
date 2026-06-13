@@ -9,6 +9,7 @@ const NAV = [
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer', active: true },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'audit';
@@ -172,7 +173,7 @@ function AdminPageContent() {
 
 export default function AdminPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={['beheerder']}>
       <AdminPageContent />
     </ProtectedRoute>
   );

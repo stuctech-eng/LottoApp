@@ -1,9 +1,31 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { mockUser, mockTrekkingen, mockLeden } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth-context';
 
 function DashboardPageContent() {
+  const { profile, profileLoading } = useAuth();
+  const router = useRouter();
+
+  // Rol-router: kashouder/beheerder hebben hun eigen dashboard
+  useEffect(() => {
+    if (!profileLoading && profile) {
+      if (profile.rol === 'kashouder') router.replace('/kashouder');
+      else if (profile.rol === 'beheerder') router.replace('/beheerder');
+    }
+  }, [profile, profileLoading, router]);
+
+  if (profileLoading || (profile && profile.rol !== 'lid')) {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 40, height: 40, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="bg-grid" />
@@ -12,10 +34,12 @@ function DashboardPageContent() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.5px' }}>Goedemorgen 👋</span>
             <Link href="/profiel">
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#4a9eff,#2070cc)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: '2px solid rgba(74,158,255,0.3)' }}>👩‍🦱</div>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg,#4a9eff,#2070cc)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: '2px solid rgba(74,158,255,0.3)', overflow: 'hidden' }}>
+                {profile?.foto ? <img src={profile.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
+              </div>
             </Link>
           </div>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, lineHeight: 1.1 }}>{mockUser.naam.split(' ')[0]}</div>
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, lineHeight: 1.1 }}>{(profile?.naam || mockUser.naam).split(' ')[0]}</div>
         </div>
 
         {/* Pot hero */}

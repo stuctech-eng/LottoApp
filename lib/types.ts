@@ -1,3 +1,5 @@
+import type { Timestamp } from 'firebase/firestore';
+
 export type Rol = 'lid' | 'kashouder' | 'beheerder';
 
 export interface User {
@@ -5,15 +7,16 @@ export interface User {
   naam: string;
   email: string;
   telefoon?: string;
-  foto?: string;
+  foto?: string | null;
   rol: Rol;
   tickets: Ticket[];
-  lidSinds: string;
+  lidSinds: Timestamp | null;
   ranglijstPunten: number;
   actief: boolean;
 }
 
 export interface Ticket {
+  id: string;
   naam: string;
   nummers: number[];
 }

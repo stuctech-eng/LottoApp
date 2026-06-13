@@ -8,6 +8,7 @@ const NAV = [
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 function BeheerderPageContent() {
@@ -101,7 +102,7 @@ function BeheerderPageContent() {
 
 export default function BeheerderPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={['beheerder']}>
       <BeheerderPageContent />
     </ProtectedRoute>
   );

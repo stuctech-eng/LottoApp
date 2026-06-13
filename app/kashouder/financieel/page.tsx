@@ -8,6 +8,7 @@ const NAV = [
   { href: '/kashouder/financieel', icon: '💰', label: 'Financieel', active: true },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 function FinancieelPageContent() {
@@ -84,7 +85,7 @@ function FinancieelPageContent() {
 
 export default function FinancieelPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={['kashouder', 'beheerder']}>
       <FinancieelPageContent />
     </ProtectedRoute>
   );

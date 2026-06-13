@@ -14,12 +14,15 @@ import {
   signInWithEmailLink,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { User } from './types';
 
 interface AuthContextType {
   user: FirebaseUser | null;
   loading: boolean;
+  profile: User | null;
+  profileLoading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, naam: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -52,6 +55,8 @@ async function ensureUserDoc(user: FirebaseUser) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<User | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -72,6 +77,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return unsub;
   }, []);
+
+  // Live luisteren naar het Firestore profiel van de ingelogde gebruiker
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+    setProfileLoading(true);
+    const ref = doc(db, 'users', user.uid);
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setProfile({
+            id: snap.id,
+            naam: data.naam ?? '',
+            email: data.email ?? '',
+            telefoon: data.telefoon,
+            foto: data.foto ?? null,
+            rol: data.rol ?? 'lid',
+            tickets: data.tickets ?? [],
+            lidSinds: data.lidSinds ?? null,
+            ranglijstPunten: data.ranglijstPunten ?? 0,
+            actief: data.actief ?? true,
+          });
+        } else {
+          setProfile(null);
+        }
+        setProfileLoading(false);
+      },
+      (err) => {
+        console.error('Profile listener error:', err);
+        setProfileLoading(false);
+      }
+    );
+    return unsub;
+  }, [user]);
 
   const loginWithEmail = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -123,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithEmail, registerWithEmail, loginWithGoogle, sendMagicLink, completeMagicLinkSignIn, resetPassword, logout }}>
+    <AuthContext.Provider value={{ user, loading, profile, profileLoading, loginWithEmail, registerWithEmail, loginWithGoogle, sendMagicLink, completeMagicLinkSignIn, resetPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

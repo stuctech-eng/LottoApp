@@ -9,6 +9,7 @@ const NAV = [
   { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 function KashouderPageContent() {
@@ -111,7 +112,7 @@ function KashouderPageContent() {
 
 export default function KashouderPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={['kashouder', 'beheerder']}>
       <KashouderPageContent />
     </ProtectedRoute>
   );
