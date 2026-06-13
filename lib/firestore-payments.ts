@@ -23,23 +23,30 @@ interface ActieUser {
 /** Live-luisteren naar alle kasmutaties, nieuwste eerst. */
 export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void) {
   const q = query(collection(db, 'kasmutaties'), orderBy('datum', 'desc'));
-  return onSnapshot(q, (snap) => {
-    const mutaties: Kasmutatie[] = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        datum: data.datum ?? null,
-        omschrijving: data.omschrijving ?? '',
-        bedrag: data.bedrag ?? 0,
-        type: data.type ?? 'correctie',
-        rondeId: data.rondeId,
-        userId: data.userId,
-        betalingId: data.betalingId,
-        aangemaaktDoor: data.aangemaaktDoor,
-      };
-    });
-    callback(mutaties);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const mutaties: Kasmutatie[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          datum: data.datum ?? null,
+          omschrijving: data.omschrijving ?? '',
+          bedrag: data.bedrag ?? 0,
+          type: data.type ?? 'correctie',
+          rondeId: data.rondeId,
+          userId: data.userId,
+          betalingId: data.betalingId,
+          aangemaaktDoor: data.aangemaaktDoor,
+        };
+      });
+      callback(mutaties);
+    },
+    (err) => {
+      console.error('subscribeKasmutaties error:', err);
+      callback([]);
+    }
+  );
 }
 
 /**
@@ -74,49 +81,68 @@ async function maakKasmutatie(input: {
 /** Live-luisteren naar alle betalingen (voor kashouder/beheerder). */
 export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) {
   const q = query(collection(db, 'betalingen'), orderBy('aangemaakt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    const betalingen: Betaling[] = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        userId: data.userId,
-        userNaam: data.userNaam,
-        bedrag: data.bedrag,
-        omschrijving: data.omschrijving,
-        provider: data.provider,
-        status: data.status,
-        aangemaakt: data.aangemaakt ?? null,
-        bevestigd: data.bevestigd ?? null,
-        bevestigdDoor: data.bevestigdDoor ?? null,
-        rondeId: data.rondeId,
-      };
-    });
-    callback(betalingen);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const betalingen: Betaling[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          userId: data.userId,
+          userNaam: data.userNaam,
+          bedrag: data.bedrag,
+          omschrijving: data.omschrijving,
+          provider: data.provider,
+          status: data.status,
+          aangemaakt: data.aangemaakt ?? null,
+          bevestigd: data.bevestigd ?? null,
+          bevestigdDoor: data.bevestigdDoor ?? null,
+          rondeId: data.rondeId,
+        };
+      });
+      callback(betalingen);
+    },
+    (err) => {
+      console.error('subscribeBetalingen error:', err);
+      callback([]);
+    }
+  );
 }
 
-/** Live-luisteren naar de betalingen van één gebruiker. */
+/** Live-luisteren naar de betalingen van één gebruiker (client-side gesorteerd, geen composite index nodig). */
 export function subscribeUserBetalingen(uid: string, callback: (betalingen: Betaling[]) => void) {
-  const q = query(collection(db, 'betalingen'), where('userId', '==', uid), orderBy('aangemaakt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    const betalingen: Betaling[] = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        userId: data.userId,
-        userNaam: data.userNaam,
-        bedrag: data.bedrag,
-        omschrijving: data.omschrijving,
-        provider: data.provider,
-        status: data.status,
-        aangemaakt: data.aangemaakt ?? null,
-        bevestigd: data.bevestigd ?? null,
-        bevestigdDoor: data.bevestigdDoor ?? null,
-        rondeId: data.rondeId,
-      };
-    });
-    callback(betalingen);
-  });
+  const q = query(collection(db, 'betalingen'), where('userId', '==', uid));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const betalingen: Betaling[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          userId: data.userId,
+          userNaam: data.userNaam,
+          bedrag: data.bedrag,
+          omschrijving: data.omschrijving,
+          provider: data.provider,
+          status: data.status,
+          aangemaakt: data.aangemaakt ?? null,
+          bevestigd: data.bevestigd ?? null,
+          bevestigdDoor: data.bevestigdDoor ?? null,
+          rondeId: data.rondeId,
+        };
+      });
+      betalingen.sort((a, b) => {
+        const ta = a.aangemaakt?.toMillis() ?? 0;
+        const tb = b.aangemaakt?.toMillis() ?? 0;
+        return tb - ta;
+      });
+      callback(betalingen);
+    },
+    (err) => {
+      console.error('subscribeUserBetalingen error:', err);
+      callback([]);
+    }
+  );
 }
 
 /** Lid meldt een betaling (offline provider) → status 'verificatie'. */

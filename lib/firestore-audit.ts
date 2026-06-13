@@ -39,19 +39,26 @@ export async function logAudit(
 /** Live-luisteren naar de meest recente audit-log entries. */
 export function subscribeAuditLog(callback: (entries: AuditLogEntry[]) => void, limitCount = 50) {
   const q = query(collection(db, 'auditLog'), orderBy('datum', 'desc'), fbLimit(limitCount));
-  return onSnapshot(q, (snap) => {
-    const entries: AuditLogEntry[] = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        actie: data.actie,
-        omschrijving: data.omschrijving,
-        userId: data.userId,
-        userNaam: data.userNaam,
-        doelUserId: data.doelUserId ?? undefined,
-        datum: data.datum ?? null,
-      };
-    });
-    callback(entries);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const entries: AuditLogEntry[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          actie: data.actie,
+          omschrijving: data.omschrijving,
+          userId: data.userId,
+          userNaam: data.userNaam,
+          doelUserId: data.doelUserId ?? undefined,
+          datum: data.datum ?? null,
+        };
+      });
+      callback(entries);
+    },
+    (err) => {
+      console.error('subscribeAuditLog error:', err);
+      callback([]);
+    }
+  );
 }
