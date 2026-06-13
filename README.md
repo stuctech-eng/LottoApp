@@ -48,10 +48,14 @@ Security rules: `firestore.rules` — ingelogde users mogen alles lezen, alleen 
 ## Rollen & toegang (Fase 2B)
 - **Lid**: `/dashboard`, `/profiel`, `/trekkingen`, `/ranglijst`, `/kas`, `/betalen`
 - **Kashouder**: + `/kashouder`, `/kashouder/financieel`, `/leden`
-- **Beheerder**: + `/beheerder`, `/beheerder/admin`, `/leden`
+- **Beheerder**: + `/beheerder`, `/beheerder/admin`, `/leden` (incl. rollen wijzigen)
 
 `/dashboard` is een rol-router: kashouder → `/kashouder`, beheerder → `/beheerder`, lid → eigen dashboard.
 Route-toegang wordt afgedwongen via `ProtectedRoute` met `allowedRoles`. Bij ongeldige rol → redirect naar `/dashboard`.
+
+**Rollen wijzigen**: beheerder kan op `/leden` de rol van elk lid direct aanpassen via een dropdown (lid/kashouder/beheerder). Elke wijziging wordt gelogd in `/auditLog` (`rol_gewijzigd`).
+
+⚠️ **Eenmalige bootstrap**: de allereerste beheerder moet handmatig via Firebase Console → Firestore → `users/{uid}` → `rol: "beheerder"` ingesteld worden. Daarna kan alles via de app.
 
 ## Tickets (Fase 2C)
 Elk lid beheert eigen lotto-tickets via `/profiel`:

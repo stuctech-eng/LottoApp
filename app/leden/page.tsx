@@ -2,8 +2,10 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { subscribeAllUsers, formatLidSinds } from '@/lib/firestore-users';
-import { User } from '@/lib/types';
+import { subscribeAllUsers, formatLidSinds, updateUserRol } from '@/lib/firestore-users';
+import { logAudit } from '@/lib/firestore-audit';
+import { useAuth } from '@/lib/auth-context';
+import { User, Rol } from '@/lib/types';
 
 const NAV = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
@@ -17,10 +19,25 @@ const emojis = ['👩‍🦱','👩','👨','👩‍🦰','🧔','👦','👴','
 const rolColors: Record<string,string> = { lid:'badge-blue', kashouder:'badge-green', beheerder:'badge-gold' };
 
 function LedenPageContent() {
+  const { user, profile } = useAuth();
   const [zoek, setZoek] = useState('');
   const [filter, setFilter] = useState('Alle');
   const [leden, setLeden] = useState<User[]>([]);
   const [laden, setLaden] = useState(true);
+  const [bezigId, setBezigId] = useState<string | null>(null);
+
+  const isBeheerder = profile?.rol === 'beheerder';
+
+  const handleRolChange = async (lid: User, nieuweRol: Rol) => {
+    if (!user || !profile || nieuweRol === lid.rol) return;
+    setBezigId(lid.id);
+    try {
+      await updateUserRol(lid.id, nieuweRol);
+      await logAudit('rol_gewijzigd', `${profile.naam} wijzigde rol van ${lid.naam}: ${lid.rol} → ${nieuweRol}`, { uid: user.uid, naam: profile.naam }, { doelUserId: lid.id });
+    } finally {
+      setBezigId(null);
+    }
+  };
 
   useEffect(() => {
     const unsub = subscribeAllUsers((users) => {
@@ -95,7 +112,30 @@ function LedenPageContent() {
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lid.email} · sinds {formatLidSinds(lid.lidSinds)}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <span className={`badge ${rolColors[lid.rol]}`}>{lid.rol}</span>
+                {isBeheerder ? (
+                  <select
+                    value={lid.rol}
+                    disabled={bezigId === lid.id}
+                    onChange={(e) => handleRolChange(lid, e.target.value as Rol)}
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '4px 8px',
+                      borderRadius: 10,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface2)',
+                      color: lid.rol === 'beheerder' ? 'var(--gold)' : lid.rol === 'kashouder' ? 'var(--success)' : 'var(--accent)',
+                      fontFamily: "'DM Sans',sans-serif",
+                      opacity: bezigId === lid.id ? 0.5 : 1,
+                    }}
+                  >
+                    <option value="lid">lid</option>
+                    <option value="kashouder">kashouder</option>
+                    <option value="beheerder">beheerder</option>
+                  </select>
+                ) : (
+                  <span className={`badge ${rolColors[lid.rol]}`}>{lid.rol}</span>
+                )}
                 {!lid.actief && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>inactief</span>}
               </div>
             </div>

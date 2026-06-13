@@ -53,6 +53,11 @@ export async function updateUserTelefoon(uid: string, telefoon: string) {
   await updateDoc(doc(db, 'users', uid), { telefoon });
 }
 
+/** Wijzig de rol van een gebruiker (alleen door beheerder aan te roepen). */
+export async function updateUserRol(uid: string, rol: import('./types').Rol) {
+  await updateDoc(doc(db, 'users', uid), { rol });
+}
+
 /** Formatteer een Firestore Timestamp naar "januari 2026". */
 export function formatLidSinds(ts: Timestamp | null | undefined): string {
   if (!ts) return '—';
