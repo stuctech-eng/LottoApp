@@ -1,6 +1,9 @@
 'use client';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { mockUser } from '@/lib/mock-data';
+import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -10,7 +13,15 @@ const NAV = [
   { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
 ];
 
-export default function ProfielPage() {
+function ProfielPageContent() {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/');
+  };
+
   return (
     <>
       <div className="bg-grid" />
@@ -24,8 +35,8 @@ export default function ProfielPage() {
               <div style={{ position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: '50%', background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--navy)', border: '2px solid var(--navy)' }}>2</div>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, letterSpacing: -0.5, marginBottom: 4 }}>{mockUser.naam}</div>
-              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Lid sinds {mockUser.lidSinds} · 22 rondes</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, letterSpacing: -0.5, marginBottom: 4 }}>{user?.displayName || user?.email?.split('@')[0] || mockUser.naam}</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>{user?.email} · Lid sinds {mockUser.lidSinds}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <span className="badge badge-blue">🎱 Lid</span>
                 <span className="badge badge-green">✓ Betaald</span>
@@ -111,6 +122,13 @@ export default function ProfielPage() {
             </Link>
           ))}
         </div>
+
+        {/* Uitloggen */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <button onClick={handleLogout} style={{ width: '100%', background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', color: 'var(--error)', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>
+            🚪 Uitloggen
+          </button>
+        </div>
       </div>
 
       <nav className="bottom-nav">
@@ -123,5 +141,13 @@ export default function ProfielPage() {
         ))}
       </nav>
     </>
+  );
+}
+
+export default function ProfielPage() {
+  return (
+    <ProtectedRoute>
+      <ProfielPageContent />
+    </ProtectedRoute>
   );
 }
