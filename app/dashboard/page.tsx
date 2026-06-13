@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { mockUser, mockTrekkingen, mockLeden } from '@/lib/mock-data';
+import { mockUser } from '@/lib/mock-data';
 import { useAuth } from '@/lib/auth-context';
 
 function DashboardPageContent() {

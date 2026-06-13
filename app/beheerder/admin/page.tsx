@@ -2,10 +2,14 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { subscribeAuditLog } from '@/lib/firestore-audit';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
+import { subscribeSpelConfig, subscribePrijsConfig, DEFAULT_SPELCONFIG, DEFAULT_PRIJSCONFIG } from '@/lib/firestore-spelconfig';
+import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
-import { AuditLogEntry, PaymentConfig } from '@/lib/types';
+import { AuditLogEntry, PaymentConfig, SpelConfig, PrijsConfig, Seizoen } from '@/lib/types';
 
 const NAV = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
@@ -23,12 +27,40 @@ function AdminPageContent() {
   const [toggles, setToggles] = useState({ bewijs:true, notif:true, herinner:true, winnaar:true });
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [spelConfig, setSpelConfig] = useState<SpelConfig>(DEFAULT_SPELCONFIG);
+  const [prijsConfig, setPrijsConfig] = useState<PrijsConfig>(DEFAULT_PRIJSCONFIG);
+  const [seizoenen, setSeizoenen] = useState<Seizoen[]>([]);
+  const [actiefsSeizoen, setActiefSeizoen] = useState<Seizoen | null>(null);
+  const [nieuwSeizoenNaam, setNieuwSeizoenNaam] = useState('');
+  const [spelBezig, setSpelBezig] = useState(false);
+  const [spelOk, setSpelOk] = useState(false);
 
   useEffect(() => {
     const u1 = subscribeAuditLog(setAuditLog, 50);
     const u2 = subscribePaymentConfig(setPaymentConfig);
-    return () => { u1(); u2(); };
+    const u3 = subscribeSpelConfig(setSpelConfig);
+    const u4 = subscribePrijsConfig(setPrijsConfig);
+    const u5 = subscribeAlleSeizoenen(setSeizoenen);
+    const u6 = subscribeSeizoen(setActiefSeizoen);
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
+
+  const handleSpelConfigSave = async () => {
+    setSpelBezig(true);
+    try {
+      await setDoc(doc(db, 'spelConfig', 'default'), spelConfig, { merge: true });
+      setSpelOk(true);
+      setTimeout(() => setSpelOk(false), 2000);
+    } finally {
+      setSpelBezig(false);
+    }
+  };
+
+  const handleMaakSeizoen = async () => {
+    const naam = nieuwSeizoenNaam.trim() || `Seizoen ${new Date().getFullYear()}`;
+    await maakSeizoen(naam);
+    setNieuwSeizoenNaam('');
+  };
 
   const auditIcon: Record<string, string> = {
     gebruiker_aangemaakt: '👤', gebruiker_verwijderd: '🗑️',
@@ -140,13 +172,26 @@ function AdminPageContent() {
           <div style={{ padding: '0 20px' }}>
             <div className="section-title">Spelconfiguratie</div>
             <div className="card" style={{ padding: 18, marginBottom: 16 }}>
-              {[['Naam spel','text','Nederlandse Lotto'],['Aantal getallen','number','6'],['Min. getal','number','1'],['Max. getal','number','45']].map(([l,t,v]) => (
-                <div key={String(l)}>
-                  <label className="form-label">{String(l)}</label>
-                  <input type={String(t)} defaultValue={String(v)} className="form-input" />
-                </div>
-              ))}
-              <button style={{ width:'100%', background:'linear-gradient(135deg,var(--gold),#c08820)', color:'var(--navy)', border:'none', borderRadius:13, padding:14, fontSize:14, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:'pointer' }}>💾 Opslaan</button>
+              <label className="form-label">Naam spel</label>
+              <input type="text" className="form-input" value={spelConfig.naam} onChange={e => setSpelConfig(s => ({...s, naam: e.target.value}))} />
+              <label className="form-label">Aantal getallen</label>
+              <input type="number" className="form-input" value={spelConfig.aantalGetallen} onChange={e => setSpelConfig(s => ({...s, aantalGetallen: parseInt(e.target.value) || s.aantalGetallen}))} />
+              <label className="form-label">Min. getal</label>
+              <input type="number" className="form-input" value={spelConfig.minGetal} onChange={e => setSpelConfig(s => ({...s, minGetal: parseInt(e.target.value) || s.minGetal}))} />
+              <label className="form-label">Max. getal</label>
+              <input type="number" className="form-input" value={spelConfig.maxGetal} onChange={e => setSpelConfig(s => ({...s, maxGetal: parseInt(e.target.value) || s.maxGetal}))} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Bonusbal</label>
+                <button onClick={() => setSpelConfig(s => ({...s, bonusBal: !s.bonusBal}))} style={{ width: 44, height: 26, borderRadius: 13, border: 'none', position: 'relative', cursor: 'pointer', background: spelConfig.bonusBal ? 'var(--accent)' : 'var(--navy-mid)', transition: 'background 0.2s', flexShrink: 0 }}>
+                  <span style={{ position: 'absolute', top: 3, left: 3, width: 20, height: 20, borderRadius: '50%', background: 'white', transition: 'transform 0.2s', transform: spelConfig.bonusBal ? 'translateX(18px)' : 'translateX(0)' }} />
+                </button>
+              </div>
+              <button onClick={handleSpelConfigSave} disabled={spelBezig} style={{ width:'100%', background: spelOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--gold),#c08820)', color: spelOk ? 'white' : 'var(--navy)', border:'none', borderRadius:13, padding:14, fontSize:14, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:'pointer', opacity: spelBezig ? 0.6 : 1 }}>
+                {spelOk ? '✓ Opgeslagen' : spelBezig ? 'Opslaan…' : '💾 Opslaan in Firestore'}
+              </button>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
+                Wijzigingen worden direct toegepast op nieuwe trekkingen. Bestaande resultaten blijven ongewijzigd.
+              </div>
             </div>
           </div>
         )}
@@ -156,15 +201,18 @@ function AdminPageContent() {
           <div style={{ padding: '0 20px' }}>
             <div className="section-title">Prijsverdeling</div>
             <div className="card" style={{ padding: 18 }}>
-              <div style={{ background: 'var(--surface2)', borderRadius: 13, overflow: 'hidden', marginBottom: 14 }}>
-                {[[2,'€0'],[3,'€10'],[4,'€25'],[5,'€250'],[6,'Jackpot']].map(([g,b],i,arr) => (
-                  <div key={String(g)} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom: i<arr.length-1?'1px solid rgba(74,158,255,0.06)':'none' }}>
-                    <span style={{ fontSize:14, fontWeight:600 }}>🎯 {g} goed</span>
-                    <input defaultValue={String(b)} style={{ width:80, background:'var(--surface)', border:'1.5px solid var(--border)', borderRadius:10, padding:'7px 10px', fontSize:14, fontWeight:600, color:'var(--gold)', fontFamily:"'DM Sans',sans-serif", outline:'none', textAlign:'center' }} />
+              <label className="form-label">Modus</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {([['hoogste_score_wint','🏆 Hoogste score wint (standaard)'],['meerdere_winnaars','👥 Meerdere winnaars'],['vaste_prijzen','💰 Vaste prijzen per score']] as const).map(([modus, label]) => (
+                  <div key={modus} onClick={() => setPrijsConfig(p => ({...p, modus}))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${prijsConfig.modus === modus ? 'var(--accent)' : 'var(--border)'}`, background: prijsConfig.modus === modus ? 'var(--accent-soft)' : 'var(--surface2)', cursor: 'pointer' }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--white)' }}>{label}</span>
+                    {prijsConfig.modus === modus && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
                   </div>
                 ))}
               </div>
-              <button style={{ width:'100%', background:'linear-gradient(135deg,var(--gold),#c08820)', color:'var(--navy)', border:'none', borderRadius:13, padding:14, fontSize:14, fontWeight:700, fontFamily:"'DM Sans',sans-serif", cursor:'pointer' }}>💾 Prijzen opslaan</button>
+              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                Prijsconfiguratie wordt opgeslagen via de spelConfig. Neem contact op met de beheerder voor geavanceerde prijsinstellingen.
+              </div>
             </div>
           </div>
         )}
@@ -172,26 +220,43 @@ function AdminPageContent() {
         {/* SEIZOEN */}
         {tab==='seizoen' && (
           <div style={{ padding: '0 20px' }}>
-            <div className="section-title">Seizoenen</div>
-            <div style={{ background:'linear-gradient(135deg,rgba(240,192,96,0.08),var(--surface))', border:'1px solid rgba(240,192,96,0.2)', borderRadius:18, padding:'16px 18px', marginBottom:10 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-                <span style={{ fontSize:16, fontWeight:700 }}>🏆 Seizoen 2026</span>
-                <span className="badge badge-green">● Actief</span>
+            <div className="section-title">Actief seizoen</div>
+            {actiefsSeizoen ? (
+              <div style={{ background:'linear-gradient(135deg,rgba(240,192,96,0.08),var(--surface))', border:'1px solid rgba(240,192,96,0.2)', borderRadius:18, padding:'16px 18px', marginBottom:16 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                  <span style={{ fontSize:16, fontWeight:700 }}>🏆 {actiefsSeizoen.naam}</span>
+                  <span className="badge badge-green">● Actief</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
+                  {actiefsSeizoen.startDatum ? `Gestart: ${actiefsSeizoen.startDatum.toDate().toLocaleDateString('nl-NL')}` : 'Startdatum onbekend'}
+                </div>
+                <button onClick={() => sluitSeizoen(actiefsSeizoen.id)} style={{ width:'100%', background:'linear-gradient(135deg,#ff5a5a,#aa0000)', color:'white', border:'none', borderRadius:13, padding:13, fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:'pointer' }}>⛔ Seizoen afsluiten</button>
               </div>
-              <div style={{ display:'flex', gap:16, marginBottom:14 }}>
-                {[['22','Rondes'],['17','Leden'],['€1.247','Pot']].map(([v,l]) => (
-                  <div key={l}><div style={{ fontSize:14, fontWeight:600, color:'var(--gold)' }}>{v}</div><div style={{ fontSize:11, color:'var(--muted)' }}>{l}</div></div>
+            ) : (
+              <div className="card" style={{ padding: '20px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 14, marginBottom: 16 }}>
+                Geen actief seizoen. Maak een nieuw seizoen aan.
+              </div>
+            )}
+
+            <div className="section-title">Nieuw seizoen</div>
+            <div className="card" style={{ padding: 18, marginBottom: 16 }}>
+              <label className="form-label">Naam</label>
+              <input type="text" className="form-input" placeholder={`Seizoen ${new Date().getFullYear()}`} value={nieuwSeizoenNaam} onChange={e => setNieuwSeizoenNaam(e.target.value)} />
+              <button onClick={handleMaakSeizoen} disabled={!!actiefsSeizoen} style={{ width:'100%', background:'linear-gradient(135deg,var(--success),#1a8a50)', color:'white', border:'none', borderRadius:13, padding:13, fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor: actiefsSeizoen ? 'not-allowed' : 'pointer', opacity: actiefsSeizoen ? 0.4 : 1 }}>🚀 Nieuw seizoen starten</button>
+              {actiefsSeizoen && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>Sluit het huidige seizoen eerst af voordat je een nieuw seizoen start.</div>}
+            </div>
+
+            {seizoenen.filter(s => s.status === 'gesloten').length > 0 && (
+              <>
+                <div className="section-title">Afgesloten seizoenen</div>
+                {seizoenen.filter(s => s.status === 'gesloten').map(s => (
+                  <div key={s.id} className="card" style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{s.naam}</span>
+                    <span className="badge badge-muted">Gesloten</span>
+                  </div>
                 ))}
-              </div>
-              <button style={{ width:'100%', background:'linear-gradient(135deg,#ff5a5a,#aa0000)', color:'white', border:'none', borderRadius:13, padding:13, fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:'pointer' }}>⛔ Seizoen afsluiten</button>
-            </div>
-            <div style={{ background:'linear-gradient(135deg,rgba(52,201,122,0.06),var(--surface))', border:'1px solid rgba(52,201,122,0.18)', borderRadius:18, padding:'16px 18px' }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-                <span style={{ fontSize:16, fontWeight:700 }}>✨ Seizoen 2027</span>
-                <span className="badge badge-muted">Nog niet gestart</span>
-              </div>
-              <button style={{ width:'100%', background:'linear-gradient(135deg,var(--success),#1a8a50)', color:'white', border:'none', borderRadius:13, padding:13, fontSize:14, fontWeight:600, fontFamily:"'DM Sans',sans-serif", cursor:'pointer' }}>🚀 Nieuw seizoen starten</button>
-            </div>
+              </>
+            )}
           </div>
         )}
 

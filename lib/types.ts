@@ -21,48 +21,94 @@ export interface Ticket {
   nummers: number[];
 }
 
+// ─────────────────────── SpelConfig ───────────────────────
+
+export interface SpelConfig {
+  naam: string;
+  aantalGetallen: number;
+  minGetal: number;
+  maxGetal: number;
+  bonusBal: boolean;
+}
+
+// ─────────────────────── PrijsConfig ───────────────────────
+
+export type PrijsConfigModus =
+  | 'hoogste_score_wint'   // hoogste score = 1 winnaar (of meerdere bij gelijkspel)
+  | 'meerdere_winnaars'    // iedereen met score >= drempel wint
+  | 'vaste_prijzen';       // vaste uitbetaling per score (bijv. 5 goed = €25)
+
+export interface PrijsConfig {
+  modus: PrijsConfigModus;
+  /** Alleen bij modus='vaste_prijzen': score -> uitbetaling in euro */
+  vastePrijzen?: Record<number, number>;
+  /** Alleen bij modus='meerdere_winnaars': minimale score om te winnen */
+  minimumScore?: number;
+}
+
+// ─────────────────────── Seizoen / Ronde ───────────────────────
+
 export interface Seizoen {
   id: string;
   naam: string;
-  startDatum: string;
-  eindDatum?: string;
+  startDatum: Timestamp | null;
+  eindDatum?: Timestamp | null;
   status: 'actief' | 'gesloten';
-  totalePot: number;
 }
 
 export interface Ronde {
   id: string;
   seizoenId: string;
   nummer: number;
-  startDatum: string;
-  sluitingsDatum: string;
-  trekkingsDatum: string;
-  status: 'open' | 'gesloten' | 'getrokken';
+  sluitingsDatum: Timestamp | null;
+  trekkingsDatum: Timestamp | null;
+  status: 'open' | 'gesloten' | 'verwerkt';
   inleg: number;
-  pot: number;
 }
+
+// ─────────────────────── Trekking ───────────────────────
 
 export interface Trekking {
   id: string;
   rondeId: string;
-  datum: string;
+  seizoenId: string;
   nummers: number[];
-  bonusBal?: number;
-  winnaars: Winnaar[];
+  bonusBal: number | null;
+  datum: Timestamp | null;
+  ingevoerdDoor: string;   // userId
+  ingevoerdDoorNaam: string;
+  verwerkt: boolean;
 }
 
-export interface Winnaar {
+// ─────────────────────── Resultaat ───────────────────────
+
+/**
+ * Opgeslagen resultaat per ticket per ronde.
+ * Geschreven door de controle-engine na verwerking van een trekking.
+ */
+export interface Resultaat {
+  id: string;
   userId: string;
+  userNaam: string;
+  ticketId: string;
   ticketNaam: string;
+  rondeId: string;
+  seizoenId: string;
+  trekkingId: string;
+  nummersGoed: number[];   // welke nummers klopten
   aantalGoed: number;
-  uitbetaling: number;
+  bonusGoed: boolean;
+  punten: number;
+  isWinnaar: boolean;
+  verwerktOp: Timestamp | null;
 }
+
+// ─────────────────────── Kasmutatie ───────────────────────
 
 export interface Kasmutatie {
   id: string;
   datum: Timestamp | null;
   omschrijving: string;
-  /** positief = inkomsten, negatief = uitgaven */
   bedrag: number;
   type: 'inleg' | 'uitbetaling' | 'correctie';
   rondeId?: string;
@@ -71,14 +117,7 @@ export interface Kasmutatie {
   aangemaaktDoor?: string;
 }
 
-export interface SpelConfig {
-  id: string;
-  naam: string;
-  aantalGetallen: number;
-  min: number;
-  max: number;
-  bonusBal: boolean;
-}
+// ─────────────────────── Betalingen ───────────────────────
 
 export type PaymentProviderId = 'offline' | 'mollie' | 'tikkie' | 'stripe' | 'incasso';
 
@@ -102,6 +141,8 @@ export interface Betaling {
   bevestigdDoor?: string | null;
   rondeId?: string;
 }
+
+// ─────────────────────── Audit ───────────────────────
 
 export type AuditAction =
   | 'gebruiker_aangemaakt'
