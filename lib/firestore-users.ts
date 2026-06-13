@@ -48,6 +48,11 @@ export async function updateUserTickets(uid: string, tickets: Ticket[]) {
   await updateDoc(doc(db, 'users', uid), { tickets });
 }
 
+/** Werkt het telefoonnummer van een gebruiker bij (voor WhatsApp-koppeling). */
+export async function updateUserTelefoon(uid: string, telefoon: string) {
+  await updateDoc(doc(db, 'users', uid), { telefoon });
+}
+
 /** Formatteer een Firestore Timestamp naar "januari 2026". */
 export function formatLidSinds(ts: Timestamp | null | undefined): string {
   if (!ts) return '—';

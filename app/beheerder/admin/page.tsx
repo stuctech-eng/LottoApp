@@ -1,7 +1,11 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { subscribeAuditLog } from '@/lib/firestore-audit';
+import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
+import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
+import { AuditLogEntry, PaymentConfig } from '@/lib/types';
 
 const NAV = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
@@ -17,6 +21,33 @@ type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'audit';
 function AdminPageContent() {
   const [tab, setTab] = useState<Tab>('instellingen');
   const [toggles, setToggles] = useState({ bewijs:true, notif:true, herinner:true, winnaar:true });
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+
+  useEffect(() => {
+    const u1 = subscribeAuditLog(setAuditLog, 50);
+    const u2 = subscribePaymentConfig(setPaymentConfig);
+    return () => { u1(); u2(); };
+  }, []);
+
+  const auditIcon: Record<string, string> = {
+    gebruiker_aangemaakt: '👤', gebruiker_verwijderd: '🗑️',
+    ticket_toegevoegd: '🎱', ticket_gewijzigd: '🎱', ticket_verwijderd: '🎱',
+    rol_gewijzigd: '🔑',
+    betaling_gemeld: '💬', betaling_bevestigd: '✅', betaling_afgewezen: '❌',
+    uitbetaling_geregistreerd: '💸', kascorrectie: '⚖️',
+    trekking_ingevoerd: '🎱', trekking_gewijzigd: '🎱',
+    seizoen_gestart: '🚀', seizoen_gesloten: '⛔',
+  };
+
+  const formatAuditDatum = (ts: AuditLogEntry['datum']): string => {
+    if (!ts) return '—';
+    const d = ts.toDate();
+    const vandaag = new Date();
+    const isVandaag = d.toDateString() === vandaag.toDateString();
+    if (isVandaag) return `${d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })} · vandaag`;
+    return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+  };
 
   const Toggle = ({ k }: { k: keyof typeof toggles }) => (
     <button onClick={() => setToggles(t => ({...t,[k]:!t[k]}))} style={{ width: 44, height: 26, borderRadius: 13, border: 'none', position: 'relative', cursor: 'pointer', background: toggles[k]?'var(--accent)':'var(--navy-mid)', transition: 'background 0.2s', flexShrink: 0 }}>
@@ -46,7 +77,7 @@ function AdminPageContent() {
         {/* INSTELLINGEN */}
         {tab==='instellingen' && (
           <div style={{ padding: '0 20px' }}>
-            {[{title:'Vereniging',rows:[{icon:'🎱',bg:'var(--gold-soft)',label:'Naam vereniging',sub:'LottoClub'},{icon:'💶',bg:'var(--accent-soft)',label:'Inleg per ronde',sub:'€4,00'},{icon:'⚡',bg:'var(--success-soft)',label:'Kashouder',sub:'Marco Visser'}]},{title:'Betalingen',rows:[{icon:'💳',bg:'var(--accent-soft)',label:'Mollie iDEAL',sub:'API gekoppeld'},{icon:'⏰',bg:'var(--warning-soft)',label:'Betalingsdeadline',sub:'Vrijdag 18:00'}]}].map(section => (
+            {[{title:'Vereniging',rows:[{icon:'🎱',bg:'var(--gold-soft)',label:'Naam vereniging',sub:'LottoClub'},{icon:'💶',bg:'var(--accent-soft)',label:'Standaard inleg',sub:'€4,00'},{icon:'⚡',bg:'var(--success-soft)',label:'Kashouder',sub:'—'}]}].map(section => (
               <div key={section.title} style={{ marginBottom: 20 }}>
                 <div className="section-title">{section.title}</div>
                 <div className="card" style={{ overflow: 'hidden' }}>
@@ -63,6 +94,32 @@ function AdminPageContent() {
                 </div>
               </div>
             ))}
+
+            <div style={{ marginBottom: 20 }}>
+              <div className="section-title">Betaalproviders</div>
+              <div className="card" style={{ overflow: 'hidden' }}>
+                {(Object.keys(PAYMENT_PROVIDERS) as (keyof typeof PAYMENT_PROVIDERS)[]).map((id, i, arr) => {
+                  const info = PAYMENT_PROVIDERS[id];
+                  const enabled = paymentConfig.providers[id]?.enabled;
+                  const isActive = paymentConfig.activeProvider === id;
+                  return (
+                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i<arr.length-1?'1px solid rgba(74,158,255,0.06)':'none' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 11, background: isActive ? 'var(--success-soft)' : 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{info.icoon}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>{info.naam}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{info.beschrijving}</div>
+                      </div>
+                      {isActive && <span className="badge badge-green">Actief</span>}
+                      {!isActive && <span className="badge badge-muted">{enabled ? 'Beschikbaar' : 'Uit'}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5, padding: '0 4px' }}>
+                Wijzigen van de actieve provider gebeurt via Firestore Console (`/paymentConfig/main`) totdat Tikkie, Stripe of Mollie volledig geïmplementeerd zijn.
+              </div>
+            </div>
+
             <div style={{ marginBottom: 20 }}>
               <div className="section-title">Notificaties</div>
               <div className="card" style={{ overflow: 'hidden' }}>
@@ -142,14 +199,19 @@ function AdminPageContent() {
         {tab==='audit' && (
           <div style={{ padding: '0 20px' }}>
             <div className="section-title">Alle systeem activiteit</div>
-            {[{icon:'✅',actie:'Betaling goedgekeurd — Rob de Vries',meta:'Marco Visser · Kashouder',tijd:'14:22 · vandaag'},{icon:'🔔',actie:'Betaalverzoeken verstuurd — ronde 22',meta:'Systeem · 17 leden',tijd:'09:00 · vandaag'},{icon:'💸',actie:'Uitbetaling geregistreerd — Jenny Smit €25',meta:'Marco Visser · Kashouder',tijd:'24 mei'},{icon:'🎱',actie:'Trekking ronde 21 ingevoerd en verwerkt',meta:'Sandra Bakker · Beheerder',tijd:'24 mei'},{icon:'📈',actie:'Ranglijst bijgewerkt — ronde 21',meta:'Systeem · automatisch',tijd:'24 mei'},{icon:'👤',actie:'Lid toegevoegd — Tim Hoekstra',meta:'Sandra Bakker · Beheerder',tijd:'1 mei'},{icon:'⚖️',actie:'Kascorrectie +€4',meta:'Marco Visser · Kashouder',tijd:'20 apr'},{icon:'⚙️',actie:'Spelconfiguratie gewijzigd',meta:'Sandra Bakker · Beheerder',tijd:'1 jan'}].map(a => (
-              <div key={a.actie} className="card" style={{ padding:'12px 14px', display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
-                <span style={{ fontSize:16, flexShrink:0 }}>{a.icon}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:500 }}>{a.actie}</div>
-                  <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{a.meta}</div>
+            {auditLog.length === 0 && (
+              <div className="card" style={{ padding: '20px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                Nog geen activiteit gelogd.
+              </div>
+            )}
+            {auditLog.map(a => (
+              <div key={a.id} className="card" style={{ padding:'12px 14px', display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
+                <span style={{ fontSize:16, flexShrink:0 }}>{auditIcon[a.actie] ?? '📋'}</span>
+                <div style={{ flex:1, minWidth: 0 }}>
+                  <div style={{ fontSize:13, fontWeight:500 }}>{a.omschrijving}</div>
+                  <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{a.userNaam}</div>
                 </div>
-                <span style={{ fontSize:11, color:'var(--muted)', whiteSpace:'nowrap', flexShrink:0 }}>{a.tijd}</span>
+                <span style={{ fontSize:11, color:'var(--muted)', whiteSpace:'nowrap', flexShrink:0 }}>{formatAuditDatum(a.datum)}</span>
               </div>
             ))}
           </div>

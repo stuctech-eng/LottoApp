@@ -2,10 +2,11 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import TicketEditorModal from '@/components/TicketEditorModal';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { updateUserTickets, formatLidSinds } from '@/lib/firestore-users';
+import { updateUserTickets, updateUserTelefoon, formatLidSinds } from '@/lib/firestore-users';
+import { logAudit } from '@/lib/firestore-audit';
 import { Ticket } from '@/lib/types';
 
 const NAV = [
@@ -27,6 +28,19 @@ function ProfielPageContent() {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [editTicket, setEditTicket] = useState<Ticket | null>(null);
+  const [telefoon, setTelefoon] = useState('');
+  const [telefoonOpgeslagen, setTelefoonOpgeslagen] = useState(false);
+
+  useEffect(() => {
+    if (profile?.telefoon) setTelefoon(profile.telefoon);
+  }, [profile?.telefoon]);
+
+  const handleSaveTelefoon = async () => {
+    if (!user) return;
+    await updateUserTelefoon(user.uid, telefoon.trim());
+    setTelefoonOpgeslagen(true);
+    setTimeout(() => setTelefoonOpgeslagen(false), 2000);
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -44,12 +58,25 @@ function ProfielPageContent() {
       ? bestaande.map(t => t.id === ticket.id ? ticket : t)
       : [...bestaande, ticket];
     await updateUserTickets(user.uid, nieuwe);
+    await logAudit(
+      idx >= 0 ? 'ticket_gewijzigd' : 'ticket_toegevoegd',
+      `${profile.naam} ${idx >= 0 ? 'wijzigde' : 'voegde'} ticket "${ticket.naam}" toe`,
+      { uid: user.uid, naam: profile.naam },
+      { doelUserId: user.uid }
+    );
   };
 
   const handleDeleteTicket = async (ticketId: string) => {
     if (!user || !profile) return;
+    const verwijderd = (profile.tickets ?? []).find(t => t.id === ticketId);
     const nieuwe = (profile.tickets ?? []).filter(t => t.id !== ticketId);
     await updateUserTickets(user.uid, nieuwe);
+    await logAudit(
+      'ticket_verwijderd',
+      `${profile.naam} verwijderde ticket "${verwijderd?.naam ?? ticketId}"`,
+      { uid: user.uid, naam: profile.naam },
+      { doelUserId: user.uid }
+    );
   };
 
   const badge = profile ? rolBadge[profile.rol] : rolBadge.lid;
@@ -119,6 +146,27 @@ function ProfielPageContent() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Telefoonnummer */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">Telefoonnummer</div>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Nodig voor WhatsApp-betaalverzoeken en herinneringen van de kashouder.
+            </div>
+            <input
+              type="tel"
+              className="form-input"
+              placeholder="06 12345678"
+              value={telefoon}
+              onChange={e => setTelefoon(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+            <button onClick={handleSaveTelefoon} className="btn-primary" style={{ background: telefoonOpgeslagen ? 'linear-gradient(135deg,var(--success),#1a8a50)' : undefined }}>
+              {telefoonOpgeslagen ? '✓ Opgeslagen' : 'Opslaan'}
+            </button>
+          </div>
         </div>
 
         {/* Uitloggen */}

@@ -1,4 +1,4 @@
-import { User, Seizoen, Ronde, Trekking, Kasmutatie } from './types';
+import { User, Seizoen, Ronde, Trekking } from './types';
 
 export const mockUser: User = {
   id: 'user-1',
@@ -71,13 +71,3 @@ export const mockTrekkingen: Trekking[] = [
   },
 ];
 
-export const mockKasmutaties: Kasmutatie[] = [
-  { id: 'k1', datum: '2026-05-30', omschrijving: 'Inleg leden — ronde 22', bedrag: 56, type: 'inleg', rondeId: 'ronde-22' },
-  { id: 'k2', datum: '2026-05-24', omschrijving: 'Uitbetaling winnaar — Jenny Smit', bedrag: -25, type: 'uitbetaling', rondeId: 'ronde-21' },
-  { id: 'k3', datum: '2026-05-23', omschrijving: 'Inleg leden — ronde 21', bedrag: 68, type: 'inleg', rondeId: 'ronde-21' },
-  { id: 'k4', datum: '2026-05-17', omschrijving: 'Uitbetaling winnaar — Neeltje Visser', bedrag: -25, type: 'uitbetaling', rondeId: 'ronde-20' },
-  { id: 'k5', datum: '2026-05-16', omschrijving: 'Inleg leden — ronde 20', bedrag: 68, type: 'inleg', rondeId: 'ronde-20' },
-  { id: 'k6', datum: '2026-04-26', omschrijving: 'Inleg leden — ronde 19', bedrag: 68, type: 'inleg', rondeId: 'ronde-19' },
-  { id: 'k7', datum: '2026-04-20', omschrijving: 'Kascorrectie', bedrag: 4, type: 'correctie' },
-  { id: 'k8', datum: '2026-04-19', omschrijving: 'Uitbetaling winnaar — Jan de Boer', bedrag: -25, type: 'uitbetaling', rondeId: 'ronde-18' },
-];

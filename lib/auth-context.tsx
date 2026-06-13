@@ -17,6 +17,7 @@ import {
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { User } from './types';
+import { logAudit } from './firestore-audit';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -39,8 +40,9 @@ async function ensureUserDoc(user: FirebaseUser) {
   const ref = doc(db, 'users', user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
+    const naam = user.displayName || user.email?.split('@')[0] || 'Nieuw lid';
     await setDoc(ref, {
-      naam: user.displayName || user.email?.split('@')[0] || 'Nieuw lid',
+      naam,
       email: user.email,
       foto: user.photoURL || null,
       rol: 'lid',
@@ -49,6 +51,7 @@ async function ensureUserDoc(user: FirebaseUser) {
       ranglijstPunten: 0,
       actief: true,
     });
+    await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: user.uid, naam }, { doelUserId: user.uid });
   }
 }
 
@@ -133,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ranglijstPunten: 0,
       actief: true,
     });
+    await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: cred.user.uid, naam }, { doelUserId: cred.user.uid });
   };
 
   const loginWithGoogle = async () => {

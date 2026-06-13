@@ -2,17 +2,62 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function ingelogd() {
+      return request.auth != null;
+    }
+
+    function rol() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol;
+    }
+
+    function isKashouderOfBeheerder() {
+      return ingelogd() && (rol() == 'kashouder' || rol() == 'beheerder');
+    }
+
+    function isBeheerder() {
+      return ingelogd() && rol() == 'beheerder';
+    }
+
     // Users: iedereen die ingelogd is mag lezen (voor ranglijst/leden),
     // maar alleen het eigen document bewerken
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if ingelogd();
+      allow write: if ingelogd() && request.auth.uid == userId;
     }
 
-    // Overige collecties: alleen lezen voor ingelogde gebruikers
-    // Schrijven gebeurt later via kashouder/beheerder rollen (Fase 2)
+    // Betalingen: lid maakt eigen betaling aan (status verificatie/open),
+    // kashouder/beheerder mag alle betalingen lezen en bijwerken (bevestigen/afwijzen)
+    match /betalingen/{betalingId} {
+      allow read: if ingelogd();
+      allow create: if ingelogd() && request.resource.data.userId == request.auth.uid;
+      allow update: if isKashouderOfBeheerder();
+      allow delete: if false;
+    }
+
+    // Kasmutaties: iedereen leest (transparantie), alleen kashouder/beheerder schrijft
+    match /kasmutaties/{mutatieId} {
+      allow read: if ingelogd();
+      allow create: if isKashouderOfBeheerder();
+      allow update, delete: if false;
+    }
+
+    // AuditLog: iedereen leest, elke ingelogde gebruiker mag eigen acties loggen
+    match /auditLog/{entryId} {
+      allow read: if ingelogd();
+      allow create: if ingelogd() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // PaymentConfig: iedereen leest, alleen beheerder schrijft
+    match /paymentConfig/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    // Overige collecties (seizoenen, rondes, trekkingen, hallOfFame, spelConfig, ...):
+    // alleen lezen voor ingelogde gebruikers, schrijven volgt in Fase 4/5
     match /{document=**} {
-      allow read: if request.auth != null;
+      allow read: if ingelogd();
       allow write: if false;
     }
   }

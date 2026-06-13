@@ -42,16 +42,6 @@ export interface Ronde {
   pot: number;
 }
 
-export interface Betaling {
-  id: string;
-  userId: string;
-  rondeId: string;
-  bedrag: number;
-  status: 'open' | 'betaald' | 'verificatie' | 'afgewezen';
-  methode: 'ideal' | 'bewijs';
-  datum?: string;
-}
-
 export interface Trekking {
   id: string;
   rondeId: string;
@@ -70,12 +60,15 @@ export interface Winnaar {
 
 export interface Kasmutatie {
   id: string;
-  datum: string;
+  datum: Timestamp | null;
   omschrijving: string;
+  /** positief = inkomsten, negatief = uitgaven */
   bedrag: number;
   type: 'inleg' | 'uitbetaling' | 'correctie';
   rondeId?: string;
   userId?: string;
+  betalingId?: string;
+  aangemaaktDoor?: string;
 }
 
 export interface SpelConfig {
@@ -87,8 +80,52 @@ export interface SpelConfig {
   bonusBal: boolean;
 }
 
-export interface PrijsConfig {
+export type PaymentProviderId = 'offline' | 'mollie' | 'tikkie' | 'stripe' | 'incasso';
+
+export interface PaymentConfig {
+  activeProvider: PaymentProviderId;
+  providers: Record<PaymentProviderId, { enabled: boolean }>;
+}
+
+export type BetalingStatus = 'open' | 'verificatie' | 'betaald' | 'afgewezen';
+
+export interface Betaling {
   id: string;
-  modus: 'vaste_prijzen' | 'percentage_pot' | 'winnaar_neemt_alles';
-  vaste_prijzen: Record<number, number | string>;
+  userId: string;
+  userNaam: string;
+  bedrag: number;
+  omschrijving: string;
+  provider: PaymentProviderId;
+  status: BetalingStatus;
+  aangemaakt: Timestamp | null;
+  bevestigd?: Timestamp | null;
+  bevestigdDoor?: string | null;
+  rondeId?: string;
+}
+
+export type AuditAction =
+  | 'gebruiker_aangemaakt'
+  | 'gebruiker_verwijderd'
+  | 'ticket_toegevoegd'
+  | 'ticket_gewijzigd'
+  | 'ticket_verwijderd'
+  | 'rol_gewijzigd'
+  | 'betaling_gemeld'
+  | 'betaling_bevestigd'
+  | 'betaling_afgewezen'
+  | 'uitbetaling_geregistreerd'
+  | 'kascorrectie'
+  | 'trekking_ingevoerd'
+  | 'trekking_gewijzigd'
+  | 'seizoen_gestart'
+  | 'seizoen_gesloten';
+
+export interface AuditLogEntry {
+  id: string;
+  actie: AuditAction;
+  omschrijving: string;
+  userId: string;
+  userNaam: string;
+  doelUserId?: string;
+  datum: Timestamp | null;
 }

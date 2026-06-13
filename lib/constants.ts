@@ -15,6 +15,17 @@ export const TICKET_CONFIG = {
   max: 45,
 } as const;
 
+/**
+ * Standaard inleg per betaling.
+ *
+ * ONBEVESTIGD / AANNAME: er bestaat nog geen "ronde"-concept (Fase 4),
+ * dus betalingen zijn nog niet aan een specifieke ronde gekoppeld.
+ * Zodra Fase 4 rondes met een eigen `inleg`-bedrag introduceert,
+ * vervangt `ronde.inleg` deze constante.
+ */
+export const STANDAARD_INLEG = 4;
+export const STANDAARD_OMSCHRIJVING = 'Inleg LottoClub';
+
 export function valideerTicketNummers(nummers: number[]): string | null {
   const { aantalNummers, min, max } = TICKET_CONFIG;
 
