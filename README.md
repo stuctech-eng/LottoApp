@@ -55,7 +55,9 @@ Route-toegang wordt afgedwongen via `ProtectedRoute` met `allowedRoles`. Bij ong
 
 **Rollen wijzigen**: beheerder kan op `/leden` de rol van elk lid direct aanpassen via een dropdown (lid/kashouder/beheerder). Elke wijziging wordt gelogd in `/auditLog` (`rol_gewijzigd`).
 
-⚠️ **Eenmalige bootstrap**: de allereerste beheerder moet handmatig via Firebase Console → Firestore → `users/{uid}` → `rol: "beheerder"` ingesteld worden. Daarna kan alles via de app.
+**Systeemvoorwaarde — altijd minstens 1 beheerder**: het wijzigen van de rol van de **laatste beheerder** naar iets anders wordt geblokkeerd met een waarschuwing. Dit voorkomt dat het systeem onbestuurbaar wordt (geen enkele beheerder meer over om rollen te wijzigen). Wijs eerst een andere gebruiker aan als beheerder voordat je de huidige laatste beheerder demote.
+
+⚠️ **Eenmalige bootstrap**: de allereerste beheerder moet handmatig via Firebase Console → Firestore → `users/{uid}` → `rol: "beheerder"` ingesteld worden (er is nog niemand om dit via de app te doen). Daarna geldt de bovenstaande bescherming en is Firebase Console niet meer nodig voor rolbeheer.
 
 ## Tickets (Fase 2C)
 Elk lid beheert eigen lotto-tickets via `/profiel`:

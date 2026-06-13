@@ -25,11 +25,21 @@ function LedenPageContent() {
   const [leden, setLeden] = useState<User[]>([]);
   const [laden, setLaden] = useState(true);
   const [bezigId, setBezigId] = useState<string | null>(null);
+  const [waarschuwing, setWaarschuwing] = useState<string | null>(null);
 
   const isBeheerder = profile?.rol === 'beheerder';
+  const aantalBeheerders = leden.filter(l => l.rol === 'beheerder').length;
 
   const handleRolChange = async (lid: User, nieuweRol: Rol) => {
     if (!user || !profile || nieuweRol === lid.rol) return;
+
+    // Systeemvoorwaarde: er moet altijd minstens 1 beheerder zijn.
+    if (lid.rol === 'beheerder' && nieuweRol !== 'beheerder' && aantalBeheerders <= 1) {
+      setWaarschuwing(`${lid.naam} is de laatste beheerder — wijs eerst iemand anders aan als beheerder voordat je deze rol wijzigt.`);
+      setTimeout(() => setWaarschuwing(null), 5000);
+      return;
+    }
+
     setBezigId(lid.id);
     try {
       await updateUserRol(lid.id, nieuweRol);
@@ -87,6 +97,13 @@ function LedenPageContent() {
             </div>
           ))}
         </div>
+
+        {waarschuwing && (
+          <div style={{ margin: '0 20px 14px', background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.25)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+            <span style={{ fontSize: 13, color: 'var(--warning)', lineHeight: 1.5 }}>{waarschuwing}</span>
+          </div>
+        )}
 
         {laden && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>

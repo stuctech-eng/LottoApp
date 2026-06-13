@@ -45,7 +45,7 @@ function BeheerderPageContent() {
         <div style={{ padding: '0 20px', marginBottom: 16 }}>
           <div className="section-title">Snelle acties</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {[{icon:'🎱',label:'Trekking invoeren',href:'/trekkingen',bg:'var(--accent-soft)'},{icon:'👥',label:'Leden beheren',href:'/leden',bg:'var(--gold-soft)'},{icon:'💰',label:'Kasboek',href:'/kas',bg:'var(--success-soft)'},{icon:'⚙️',label:'Instellingen',href:'/beheerder/admin',bg:'var(--purple-soft)'}].map(a => (
+            {[{icon:'🎱',label:'Trekking invoeren',href:'/trekkingen',bg:'var(--accent-soft)'},{icon:'👥',label:'Leden beheren',href:'/leden',bg:'var(--gold-soft)'},{icon:'💰',label:'Kasboek',href:'/kas',bg:'var(--success-soft)'},{icon:'💸',label:'Financieel beheer',href:'/kashouder/financieel',bg:'rgba(52,201,122,0.06)'},{icon:'⚙️',label:'Instellingen',href:'/beheerder/admin',bg:'var(--purple-soft)'}].map(a => (
               <Link key={a.label} href={a.href} style={{ textDecoration: 'none' }}>
                 <div style={{ background: a.bg, border: '1px solid var(--border)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontSize: 24 }}>{a.icon}</span>
