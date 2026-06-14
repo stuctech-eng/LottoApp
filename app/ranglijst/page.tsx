@@ -1,6 +1,9 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth-context';
+import { subscribeRanglijst, RanglijstEntry } from '@/lib/firestore-ranglijst';
 
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -10,22 +13,25 @@ const NAV = [
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
-const rangData = [
-  { pos: 1, emoji: '👩', naam: 'Jenny Smit', rondes: 22, wins: 5, punten: 52, trend: '= stabiel', trendColor: 'var(--muted)', isMe: false },
-  { pos: 2, emoji: '👩‍🦱', naam: 'Neeltje Visser', rondes: 22, wins: 3, punten: 48, trend: '↑ +1', trendColor: 'var(--success)', isMe: true },
-  { pos: 3, emoji: '👨', naam: 'Jan de Boer', rondes: 21, wins: 2, punten: 43, trend: '= stabiel', trendColor: 'var(--muted)', isMe: false },
-  { pos: 4, emoji: '👩‍🦰', naam: 'Lisa van Dam', rondes: 20, wins: 1, punten: 38, trend: '↑ +2', trendColor: 'var(--success)', isMe: false },
-  { pos: 5, emoji: '🧔', naam: 'Peter Janssen', rondes: 19, wins: 1, punten: 35, trend: '↓ −1', trendColor: 'var(--error)', isMe: false },
-  { pos: 6, emoji: '👵', naam: 'Mia Koster', rondes: 22, wins: 0, punten: 33, trend: '= stabiel', trendColor: 'var(--muted)', isMe: false },
-  { pos: 7, emoji: '👴', naam: 'Henk Smeets', rondes: 22, wins: 0, punten: 31, trend: '↓ −2', trendColor: 'var(--error)', isMe: false },
-  { pos: 8, emoji: '🧑', naam: 'Marco Visser', rondes: 22, wins: 0, punten: 29, trend: '= stabiel', trendColor: 'var(--muted)', isMe: false },
-];
-
 const posColor = ['var(--gold)', '#c0c8d0', '#c08050'];
-const podiumOrder = [1, 0, 2];
 const podiumH = ['64px', '48px', '36px'];
 
 function RanglijstPageContent() {
+  const { user } = useAuth();
+  const [entries, setEntries] = useState<RanglijstEntry[]>([]);
+  const [laden, setLaden] = useState(true);
+
+  useEffect(() => {
+    const unsub = subscribeRanglijst(data => {
+      setEntries(data);
+      setLaden(false);
+    });
+    return unsub;
+  }, []);
+
+  const top3 = entries.slice(0, 3);
+  const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]] : top3;
+
   return (
     <>
       <div className="bg-grid" />
@@ -37,55 +43,78 @@ function RanglijstPageContent() {
           </Link>
         </div>
 
-        {/* Seizoen chips */}
-        <div style={{ display: 'flex', gap: 8, padding: '0 20px 16px', overflowX: 'auto' }}>
-          {['Seizoen 2026','Seizoen 2025','Seizoen 2024','All-time'].map((s, i) => (
-            <div key={s} style={{ flexShrink: 0, padding: '7px 16px', borderRadius: 20, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: '1.5px solid', background: i===0 ? 'var(--accent-soft)' : 'var(--surface)', borderColor: i===0 ? 'rgba(74,158,255,0.35)' : 'var(--border)', color: i===0 ? 'var(--accent)' : 'var(--muted)' }}>{s}</div>
-          ))}
-        </div>
+        {laden && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+            <div style={{ width: 32, height: 32, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          </div>
+        )}
+
+        {!laden && entries.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)', fontSize: 14 }}>
+            Nog geen ranglijstdata. Voer een trekking in om de ranglijst te vullen.
+          </div>
+        )}
 
         {/* Podium */}
-        <div style={{ padding: '0 20px 24px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10 }}>
-          {podiumOrder.map((idx) => {
-            const d = rangData[idx];
-            const p = idx;
-            const sizes = ['72px','60px','56px'];
-            return (
-              <div key={d.naam} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }}>
-                <div style={{ width: sizes[p], height: sizes[p], borderRadius: '50%', background: '#1a2f45', border: `3px solid ${posColor[p]}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: p===0?26:22, position: 'relative' }}>
-                  {['👩','👩‍🦱','👨'][p]}
-                  {p===0 && <div style={{ position: 'absolute', top: -14, fontSize: 18 }}>👑</div>}
+        {top3.length >= 2 && (
+          <div style={{ padding: '0 20px 24px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 10 }}>
+            {podiumOrder.map((entry, podiumIdx) => {
+              const rangIdx = top3.indexOf(entry);
+              const isFirst = rangIdx === 0;
+              const sizes = ['72px', '60px', '56px'];
+              return (
+                <div key={entry.user.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <div style={{ width: sizes[rangIdx], height: sizes[rangIdx], borderRadius: '50%', background: '#1a2f45', border: `3px solid ${posColor[rangIdx]}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: rangIdx === 0 ? 26 : 22, position: 'relative' }}>
+                    {entry.user.foto
+                      ? <img src={entry.user.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      : <span>👤</span>
+                    }
+                    {isFirst && <div style={{ position: 'absolute', top: -14, fontSize: 18 }}>👑</div>}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', color: 'var(--white)' }}>{entry.user.naam.split(' ')[0]}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{entry.totaalPunten} pt</div>
+                  <div style={{ width: '100%', height: podiumH[rangIdx], borderRadius: '12px 12px 0 0', background: `rgba(${rangIdx===0?'240,192,96':rangIdx===1?'192,200,208':'192,128,80'},0.15)`, border: `1px solid ${posColor[rangIdx]}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: posColor[rangIdx] }}>{rangIdx + 1}</span>
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', color: 'var(--white)' }}>{d.naam.split(' ')[0]}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{d.punten} pt</div>
-                <div style={{ width: '100%', height: podiumH[p], borderRadius: '12px 12px 0 0', background: `rgba(${p===0?'240,192,96':p===1?'192,200,208':'192,128,80'},0.15)`, border: `1px solid ${posColor[p]}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: posColor[p] }}>{p+1}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
-        <div className="section-title" style={{ padding: '0 20px', marginBottom: 10 }}>Volledige ranglijst</div>
-
-        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-          {rangData.map(d => (
-            <Link key={d.naam} href="/profiel" style={{ textDecoration: 'none' }}>
-              <div style={{ background: d.isMe ? 'var(--accent-soft)' : 'var(--surface)', border: `1px solid ${d.isMe ? 'rgba(74,158,255,0.3)' : 'var(--border)'}`, borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: d.pos===1?'var(--gold)':d.pos===2?'#c0c8d0':d.pos===3?'#c08050':'var(--muted)', width: 24, textAlign: 'center', flexShrink: 0 }}>{d.pos}</span>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{d.emoji}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)' }}>{d.naam}{d.isMe && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}> (jij)</span>}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{d.rondes} rondes · {d.wins}× gewonnen</div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                  <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--white)' }}>{d.punten}</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: d.trendColor }}>{d.trend}</span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {/* Volledige lijst */}
+        {entries.length > 0 && (
+          <>
+            <div className="section-title" style={{ padding: '0 20px', marginBottom: 10 }}>Volledige ranglijst</div>
+            <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+              {entries.map(entry => {
+                const isIk = user && entry.user.id === user.uid;
+                const posC = entry.positie === 1 ? 'var(--gold)' : entry.positie === 2 ? '#c0c8d0' : entry.positie === 3 ? '#c08050' : 'var(--muted)';
+                return (
+                  <div key={entry.user.id} style={{ background: isIk ? 'var(--accent-soft)' : 'var(--surface)', border: `1px solid ${isIk ? 'rgba(74,158,255,0.3)' : 'var(--border)'}`, borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: posC, width: 24, textAlign: 'center', flexShrink: 0 }}>{entry.positie}</span>
+                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0, overflow: 'hidden' }}>
+                      {entry.user.foto ? <img src={entry.user.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        {entry.user.naam}
+                        {isIk && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}> (jij)</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                        {entry.aantalDeelnames} rondes · {entry.aantalGewonnen}× gewonnen · gem. {entry.gemiddeldeScore} goed
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                      <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--white)' }}>{entry.totaalPunten}</span>
+                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>punten</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       <nav className="bottom-nav">

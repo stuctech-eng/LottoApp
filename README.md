@@ -93,7 +93,7 @@ Elk lid beheert eigen lotto-tickets via `/profiel`:
 - **Fase 2** ✅ Echte ledendata uit Firestore (2A) + rol-gebaseerde routing/toegang (2B) + ticketbeheer per lid (2C). Schema voor seizoenen/rondes/trekkingen/kas/uitbetalingen/Hall of Fame staat klaar in `types.ts`, nog niet aan UI gekoppeld.
 - **Fase 3** ✅ Provider-architectuur betalingen (`offline` actief, `mollie` stub) + WhatsApp-provider + `/betalingen`, `/kasmutaties`, `/auditLog`, `/paymentConfig` (Firestore)
 - **Fase 4** ✅ SpelConfig + PrijsConfig uit Firestore, seizoenen aanmaken/afsluiten, trekkingen invoeren, controle-engine (pure functie, platform-onafhankelijk), resultaten per ticket per ronde, ranglijstpunten automatisch bijgewerkt
-- **Fase 5** 🔜 Ranglijst + Hall of Fame live data (Firestore)
+- **Fase 5** ✅ Ranglijst + Hall of Fame live data (ranglijstPunten, resultaten, all-time records uit Firestore)
 - **Fase 6** 🔜 Notificaties + afwerking
 
 ## Firebase setup (uitgevoerd)
@@ -177,7 +177,7 @@ verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 
 ## Bekende aandachtspunten (Fase 4)
 - Rondes zijn nog niet gekoppeld aan trekkingen in de UI — trekking wordt direct onder een seizoen gezet zonder expliciete ronde-selectie. Wordt gekoppeld in Fase 5/6 wanneer betalingen per ronde nodig zijn.
-- `mock-data.ts` bevat nog `mockUser` en `mockLeden` voor `/ranglijst` en `/hall-of-fame` — worden vervangen in Fase 5.
+
 - Aanname over validatie ticket-nummers (6 uit 45) is nu vervangen door live spelConfig uit Firestore.
 - Eerste account dat je aanmaakt krijgt automatisch rol `lid`. Wil je jezelf als `beheerder` of `kashouder` instellen om die schermen te testen, pas dit handmatig aan in Firebase Console → Firestore → `users/{jouw-uid}` → veld `rol`.
 - `/betalen` gebruikt een vaste `STANDAARD_INLEG` (€4, `lib/constants.ts`) — er bestaat nog geen "ronde" met eigen inlegbedrag (volgt in Fase 4).
