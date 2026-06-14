@@ -7,6 +7,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { updateUserTickets, updateUserTelefoon, formatLidSinds } from '@/lib/firestore-users';
 import { logAudit } from '@/lib/firestore-audit';
+import { activeerNotificaties, deactiveerNotificaties, notificatiesIngeschakeld } from '@/lib/firebase-messaging';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
 
 const NAV = [
@@ -30,6 +33,37 @@ function ProfielPageContent() {
   const [editTicket, setEditTicket] = useState<Ticket | null>(null);
   const [telefoon, setTelefoon] = useState('');
   const [telefoonOpgeslagen, setTelefoonOpgeslagen] = useState(false);
+  const [notifActief, setNotifActief] = useState(false);
+  const [notifBezig, setNotifBezig] = useState(false);
+  const [notifToast, setNotifToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (profile?.telefoon) setTelefoon(profile.telefoon);
+    setNotifActief(notificatiesIngeschakeld());
+  }, [profile?.telefoon]);
+
+  const handleNotificaties = async () => {
+    if (!user) return;
+    setNotifBezig(true);
+    try {
+      if (notifActief) {
+        await deactiveerNotificaties(user.uid);
+        setNotifActief(false);
+        setNotifToast('Notificaties uitgeschakeld');
+      } else {
+        const token = await activeerNotificaties(user.uid);
+        if (token) {
+          setNotifActief(true);
+          setNotifToast('Notificaties ingeschakeld ✅');
+        } else {
+          setNotifToast('Toestemming geweigerd — check je browserinstellingen');
+        }
+      }
+      setTimeout(() => setNotifToast(null), 3000);
+    } finally {
+      setNotifBezig(false);
+    }
+  };
 
   useEffect(() => {
     if (profile?.telefoon) setTelefoon(profile.telefoon);
@@ -43,6 +77,7 @@ function ProfielPageContent() {
   };
 
   const handleLogout = async () => {
+    if (user) await deactiveerNotificaties(user.uid);
     await logout();
     router.push('/');
   };
@@ -166,6 +201,38 @@ function ProfielPageContent() {
             <button onClick={handleSaveTelefoon} className="btn-primary" style={{ background: telefoonOpgeslagen ? 'linear-gradient(135deg,var(--success),#1a8a50)' : undefined }}>
               {telefoonOpgeslagen ? '✓ Opgeslagen' : 'Opslaan'}
             </button>
+          </div>
+        </div>
+
+        {/* Notificaties */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">Push notificaties</div>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
+                  {notifActief ? '🔔 Notificaties aan' : '🔕 Notificaties uit'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  {notifActief ? 'Je ontvangt meldingen van trekkingen en betalingen' : 'Schakel in voor meldingen van trekkingen en betalingen'}
+                </div>
+              </div>
+              <button
+                onClick={handleNotificaties}
+                disabled={notifBezig}
+                style={{ width: 44, height: 26, borderRadius: 13, border: 'none', position: 'relative', cursor: 'pointer', background: notifActief ? 'var(--success)' : 'var(--navy-mid)', transition: 'background 0.2s', flexShrink: 0, opacity: notifBezig ? 0.6 : 1 }}
+              >
+                <span style={{ position: 'absolute', top: 3, left: 3, width: 20, height: 20, borderRadius: '50%', background: 'white', transition: 'transform 0.2s', transform: notifActief ? 'translateX(18px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+            {notifToast && (
+              <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>{notifToast}</div>
+            )}
+            {typeof window !== 'undefined' && !('Notification' in window) && (
+              <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>
+                ⚠️ Push notificaties worden niet ondersteund door deze browser. Voeg de app toe aan je beginscherm voor de beste ervaring.
+              </div>
+            )}
           </div>
         </div>
 
