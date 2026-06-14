@@ -31,18 +31,14 @@ jobs:
         working-directory: functions
         run: npm run build
 
-      - name: Deploy to Firebase (Production)
-        if: github.ref == 'refs/heads/main'
-        uses: w9jds/firebase-action@master
-        with:
-          args: deploy --only functions --project lottoclub
-        env:
-          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Write service account key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa_key.json
 
-      - name: Deploy to Firebase (Development)
-        if: github.ref == 'refs/heads/develop'
-        uses: w9jds/firebase-action@master
-        with:
-          args: deploy --only functions --project lottoclub
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Cloud Functions
+        working-directory: functions
+        run: firebase deploy --only functions --project lottoclub
         env:
-          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa_key.json
