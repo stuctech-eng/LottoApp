@@ -92,8 +92,8 @@ Elk lid beheert eigen lotto-tickets via `/profiel`:
 - **Fase 1** ✅ Firebase Auth volledig getest op iPhone (email/wachtwoord, wachtwoord-vergeten, magic link, Google redirect, uitloggen, beveiligde routes) + Firestore
 - **Fase 2** ✅ Echte ledendata uit Firestore (2A) + rol-gebaseerde routing/toegang (2B) + ticketbeheer per lid (2C). Schema voor seizoenen/rondes/trekkingen/kas/uitbetalingen/Hall of Fame staat klaar in `types.ts`, nog niet aan UI gekoppeld.
 - **Fase 3** ✅ Provider-architectuur betalingen (`offline` actief, `mollie` stub) + WhatsApp-provider + `/betalingen`, `/kasmutaties`, `/auditLog`, `/paymentConfig` (Firestore)
-- **Fase 4** 🔜 Seizoenen, rondes, trekkingen + controle-engine (Firestore), spelConfig live — koppelt betalingen aan rondes
-- **Fase 5** 🔜 Ranglijst + Hall of Fame + statistieken (Firestore)
+- **Fase 4** ✅ SpelConfig + PrijsConfig uit Firestore, seizoenen aanmaken/afsluiten, trekkingen invoeren, controle-engine (pure functie, platform-onafhankelijk), resultaten per ticket per ronde, ranglijstpunten automatisch bijgewerkt
+- **Fase 5** 🔜 Ranglijst + Hall of Fame live data (Firestore)
 - **Fase 6** 🔜 Notificaties + afwerking
 
 ## Firebase setup (uitgevoerd)
@@ -145,7 +145,40 @@ Zichtbaar in `/beheerder/admin` → tab "Audit log".
 ## Belangrijke opmerking voor volgende fase
 Firestore staat nog in **test mode** — dit verloopt na 30 dagen of moet handmatig naar de rules in `firestore.rules`. `firestore.rules` is al uitgebreid met rollen-checks voor `/betalingen`, `/kasmutaties`, `/auditLog`, `/paymentConfig` — controleer of deze in de Firebase Console actief staan vóór test-mode verloopt.
 
-## Bekende aandachtspunten (Fase 3)
+## Trekkingen & Controle-engine (Fase 4)
+
+**Architectuurregel:**
+> *Alle berekeningen die invloed hebben op geld, winnaars of ranglijsten draaien server-side (toekomst: Cloud Functions). De controle-engine is gebouwd als pure functie zonder Firestore/React/Next.js afhankelijkheden zodat migratie later kosteloos is.*
+
+**`lib/controle-engine.ts`** — pure functie:
+```
+verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
+→ { resultaten, winnaars, ranglijstUpdates }
+```
+
+**Nieuwe Firestore collecties:**
+```
+/spelConfig/default    — naam, aantalGetallen, minGetal, maxGetal, bonusBal
+/prijsConfig/default   — modus: hoogste_score_wint | meerdere_winnaars | vaste_prijzen
+/seizoenen/{id}        — naam, startDatum, eindDatum, status
+/rondes/{id}           — seizoenId, nummer, inleg, status (nog niet in UI gekoppeld)
+/trekkingen/{id}       — nummers[], bonusBal, seizoenId, verwerkt, ingevoerdDoor
+/resultaten/{id}       — userId, ticketId, aantalGoed, nummersGoed, isWinnaar, punten
+```
+
+**Flow:**
+1. Beheerder voert nummers in → `/trekkingen` → "+ Invoeren"
+2. Controle-engine vergelijkt alle tickets van alle actieve leden
+3. Resultaten worden atomisch opgeslagen (Firestore batch)
+4. RanglijstPunten per user automatisch bijgewerkt (`increment`)
+5. AuditLog entry aangemaakt
+
+**Stap 2 (toekomst):** zelfde controle-engine naar Firebase Cloud Functions verplaatsen. Vereist Blaze plan — acceptabel zodra echte leden meedoen.
+
+## Bekende aandachtspunten (Fase 4)
+- Rondes zijn nog niet gekoppeld aan trekkingen in de UI — trekking wordt direct onder een seizoen gezet zonder expliciete ronde-selectie. Wordt gekoppeld in Fase 5/6 wanneer betalingen per ronde nodig zijn.
+- `mock-data.ts` bevat nog `mockUser` en `mockLeden` voor `/ranglijst` en `/hall-of-fame` — worden vervangen in Fase 5.
+- Aanname over validatie ticket-nummers (6 uit 45) is nu vervangen door live spelConfig uit Firestore.
 - Eerste account dat je aanmaakt krijgt automatisch rol `lid`. Wil je jezelf als `beheerder` of `kashouder` instellen om die schermen te testen, pas dit handmatig aan in Firebase Console → Firestore → `users/{jouw-uid}` → veld `rol`.
 - `/betalen` gebruikt een vaste `STANDAARD_INLEG` (€4, `lib/constants.ts`) — er bestaat nog geen "ronde" met eigen inlegbedrag (volgt in Fase 4).
 - `mockUser`/`mockLeden` in `lib/mock-data.ts` worden nog gebruikt door `/trekkingen`, `/trekkingen/[id]`, `/ranglijst`, `/hall-of-fame` — bewust niet aangepast, deze pagina's krijgen hun eigen Firestore-koppeling in Fase 4/5.
