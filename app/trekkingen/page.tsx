@@ -87,8 +87,6 @@ function TrekkingInvoerModal({
         bonusBal: bonus,
         ingevoerdDoor: user.uid,
         ingevoerdDoorNaam: profile.naam,
-        spelConfig,
-        prijsConfig,
       }, { uid: user.uid, naam: profile.naam });
       setSucces(true);
       setTimeout(() => { onClose(); }, 2000);
