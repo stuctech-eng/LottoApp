@@ -39,8 +39,18 @@ function ProfielPageContent() {
 
   useEffect(() => {
     if (profile?.telefoon) setTelefoon(profile.telefoon);
-    setNotifActief(notificatiesIngeschakeld());
+    // Check actuele toestemming status
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifActief(Notification.permission === 'granted');
+    }
   }, [profile?.telefoon]);
+
+  // Als toestemming al granted is, sla token automatisch op
+  useEffect(() => {
+    if (notifActief && user) {
+      activeerNotificaties(user.uid).catch(console.error);
+    }
+  }, [notifActief, user]);
 
   const handleNotificaties = async () => {
     if (!user) return;
@@ -51,15 +61,24 @@ function ProfielPageContent() {
         setNotifActief(false);
         setNotifToast('Notificaties uitgeschakeld');
       } else {
+        // Debug: toon VAPID key status
+        const vapid = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
+        if (!vapid || vapid === 'https://api.example.com') {
+          setNotifToast(`❌ VAPID key ontbreekt of is placeholder: "${vapid.slice(0,30)}"`);
+          return;
+        }
+        setNotifToast(`🔑 VAPID: ${vapid.slice(0,15)}... Toestemming vragen...`);
+        
         const token = await activeerNotificaties(user.uid);
         if (token) {
           setNotifActief(true);
-          setNotifToast('Notificaties ingeschakeld ✅');
+          setNotifToast(`✅ Token: ${token.slice(0,20)}...`);
         } else {
-          setNotifToast('Toestemming geweigerd — check je browserinstellingen');
+          const perm = typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unknown';
+          setNotifToast(`❌ Geen token. Toestemming: ${perm}`);
         }
       }
-      setTimeout(() => setNotifToast(null), 3000);
+      setTimeout(() => setNotifToast(null), 8000);
     } finally {
       setNotifBezig(false);
     }
@@ -234,6 +253,11 @@ function ProfielPageContent() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Debug link - tijdelijk */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <a href="/debug-fcm" style={{ display: 'block', textAlign: 'center', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>🔍 FCM Diagnostiek</a>
         </div>
 
         {/* Uitloggen */}
