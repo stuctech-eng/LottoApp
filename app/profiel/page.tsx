@@ -39,8 +39,18 @@ function ProfielPageContent() {
 
   useEffect(() => {
     if (profile?.telefoon) setTelefoon(profile.telefoon);
-    setNotifActief(notificatiesIngeschakeld());
+    // Check actuele toestemming status
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifActief(Notification.permission === 'granted');
+    }
   }, [profile?.telefoon]);
+
+  // Als toestemming al granted is, sla token automatisch op
+  useEffect(() => {
+    if (notifActief && user) {
+      activeerNotificaties(user.uid).catch(console.error);
+    }
+  }, [notifActief, user]);
 
   const handleNotificaties = async () => {
     if (!user) return;
@@ -243,6 +253,11 @@ function ProfielPageContent() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Debug link - tijdelijk */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <a href="/debug-fcm" style={{ display: 'block', textAlign: 'center', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>🔍 FCM Diagnostiek</a>
         </div>
 
         {/* Uitloggen */}
