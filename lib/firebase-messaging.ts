@@ -24,26 +24,32 @@ export async function activeerNotificaties(userId: string): Promise<string | nul
     return null;
   }
 
+  console.log('1. Toestemming status:', Notification.permission);
   const toestemming = await Notification.requestPermission();
+  console.log('2. Toestemming na request:', toestemming);
+  
   if (toestemming !== 'granted') {
     console.info('Notificatie-toestemming geweigerd');
     return null;
   }
 
   try {
-    // Registreer service worker
+    console.log('3. Service worker registreren...');
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
+    console.log('4. Service worker klaar:', registration.scope);
 
     const messaging = getMessaging(app);
+    console.log('5. VAPID key:', VAPID_KEY ? VAPID_KEY.slice(0, 20) + '...' : 'LEEG!');
+    
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: registration,
     });
 
+    console.log('6. FCM token:', token ? token.slice(0, 20) + '...' : 'GEEN TOKEN');
     if (!token) return null;
 
-    // Sla token op per apparaat (meerdere apparaten per gebruiker)
     const tokenRef = doc(collection(db, `users/${userId}/fcmTokens`), token.slice(0, 20));
     await setDoc(tokenRef, {
       token,
@@ -51,11 +57,11 @@ export async function activeerNotificaties(userId: string): Promise<string | nul
       aangemaakt: serverTimestamp(),
       actief: true,
     });
+    console.log('7. Token opgeslagen in Firestore ✅');
 
-    console.info('FCM token opgeslagen:', token.slice(0, 20) + '…');
     return token;
   } catch (err) {
-    console.error('FCM token ophalen mislukt:', err);
+    console.error('FCM fout:', err);
     return null;
   }
 }
