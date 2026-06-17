@@ -51,15 +51,24 @@ function ProfielPageContent() {
         setNotifActief(false);
         setNotifToast('Notificaties uitgeschakeld');
       } else {
+        // Debug: toon VAPID key status
+        const vapid = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
+        if (!vapid || vapid === 'https://api.example.com') {
+          setNotifToast(`❌ VAPID key ontbreekt of is placeholder: "${vapid.slice(0,30)}"`);
+          return;
+        }
+        setNotifToast(`🔑 VAPID: ${vapid.slice(0,15)}... Toestemming vragen...`);
+        
         const token = await activeerNotificaties(user.uid);
         if (token) {
           setNotifActief(true);
-          setNotifToast('Notificaties ingeschakeld ✅');
+          setNotifToast(`✅ Token: ${token.slice(0,20)}...`);
         } else {
-          setNotifToast('Toestemming geweigerd — check je browserinstellingen');
+          const perm = typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unknown';
+          setNotifToast(`❌ Geen token. Toestemming: ${perm}`);
         }
       }
-      setTimeout(() => setNotifToast(null), 3000);
+      setTimeout(() => setNotifToast(null), 8000);
     } finally {
       setNotifBezig(false);
     }
