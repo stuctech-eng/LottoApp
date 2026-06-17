@@ -1,8 +1,8 @@
 // public/firebase-messaging-sw.js
 // Service Worker voor Firebase Cloud Messaging — achtergrond push notificaties
 
-importScripts('https://www.gstatic.com/firebasejs/10.0.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.0.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
   apiKey: "AIzaSyDGz1nAbH5fxYY5halcrd0Dsu3PaM2j9bU",
