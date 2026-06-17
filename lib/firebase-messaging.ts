@@ -1,39 +1,37 @@
 'use client';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-import { doc, setDoc, deleteDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import app from './firebase';
 
-/**
- * VAPID key — nodig voor web push notificaties.
- * Genereer via: Firebase Console → Project Settings → Cloud Messaging →
- * Web Push certificates → Generate key pair
- *
- * Vervang onderstaande placeholder met jouw echte VAPID key.
- */
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
 
-/**
- * Vraag toestemming voor notificaties en sla FCM token op.
- * Geeft het token terug, of null als geen toestemming.
- */
 export async function activeerNotificaties(userId: string): Promise<string | null> {
   if (typeof window === 'undefined') return null;
-  if (!('Notification' in window)) {
-    console.warn('Push notificaties worden niet ondersteund door deze browser');
-    return null;
-  }
+  if (!('Notification' in window)) return null;
+
+  console.log('1. Permission:', Notification.permission);
+  console.log('2. Standalone:', window.matchMedia('(display-mode: standalone)').matches);
+  console.log('3. PushManager:', !!window.PushManager);
+  console.log('4. VAPID:', VAPID_KEY ? VAPID_KEY.slice(0, 15) + '...' : 'LEEG!');
 
   const toestemming = await Notification.requestPermission();
-  if (toestemming !== 'granted') {
-    console.info('Notificatie-toestemming geweigerd');
-    return null;
-  }
+  console.log('5. Toestemming:', toestemming);
+  if (toestemming !== 'granted') return null;
 
   try {
-    // Registreer service worker
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
+    console.log('6. SW ready:', registration.scope);
+    console.log('7. PushManager op SW:', !!registration.pushManager);
+
+    // Test Firestore write los van FCM
+    try {
+      await setDoc(doc(db, 'debug', 'test'), { tijd: serverTimestamp() });
+      console.log('8. Firestore write werkt ✅');
+    } catch (e) {
+      console.error('8. Firestore write MISLUKT:', e);
+    }
 
     const messaging = getMessaging(app);
     const token = await getToken(messaging, {
@@ -41,28 +39,26 @@ export async function activeerNotificaties(userId: string): Promise<string | nul
       serviceWorkerRegistration: registration,
     });
 
+    console.log('9. FCM Token:', token ? token.slice(0, 20) + '...' : 'NULL!');
     if (!token) return null;
 
-    // Sla token op per apparaat (meerdere apparaten per gebruiker)
-    const tokenRef = doc(collection(db, `users/${userId}/fcmTokens`), token.slice(0, 20));
+    // Volledige token als document ID
+    const tokenRef = doc(db, `users/${userId}/fcmTokens/${token}`);
     await setDoc(tokenRef, {
       token,
       platform: detectPlatform(),
       aangemaakt: serverTimestamp(),
       actief: true,
     });
+    console.log('10. Token opgeslagen ✅');
 
-    console.info('FCM token opgeslagen:', token.slice(0, 20) + '…');
     return token;
   } catch (err) {
-    console.error('FCM token ophalen mislukt:', err);
+    console.error('FCM fout:', err);
     return null;
   }
 }
 
-/**
- * Verwijder FCM token van dit apparaat (bij uitloggen).
- */
 export async function deactiveerNotificaties(userId: string): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
@@ -76,17 +72,13 @@ export async function deactiveerNotificaties(userId: string): Promise<void> {
     });
     if (!token) return;
 
-    const tokenRef = doc(collection(db, `users/${userId}/fcmTokens`), token.slice(0, 20));
+    const tokenRef = doc(db, `users/${userId}/fcmTokens/${token}`);
     await deleteDoc(tokenRef);
   } catch (err) {
     console.error('FCM token verwijderen mislukt:', err);
   }
 }
 
-/**
- * Luister naar notificaties terwijl de app op de voorgrond is.
- * Geeft unsubscribe-functie terug.
- */
 export function luisterNaarNotificaties(callback: (title: string, body: string) => void): () => void {
   if (typeof window === 'undefined') return () => {};
   try {
@@ -102,9 +94,6 @@ export function luisterNaarNotificaties(callback: (title: string, body: string) 
   }
 }
 
-/**
- * Check of notificaties al zijn ingeschakeld op dit apparaat.
- */
 export function notificatiesIngeschakeld(): boolean {
   if (typeof window === 'undefined') return false;
   return 'Notification' in window && Notification.permission === 'granted';
