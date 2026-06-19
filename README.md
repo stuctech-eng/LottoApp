@@ -353,10 +353,36 @@ verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 
 **Impact:** LOW-MEDIUM — raakt alleen `loginWithGoogle()` en de redirect-`useEffect` in `auth-context.tsx`. Email/wachtwoord/magic-link ongewijzigd.
 
-**⏳ Nog te bevestigen na deploy:**
-1. Google-login testen via PWA (beginscherm-icoon) — moet nu via popup gaan i.p.v. terugvallen op inlogscherm
-2. Google-login testen via gewone Safari — moet ongewijzigd blijven werken (redirect-pad)
-3. `/debug-auth` openen via PWA → "Start diagnostiek" → controleren of "Standalone PWA modus: ja" verschijnt
+### ✅ BEVESTIGD — Google Sign-In fix werkt (19 juni 2026)
+- PWA (standalone, beginscherm-icoon): popup-methode getest, werkt in 1x, geen terugval naar inlogscherm meer
+- Gewone Safari: redirect-methode getest, ongewijzigd werkend gedrag bevestigd
+- Beide paden bevestigd via praktijktest, niet alleen via `/debug-auth`
+
+### 🔐 Volledige regressietest inlogmethodes (19 juni 2026)
+| # | Methode | Status |
+|---|---|---|
+| 1 | Email + wachtwoord (login) | ✅ bevestigd |
+| 2 | Email + wachtwoord (registratie) | ✅ bevestigd |
+| 3 | Wachtwoord vergeten | ✅ bevestigd |
+| 4 | Magic link | ✅ bevestigd ná fix (zie hieronder) |
+| 5 | Google Sign-In (PWA + Safari) | ✅ bevestigd, beide werken |
+
+**Let op — los account ontstaan tijdens test:** tijdens het testen van Google Sign-In in de PWA werd per ongeluk op een ander Google-account (`stuctech@gmail.com`) ingelogd, wat een nieuw los account aanmaakte (rol `lid`, 0 punten, 0 tickets) naast het bestaande beheerder-account (`t.e.veerman@ziggo.nl`). Bewust besloten dit te laten staan als eventueel toekomstig "speel-account", gescheiden van het beheerder-account — dit is verwacht Firebase-gedrag (matching gebeurt op exact email-adres, geen automatische koppeling tussen verschillende adressen).
+
+### ✅ OPGELOST — 19 juni 2026: magic-link prompt verscheen meerdere keren
+
+**Probleem (ontdekt tijdens regressietest):** bij het inloggen via magic link verscheen de prompt "Bevestig je e-mailadres om in te loggen" 3x achter elkaar, waarbij elke keer opnieuw het e-mailadres ingetikt moest worden. Hierdoor verliep de magic link voordat de aanmelding kon worden afgerond.
+
+**Root cause:** de `useEffect` in `app/page.tsx` die de magic-link-URL detecteert en verwerkt, had geen vlag om bij te houden of de verwerking al gestart was. Bij een re-render (bijv. wanneer `completeMagicLinkSignIn` of `router` een nieuwe referentie kreeg) liep de effect opnieuw, en daarmee ook `window.prompt()` opnieuw — telkens met een leeg veld.
+
+**Fix toegepast (19 juni):**
+- `app/page.tsx` → nieuwe `useRef(false)` (`magicLinkHandled`) die bijhoudt of de magic-link-verwerking al gestart is binnen deze paginasessie
+- De `handleMagicLink()`-functie checkt deze ref vóór de `window.prompt()`-aanroep en stopt als de verwerking al loopt
+- Geen wijziging aan andere inlogmethodes
+
+**Impact:** LOW — raakt alleen de magic-link `useEffect`, geen andere flow.
+
+**⏳ Nog te bevestigen na deploy:** nieuwe (verse) magic link aanvragen en testen of de prompt nog maar 1x verschijnt.
 
 
 ### Handige links/IDs voor volgende sessie

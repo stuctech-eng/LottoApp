@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
@@ -20,6 +20,16 @@ export default function LoginPage() {
   const [naam, setNaam] = useState('');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
+  // Voorkomt dat de magic-link verwerking (en daarmee de
+  // window.prompt() voor het e-mailadres) meerdere keren start
+  // binnen dezelfde paginasessie. Zonder deze vlag kan de useEffect
+  // hieronder opnieuw triggeren (bijv. als completeMagicLinkSignIn of
+  // router een nieuwe referentie krijgt), wat de gebruiker meerdere
+  // keren achter elkaar om hetzelfde e-mailadres liet vragen — met als
+  // risico dat de link inmiddels verlopen/verbruikt is tegen de tijd
+  // dat de daadwerkelijke aanmelding wordt geprobeerd.
+  const magicLinkHandled = useRef(false);
+
   // Redirect als al ingelogd
   useEffect(() => {
     if (!loading && user) {
@@ -39,9 +49,13 @@ export default function LoginPage() {
   useEffect(() => {
     const handleMagicLink = async () => {
       if (typeof window === 'undefined') return;
+      if (magicLinkHandled.current) return;
+
       const link = window.location.href;
       const isLink = link.includes('apiKey') && link.includes('mode=signIn');
       if (!isLink) return;
+
+      magicLinkHandled.current = true;
 
       let savedEmail = window.localStorage.getItem('emailForSignIn');
       if (!savedEmail) {
