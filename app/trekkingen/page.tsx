@@ -67,14 +67,21 @@ function TrekkingInvoerModal({
   if (!open) return null;
 
   const handleNummerChange = (i: number, val: string) => {
+    const schoon = val.replace(/[^0-9]/g, '').slice(0, 2);
     const n = [...nummers];
-    n[i] = val.replace(/[^0-9]/g, '').slice(0, 2);
+    n[i] = schoon;
     setNummers(n);
     setFoutieveIndexen(prev => { const s = new Set(prev); s.delete(i); return s; });
 
-    // Auto-advance naar volgend veld zodra 2 cijfers ingevuld zijn
-    if (n[i].length === 2 && i < nummers.length - 1) {
-      inputRefs.current[i + 1]?.focus();
+    // Auto-advance: spring door zodra het veld een geldig getal bevat
+    // dat niet meer groter kan worden zonder over het maximum te gaan.
+    if (i < nummers.length - 1 && schoon.length > 0) {
+      const waarde = parseInt(schoon, 10);
+      const kanNogGroeien = schoon.length === 1 && waarde * 10 <= spelConfig.maxGetal;
+      if (schoon.length === 2 || !kanNogGroeien) {
+        // Kleine delay zodat de waarde eerst zichtbaar wordt
+        setTimeout(() => inputRefs.current[i + 1]?.focus(), 50);
+      }
     }
   };
 
