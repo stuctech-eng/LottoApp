@@ -63,7 +63,7 @@ Route-toegang wordt afgedwongen via `ProtectedRoute` met `allowedRoles`. Bij ong
 Elk lid beheert eigen lotto-tickets via `/profiel`:
 - Ticket toevoegen, bewerken, verwijderen
 - Validatie: 7 unieke nummers, 1-45 (zie `lib/constants.ts`)
-- **Aanname/ONBEVESTIGD**: deze validatie is gebaseerd op de bestaande mock-tickets, niet op een live spelConfig. Wordt in Fase 4 vervangen door een query op `/spelConfig`.
+- **Aanname**: ticket-validatie (6 nummers, 1-45) is nu live uit `/spelConfig` in Firestore (Fase 4 ✅).
 
 ## Pagina's
 
@@ -94,7 +94,92 @@ Elk lid beheert eigen lotto-tickets via `/profiel`:
 - **Fase 3** ✅ Provider-architectuur betalingen (`offline` actief, `mollie` stub) + WhatsApp-provider + `/betalingen`, `/kasmutaties`, `/auditLog`, `/paymentConfig` (Firestore)
 - **Fase 4** ✅ SpelConfig + PrijsConfig uit Firestore, seizoenen aanmaken/afsluiten, trekkingen invoeren, controle-engine (pure functie, platform-onafhankelijk), resultaten per ticket per ronde, ranglijstpunten automatisch bijgewerkt
 - **Fase 5** ✅ Ranglijst + Hall of Fame live data (ranglijstPunten, resultaten, all-time records uit Firestore)
-- **Fase 6** 🔜 Notificaties + afwerking
+- **Fase 6** ✅ Cloud Functions (server-side), push notificaties, GitHub Actions CI/CD, FCM tokens
+
+## Push Notificaties — Firebase Cloud Messaging (Fase 6)
+
+### Hoe het werkt
+
+```
+Beheerder voert trekking in
+  ↓ Firestore /trekkingen (verwerkt: false)
+  ↓ Cloud Function onTrekkingVerwerkt getriggerd
+  ↓ Controle-engine berekent resultaten
+  ↓ FCM token ophalen uit /users/{uid}/fcmTokens
+  ↓ Push notificatie verstuurd via Firebase Admin SDK
+  ↓ Notificatie verschijnt op vergrendeld iPhone scherm
+```
+
+### Vereisten
+
+**iOS Push Notificaties werken ALLEEN als:**
+1. De app is geïnstalleerd als PWA (via Safari → Deel → "Zet op beginscherm")
+2. De gebruiker toestemming heeft gegeven in de app
+3. De VAPID key correct is ingesteld (publieke sleutel, begint met `B`)
+
+**Niet via gewone Safari browser** — alleen via het beginscherm-icoon (standalone PWA).
+
+### Setup checklist
+
+- [ ] VAPID key genereren: Firebase Console → ⚙️ → Project Settings → Cloud Messaging → Web Push certificates → **Key pair** (publiek, begint met `B`)
+- [ ] VAPID key opslaan in Vercel: `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (niet sensitive)
+- [ ] Firestore rules voor `fcmTokens` subcollectie aanwezig
+- [ ] `public/firebase-messaging-sw.js` aanwezig (service worker)
+- [ ] App geïnstalleerd als PWA op beginscherm
+
+### Veelgemaakte fout — VAPID key
+
+```
+❌ Fout: "Show private key" kopiëren → begint NIET met 'B' → getToken() faalt
+✅ Goed: "Key pair" kopiëren → begint met 'B' → werkt correct
+```
+
+Foutmelding als VAPID key ongeldig is:
+```
+applicationServerKey must contain a valid P-256 public key
+```
+
+### FCM Diagnostiek pagina
+
+De app bevat een ingebouwde diagnostiek pagina: `/debug-fcm`
+
+**Alleen toegankelijk via PWA** (beginscherm-icoon), niet via Safari.
+
+Toont stap voor stap:
+1. User ID (ingelogd?)
+2. Notification.permission (granted/denied/default)
+3. Standalone modus (PWA of Safari?)
+4. PushManager beschikbaar?
+5. VAPID key aanwezig?
+6. Toestemming na request
+7. Service Worker geregistreerd
+8. Firestore write test (los van FCM)
+9. getToken() resultaat
+10. Token opgeslagen in Firestore
+
+**Gebruik bij problemen:** open `/debug-fcm` → "Start diagnostiek" → screenshot → diagnose in één oogopslag.
+
+### Firestore structuur FCM tokens
+
+```
+/users/{userId}/fcmTokens/{token}
+  token: "dxZsO9D0d0HZMSMMcmkgcw:APA91b..."
+  platform: "ios"
+  aangemaakt: Timestamp
+  actief: true
+```
+
+Meerdere apparaten per gebruiker worden ondersteund — elk apparaat heeft zijn eigen token document.
+
+### Service Worker versie
+
+```javascript
+// public/firebase-messaging-sw.js
+importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js');
+```
+
+⚠️ Gebruik Firebase versie **11.10.0 of hoger** — versie 10.0.0 heeft iOS token problemen.
 
 ## Firebase setup (uitgevoerd)
 - Project: `lottoclub`
@@ -183,3 +268,52 @@ verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 - `/betalen` gebruikt een vaste `STANDAARD_INLEG` (€4, `lib/constants.ts`) — er bestaat nog geen "ronde" met eigen inlegbedrag (volgt in Fase 4).
 - `mockUser`/`mockLeden` in `lib/mock-data.ts` worden nog gebruikt door `/trekkingen`, `/trekkingen/[id]`, `/ranglijst`, `/hall-of-fame` — bewust niet aangepast, deze pagina's krijgen hun eigen Firestore-koppeling in Fase 4/5.
 - WhatsApp-herinneringen werken alleen voor leden die een telefoonnummer hebben ingevuld via `/profiel`.
+
+---
+
+## STATUS PER [huidige datum] — WAAR WE NU MEE BEZIG ZIJN
+
+### Volledig werkend en getest
+- ✅ Fase 0-6 alle gebouwd en gepusht naar productie (`main` branch)
+- ✅ Cloud Functions live: `onTrekkingVerwerkt`, `onBetalingBevestigd`, `onBetalingsHerinnering`
+- ✅ GitHub Actions CI/CD werkt — push naar `main` deployt automatisch Cloud Functions + Vercel
+- ✅ Push notificaties werken end-to-end bevestigd:
+  - Trekking ingevoerd → "🎱 Trekking resultaten" notificatie ontvangen
+  - Betaling bevestigd → "✅ Betaling bevestigd" notificatie ontvangen
+- ✅ Tweede echt lid toegevoegd: Wim Kraaij (naast Dick Veerman als beheerder)
+- ✅ "Laatste beheerder" safeguard werkt zichtbaar in `/leden`
+- ✅ Modal trekking-invoer verbeterd: sluitknop (✕), auto-focus, auto-advance bij 2 cijfers, rode validatie-randen
+- ✅ Beheerder-dashboard heeft nu ook "💳 Mijn inleg betalen" knop (kon eerst niet als beheerder zelf betalen)
+
+### 🔴 OPENSTAAND PROBLEEM — eerstvolgende stap
+**Bij het bevestigen van een betaling kwamen er 2x dezelfde push notificatie binnen** (in plaats van 1x).
+
+**Context van de test net afgerond:**
+1. Oude testbetaling (status `betaald`, van 13 juni) verwijderd uit Firestore `/betalingen`
+2. Nieuwe betaling gemeld via `/betalen` als beheerder (Dick Veerman, €4)
+3. Bevestigd via `/kashouder/financieel` → ✓ knop
+4. App gesloten, iPhone vergrendeld, 15 sec gewacht
+5. **Resultaat: notificatie kwam 2x binnen, beide identiek** (nog te bevestigen of het echt identiek was — laatste vraag aan gebruiker nog niet beantwoord toen sessie eindigde)
+
+**Mogelijke oorzaken om te onderzoeken:**
+- Meerdere FCM tokens geregistreerd voor dezelfde user (bijv. van de PWA-herinstallaties tijdens eerdere FCM-debugging — elke herinstallatie kan een nieuw token hebben aangemaakt zonder dat het oude token verwijderd werd)
+- `onBetalingBevestigd` Cloud Function triggert mogelijk dubbel op de Firestore write (bijv. als de `update` in twee stappen gebeurt, of als er een `onDocumentWritten` i.p.v. `onDocumentUpdated` listener actief is)
+- Check Firestore: `users/{uid}/fcmTokens` — hoeveel documenten staan daar? Bij meerdere oude tokens kan elk apparaat/installatie een aparte push krijgen
+
+**Eerste stap voor volgende sessie:**
+1. Vraag de gebruiker te bevestigen: waren de 2 notificaties echt identiek qua tekst?
+2. Check `users/{dick-uid}/fcmTokens` in Firestore Console — tel het aantal documenten
+3. Indien meerdere tokens: oude/ongeldige tokens opruimen (eventueel automatisch bij elke `activeerNotificaties()` aanroep oude tokens van hetzelfde apparaat overschrijven i.p.v. toevoegen)
+4. Check Cloud Function logs (`onBetalingBevestigd`) in Google Cloud Logging — werd de functie 1x of 2x aangeroepen voor deze betaling?
+
+### Nog niet getest
+- ❓ `onBetalingsHerinnering` (wekelijkse scheduled function, draait vrijdag 09:00) — nog nooit gecontroleerd of deze daadwerkelijk afgaat
+- ❓ De FCM debug pagina (`/debug-fcm`) staat nog live in productie — beslissen of die blijft staan als ingebouwde tool of verwijderd wordt
+- ❓ Node.js 20 → 22 upgrade voor Cloud Functions (deprecation warning in build logs, nog niet kritiek)
+- ❓ Auto-advance in trekking-modal bij 1-cijferige getallen werkt niet helemaal goed op iOS (2-cijferige werkt wel) — bewust uitgesteld naar "volgende stap", nooit opgepakt
+
+### Handige links/IDs voor volgende sessie
+- Live app: https://lotto-app-eight-chi.vercel.app
+- Repo: github.com/stuctech-eng/LottoApp (branch: main is productie, develop bestaat ook maar wordt nauwelijks gebruikt)
+- Firebase project: `lottoclub` (project nummer 455488693325)
+- Test-gebruikers: Dick Veerman (beheerder, t.e.veerman@ziggo.nl), Wim Kraaij (lid)
