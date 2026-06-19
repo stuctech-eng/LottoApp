@@ -51,19 +51,31 @@ async function getAllFcmTokens(setting: keyof NotificationSettings): Promise<{ u
   return results;
 }
 
+/**
+ * Verstuurt een push notificatie naar de gegeven tokens.
+ *
+ * BELANGRIJK — DATA-ONLY PAYLOAD:
+ * Er wordt bewust GEEN top-level `notification` veld meegestuurd.
+ * Een top-level `notification` veld laat FCM zelf automatisch een
+ * notificatie tonen aan de gebruiker, BOVENOP de notificatie die de
+ * service worker zelf toont via self.registration.showNotification()
+ * in onBackgroundMessage (zie public/firebase-messaging-sw.js).
+ * Dat veroorzaakte de bug waarbij gebruikers 2x dezelfde notificatie
+ * kregen. Door alles via `data` te sturen, toont alléén de service
+ * worker de notificatie — precies 1x.
+ */
 async function sendToTokens(tokens: string[], notification: { title: string; body: string }, data?: Record<string, string>) {
   if (tokens.length === 0) return;
   try {
     const response = await messaging.sendEachForMulticast({
       tokens,
-      notification,
-      data,
+      data: {
+        title: notification.title,
+        body: notification.body,
+        ...(data ?? {}),
+      },
       webpush: {
-        notification: {
-          icon: '/icons/icon-192x192.png',
-          badge: '/icons/badge-72x72.png',
-        },
-        fcmOptions: { link: '/' },
+        fcmOptions: { link: data?.path ?? '/' },
       },
     });
     // Verwijder ongeldige tokens

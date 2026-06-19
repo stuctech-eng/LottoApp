@@ -16,11 +16,20 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // Achtergrond notificaties ontvangen (app is gesloten of op achtergrond)
+//
+// BELANGRIJK — DATA-ONLY PAYLOAD:
+// De Cloud Function (sendToTokens in functions/src/index.ts) stuurt
+// bewust GEEN top-level `notification` veld meer mee, alleen `data`.
+// Daardoor toont FCM zelf GEEN automatische notificatie meer, en is
+// deze showNotification() hieronder de ENIGE plek die de notificatie
+// toont. Eerder zorgde de combinatie van een top-level `notification`
+// veld (automatische FCM-weergave) + deze showNotification() call
+// ervoor dat gebruikers 2x dezelfde notificatie kregen.
 messaging.onBackgroundMessage((payload) => {
   console.log('[SW] Achtergrond notificatie ontvangen:', payload);
 
-  const { title, body, icon } = payload.notification ?? {};
-  const link = payload.data?.path ?? '/';
+  const { title, body, icon, path } = payload.data ?? {};
+  const link = path ?? '/';
 
   self.registration.showNotification(title ?? 'LottoClub', {
     body: body ?? '',
