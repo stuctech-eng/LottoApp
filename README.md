@@ -121,11 +121,11 @@ Beheerder voert trekking in
 
 ### Setup checklist
 
-- [ ] VAPID key genereren: Firebase Console → ⚙️ → Project Settings → Cloud Messaging → Web Push certificates → **Key pair** (publiek, begint met `B`)
-- [ ] VAPID key opslaan in Vercel: `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (niet sensitive)
-- [ ] Firestore rules voor `fcmTokens` subcollectie aanwezig
-- [ ] `public/firebase-messaging-sw.js` aanwezig (service worker)
-- [ ] App geïnstalleerd als PWA op beginscherm
+- [x] VAPID key genereren: Firebase Console → ⚙️ → Project Settings → Cloud Messaging → Web Push certificates → **Key pair** (publiek, begint met `B`)
+- [x] VAPID key opslaan in Vercel: `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (niet sensitive)
+- [x] Firestore rules voor `fcmTokens` subcollectie aanwezig
+- [x] `public/firebase-messaging-sw.js` aanwezig (service worker)
+- [x] App geïnstalleerd als PWA op beginscherm
 
 ### Veelgemaakte fout — VAPID key
 
@@ -170,6 +170,31 @@ Toont stap voor stap:
 ```
 
 Meerdere apparaten per gebruiker worden ondersteund — elk apparaat heeft zijn eigen token document.
+
+### Push payload — DATA-ONLY (sinds 19 juni, bugfix dubbele notificatie)
+
+**Belangrijke architectuurregel:** Cloud Functions sturen push-payloads **altijd alleen via `data`**, nooit via een top-level `notification`-veld.
+
+Reden: een top-level `notification`-veld in het FCM-payload laat de browser/OS **automatisch** een notificatie tonen. Omdat `firebase-messaging-sw.js` in `onBackgroundMessage` ZELF ook `self.registration.showNotification()` aanroept, zorgde de combinatie van beide voor **2x dezelfde notificatie** per verzonden bericht (bevestigd: 1 token, 1 functie-invocatie, toch 2 meldingen op het scherm — root cause gevonden in Cloud Logging + service worker code, 19 juni).
+
+```javascript
+// ✅ Goed — alleen data, service worker toont 1x
+await messaging.sendEachForMulticast({
+  tokens,
+  data: { title, body, ...extra },
+  webpush: { fcmOptions: { link: '/' } },
+});
+
+// ❌ Fout — top-level notification + eigen showNotification() = dubbel
+await messaging.sendEachForMulticast({
+  tokens,
+  notification: { title, body },  // FCM toont automatisch...
+  webpush: { notification: { ... } },
+});
+// ...en service worker toont via showNotification() óók nog een keer
+```
+
+Geldt voor alle drie notificatie-typen via de gedeelde `sendToTokens()`-helper: `betalingBevestigd`, `trekkingResultaten`, `herinneringen`.
 
 ### Service Worker versie
 
@@ -233,7 +258,7 @@ Firestore staat nog in **test mode** — dit verloopt na 30 dagen of moet handma
 ## Trekkingen & Controle-engine (Fase 4)
 
 **Architectuurregel:**
-> *Alle berekeningen die invloed hebben op geld, winnaars of ranglijsten draaien server-side (toekomst: Cloud Functions). De controle-engine is gebouwd als pure functie zonder Firestore/React/Next.js afhankelijkheden zodat migratie later kosteloos is.*
+> *Alle berekeningen die invloed hebben op geld, winnaars of ranglijsten draaien server-side (toekomst: Cloud Functions). De controle-engine is gebouwd as pure functie zonder Firestore/React/Next.js afhankelijkheden zodat migratie later kosteloos is.*
 
 **`lib/controle-engine.ts`** — pure functie:
 ```
@@ -271,7 +296,7 @@ verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 
 ---
 
-## STATUS PER [huidige datum] — WAAR WE NU MEE BEZIG ZIJN
+## STATUS PER 19 juni 2026 — WAAR WE NU MEE BEZIG ZIJN
 
 ### Volledig werkend en getest
 - ✅ Fase 0-6 alle gebouwd en gepusht naar productie (`main` branch)
@@ -285,32 +310,54 @@ verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 - ✅ Modal trekking-invoer verbeterd: sluitknop (✕), auto-focus, auto-advance bij 2 cijfers, rode validatie-randen
 - ✅ Beheerder-dashboard heeft nu ook "💳 Mijn inleg betalen" knop (kon eerst niet als beheerder zelf betalen)
 
-### 🔴 OPENSTAAND PROBLEEM — eerstvolgende stap
-**Bij het bevestigen van een betaling kwamen er 2x dezelfde push notificatie binnen** (in plaats van 1x).
+### ✅ OPGELOST — 19 juni 2026: dubbele push notificatie bij betalingsbevestiging
 
-**Context van de test net afgerond:**
-1. Oude testbetaling (status `betaald`, van 13 juni) verwijderd uit Firestore `/betalingen`
-2. Nieuwe betaling gemeld via `/betalen` als beheerder (Dick Veerman, €4)
-3. Bevestigd via `/kashouder/financieel` → ✓ knop
-4. App gesloten, iPhone vergrendeld, 15 sec gewacht
-5. **Resultaat: notificatie kwam 2x binnen, beide identiek** (nog te bevestigen of het echt identiek was — laatste vraag aan gebruiker nog niet beantwoord toen sessie eindigde)
+**Probleem (gerapporteerd):** bij het bevestigen van een betaling kwamen er 2x dezelfde push notificatie binnen.
 
-**Mogelijke oorzaken om te onderzoeken:**
-- Meerdere FCM tokens geregistreerd voor dezelfde user (bijv. van de PWA-herinstallaties tijdens eerdere FCM-debugging — elke herinstallatie kan een nieuw token hebben aangemaakt zonder dat het oude token verwijderd werd)
-- `onBetalingBevestigd` Cloud Function triggert mogelijk dubbel op de Firestore write (bijv. als de `update` in twee stappen gebeurt, of als er een `onDocumentWritten` i.p.v. `onDocumentUpdated` listener actief is)
-- Check Firestore: `users/{uid}/fcmTokens` — hoeveel documenten staan daar? Bij meerdere oude tokens kan elk apparaat/installatie een aparte push krijgen
+**Onderzoek (Guardian Mode — root cause analyse, geen quick fix):**
+1. ✅ Gecontroleerd `users/{dick-uid}/fcmTokens` in Firestore Console → **slechts 1 token-document** → hypothese "meerdere geregistreerde tokens" weerlegd
+2. ✅ Gecontroleerd Cloud Function logs in Google Cloud Logging voor `onBetalingBevestigd` rond testmoment (19 juni, ±09:11) → **functie 1x getriggerd** (1x `logger.info('Betaling bevestigd voor...')` regel, naast standaard cold-start logs) → hypothese "dubbele Firestore-write / dubbele trigger" weerlegd
+3. ✅ Service worker code (`firebase-messaging-sw.js`) gecontroleerd → **root cause gevonden**:
+   - Cloud Function stuurde een top-level `notification`-veld mee in het FCM-payload → FCM toont dit **automatisch**
+   - Service worker's `onBackgroundMessage` riep **zelf ook** `self.registration.showNotification()` aan
+   - Resultaat: 1 functie-aanroep, 1 token → 2 zichtbare notificaties (FCM automatisch + service worker handmatig)
 
-**Eerste stap voor volgende sessie:**
-1. Vraag de gebruiker te bevestigen: waren de 2 notificaties echt identiek qua tekst?
-2. Check `users/{dick-uid}/fcmTokens` in Firestore Console — tel het aantal documenten
-3. Indien meerdere tokens: oude/ongeldige tokens opruimen (eventueel automatisch bij elke `activeerNotificaties()` aanroep oude tokens van hetzelfde apparaat overschrijven i.p.v. toevoegen)
-4. Check Cloud Function logs (`onBetalingBevestigd`) in Google Cloud Logging — werd de functie 1x of 2x aangeroepen voor deze betaling?
+**Fix toegepast (19 juni):**
+- `functions/src/index.ts` → `sendToTokens()`: top-level `notification`-veld verwijderd, alles via `data` verstuurd (data-only payload)
+- `public/firebase-messaging-sw.js` → `onBackgroundMessage` leest title/body nu uit `payload.data` i.p.v. `payload.notification`
+- Geldt voor alle drie notificatie-typen (gedeelde `sendToTokens()`-helper): `betalingBevestigd`, `trekkingResultaten`, `herinneringen`
+- Architectuurregel toegevoegd aan README (zie sectie "Push payload — DATA-ONLY")
+
+**Risico van de fix:** LOW — alleen payload-formaat gewijzigd, geen Firestore-structuur/architectuur/UI-routes geraakt.
+
+**✅ Bevestigd na deploy (19 juni):** 2x herhaalde test (betaling melden → bevestigen → telefoon vergrendeld) — beide keren precies 1x notificatie op het vergrendelscherm. Fix werkt, definitief afgesloten.
 
 ### Nog niet getest
 - ❓ `onBetalingsHerinnering` (wekelijkse scheduled function, draait vrijdag 09:00) — nog nooit gecontroleerd of deze daadwerkelijk afgaat
 - ❓ De FCM debug pagina (`/debug-fcm`) staat nog live in productie — beslissen of die blijft staan als ingebouwde tool of verwijderd wordt
 - ❓ Node.js 20 → 22 upgrade voor Cloud Functions (deprecation warning in build logs, nog niet kritiek)
 - ❓ Auto-advance in trekking-modal bij 1-cijferige getallen werkt niet helemaal goed op iOS (2-cijferige werkt wel) — bewust uitgesteld naar "volgende stap", nooit opgepakt
+- ❓ **Nieuw, 19 juni:** Google Sign-In fix (zie hieronder) nog te bevestigen via `/debug-auth` na deploy — eerstvolgende sessie
+
+### 🔧 FIX TOEGEPAST, NOG TE BEVESTIGEN — 19 juni 2026: Google Sign-In faalt stil in standalone PWA
+
+**Probleem (gerapporteerd):** bij inloggen met Google in de PWA (beginscherm-icoon) doorloop je Google's eigen inlogscherm volledig, maar je komt daarna terug op het gewone LottoClub inlogscherm — alsof er niets gebeurd is. Geen zichtbare foutmelding.
+
+**Root cause:** `loginWithGoogle()` gebruikte `signInWithRedirect()`, wat een volledige paginanavigatie naar Google vereist. In een standalone iOS PWA verliest die navigatie regelmatig de sessie/storage-context, waardoor `getRedirectResult()` bij terugkomst niets vindt. De fout werd alleen naar `console.error` gelogd — onzichtbaar voor de gebruiker, dus de login "faalde stil."
+
+**Fix toegepast (19 juni):**
+- `lib/auth-context.tsx` → nieuwe `isStandalonePwa()` detectie (via `window.navigator.standalone` en `matchMedia('(display-mode: standalone)')`)
+- `loginWithGoogle()`: in standalone PWA → `signInWithPopup()` (blijft binnen dezelfde JS-context, geen navigatie-verlies). In gewone Safari → ongewijzigd `signInWithRedirect()` (werkte daar al goed, README bevestigt dit)
+- Nieuwe `googleSignInError` state + `clearGoogleSignInError()` toegevoegd aan `AuthContextType`, zodat een mislukte Google-login niet langer stil verdwijnt in de console
+- Nieuwe diagnostiek pagina **`/debug-auth`** (alleen relevant via PWA): toont auth-status, standalone-detectie resultaat, en heeft een "Test Google login" knop met live logging
+
+**Impact:** LOW-MEDIUM — raakt alleen `loginWithGoogle()` en de redirect-`useEffect` in `auth-context.tsx`. Email/wachtwoord/magic-link ongewijzigd.
+
+**⏳ Nog te bevestigen na deploy:**
+1. Google-login testen via PWA (beginscherm-icoon) — moet nu via popup gaan i.p.v. terugvallen op inlogscherm
+2. Google-login testen via gewone Safari — moet ongewijzigd blijven werken (redirect-pad)
+3. `/debug-auth` openen via PWA → "Start diagnostiek" → controleren of "Standalone PWA modus: ja" verschijnt
+
 
 ### Handige links/IDs voor volgende sessie
 - Live app: https://lotto-app-eight-chi.vercel.app

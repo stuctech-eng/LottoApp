@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
   GoogleAuthProvider,
   sendSignInLinkToEmail,
@@ -28,6 +29,8 @@ interface AuthContextType {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, naam: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  googleSignInError: string | null;
+  clearGoogleSignInError: () => void;
   sendMagicLink: (email: string) => Promise<void>;
   completeMagicLinkSignIn: (email: string, link: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -35,6 +38,28 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/**
+ * Detecteert of de app draait als standalone PWA (geïnstalleerd op
+ * beginscherm), in tegenstelling tot gewone Safari/Chrome browser.
+ *
+ * BELANGRIJK — waarom dit nodig is:
+ * signInWithRedirect() navigeert de hele pagina weg naar Google en
+ * terug. In een standalone iOS PWA verliest die navigatie regelmatig
+ * de sessie/storage-context, waardoor getRedirectResult() na
+ * terugkomst niets vindt — de gebruiker komt dan stil terug op het
+ * inlogscherm, ook al was de Google-login zelf wel gelukt.
+ * signInWithPopup() blijft binnen dezelfde JS-context (geen volledige
+ * paginanavigatie) en werkt daardoor wél betrouwbaar in standalone
+ * PWA's. In gewone Safari blijft redirect de juiste keuze (popups
+ * zijn daar minder betrouwbaar door pop-upblokkades).
+ */
+function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  const iosStandalone = (window.navigator as { standalone?: boolean }).standalone === true;
+  const displayModeStandalone = window.matchMedia?.('(display-mode: standalone)').matches;
+  return iosStandalone || !!displayModeStandalone;
+}
 
 // Zorgt dat er een gebruikersdocument in Firestore bestaat
 async function ensureUserDoc(user: FirebaseUser) {
@@ -61,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<User | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [googleSignInError, setGoogleSignInError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -68,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // Verwerk Google redirect resultaat (mobiele Safari)
+    // Verwerk Google redirect resultaat (gewone mobiele Safari, niet-PWA)
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
@@ -77,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch((err) => {
         console.error('Google redirect error:', err);
+        setGoogleSignInError('Inloggen met Google is niet gelukt. Probeer het opnieuw.');
       });
 
     return unsub;
@@ -140,11 +167,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: cred.user.uid, naam }, { doelUserId: cred.user.uid });
   };
 
+  /**
+   * Kiest automatisch popup (standalone PWA) of redirect (gewone browser).
+   * Zie isStandalonePwa() hierboven voor de reden.
+   */
   const loginWithGoogle = async () => {
+    setGoogleSignInError(null);
     const provider = new GoogleAuthProvider();
+
+    if (isStandalonePwa()) {
+      try {
+        const result = await signInWithPopup(auth, provider);
+        await ensureUserDoc(result.user);
+      } catch (err) {
+        console.error('Google popup sign-in error:', err);
+        setGoogleSignInError('Inloggen met Google is niet gelukt. Probeer het opnieuw.');
+      }
+      return;
+    }
+
+    // Gewone Safari/Chrome: redirect blijft de betrouwbare methode
     await signInWithRedirect(auth, provider);
     // Resultaat wordt afgehandeld in de useEffect via getRedirectResult
   };
+
+  const clearGoogleSignInError = () => setGoogleSignInError(null);
 
   const sendMagicLink = async (email: string) => {
     const actionCodeSettings = {
@@ -172,7 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, profile, profileLoading, loginWithEmail, registerWithEmail, loginWithGoogle, sendMagicLink, completeMagicLinkSignIn, resetPassword, logout }}>
+    <AuthContext.Provider value={{ user, loading, profile, profileLoading, loginWithEmail, registerWithEmail, loginWithGoogle, googleSignInError, clearGoogleSignInError, sendMagicLink, completeMagicLinkSignIn, resetPassword, logout }}>
       {children}
     </AuthContext.Provider>
   );
