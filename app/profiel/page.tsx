@@ -39,13 +39,11 @@ function ProfielPageContent() {
 
   useEffect(() => {
     if (profile?.telefoon) setTelefoon(profile.telefoon);
-    // Check actuele toestemming status
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setNotifActief(Notification.permission === 'granted');
     }
   }, [profile?.telefoon]);
 
-  // Als toestemming al granted is, sla token automatisch op
   useEffect(() => {
     if (notifActief && user) {
       activeerNotificaties(user.uid).catch(console.error);
@@ -61,14 +59,12 @@ function ProfielPageContent() {
         setNotifActief(false);
         setNotifToast('Notificaties uitgeschakeld');
       } else {
-        // Debug: toon VAPID key status
         const vapid = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
         if (!vapid || vapid === 'https://api.example.com') {
           setNotifToast(`❌ VAPID key ontbreekt of is placeholder: "${vapid.slice(0,30)}"`);
           return;
         }
         setNotifToast(`🔑 VAPID: ${vapid.slice(0,15)}... Toestemming vragen...`);
-        
         const token = await activeerNotificaties(user.uid);
         if (token) {
           setNotifActief(true);
@@ -187,7 +183,7 @@ function ProfielPageContent() {
             </div>
           )}
 
-          {tickets.map((ticket, i) => (
+          {tickets.map((ticket) => (
             <div key={ticket.id} className="card" style={{ padding: '16px 18px', marginBottom: 10, cursor: 'pointer' }} onClick={() => openBewerkTicket(ticket)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <span style={{ fontSize: 15, fontWeight: 600 }}>🎱 {ticket.naam}</span>
@@ -253,6 +249,18 @@ function ProfielPageContent() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Help */}
+        <div style={{ padding: '0 20px', marginBottom: 12 }}>
+          <Link href="/help" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>❓</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Handleiding & Help</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Hoe werkt de app? Uitleg per onderdeel</div>
+            </div>
+            <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+          </Link>
         </div>
 
         {/* Debug link - tijdelijk */}
