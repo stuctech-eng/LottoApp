@@ -87,7 +87,6 @@ async function sendToTokens(tokens: string[], notification: { title: string; bod
     });
     if (invalidTokens.length > 0) {
       functions.logger.info(`${invalidTokens.length} ongeldige FCM tokens — worden opgeschoond`);
-      // Opschonen (best-effort, geen fout als dit mislukt)
     }
   } catch (err) {
     functions.logger.error('FCM send error:', err);
@@ -137,10 +136,8 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
 
     functions.logger.info(`Verwerken trekking ${trekkingId}: [${trekking.nummers.join(', ')}]`);
 
-    // Haal spelConfig en prijsConfig op
     const [spelConfig, prijsConfig] = await Promise.all([getSpelConfig(), getPrijsConfig()]);
 
-    // Haal alle actieve gebruikers + tickets op
     const usersSnap = await db.collection('users').where('actief', '==', true).get();
     const deelnemers: LidTickets[] = usersSnap.docs
       .map(d => {
@@ -154,10 +151,8 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       })
       .filter(d => d.tickets.length > 0);
 
-    // Voer controle-engine uit (pure functie)
     const output = verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig });
 
-    // Schrijf resultaten + ranglijstPunten atomisch
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
       const ref = db.collection('resultaten').doc();
@@ -176,7 +171,6 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
     }
     await batch.commit();
 
-    // Audit log
     const winnaarNamen = output.winnaars.map(w => w.userNaam).join(', ');
     await logAudit(
       'trekking_ingevoerd',
@@ -185,14 +179,12 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       trekking.ingevoerdDoorNaam
     );
 
-    // Push notificaties naar alle leden
     const alleTokens = await getAllFcmTokens('trekkingResultaten');
     const winnaarTekst = output.winnaars.length > 0
       ? `🏆 Winnaar: ${winnaarNamen}`
       : 'Geen winnaar deze ronde';
 
     for (const { userId, tokens } of alleTokens) {
-      // Zoek dit lid's beste resultaat
       const mijnResultaat = output.resultaten
         .filter(r => r.userId === userId)
         .sort((a, b) => b.aantalGoed - a.aantalGoed)[0];
@@ -245,7 +237,7 @@ export const onBetalingBevestigd = functions.firestore.onDocumentUpdated(
 
 /**
  * Scheduled function — draait elke vrijdag om 09:00.
- * Stuurt herinnering naar leden met status 'open' of 'verificatie'.
+ * Stuurt herinnering naar leden met status 'open'.
  */
 export const onBetalingsHerinnering = functions.scheduler.onSchedule(
   {
@@ -270,5 +262,50 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
     }
 
     functions.logger.info(`Herinneringen verstuurd naar ${userIds.length} leden.`);
+  }
+);
+
+// ─────────────────────── onTrekkingHerinnering ───────────────────────
+
+/**
+ * Scheduled function — draait elke zaterdag om 19:30.
+ * Stuurt een herinnering naar beheerders om de lotto-uitslag in te voeren.
+ *
+ * De Nederlandse Lotto-trekking vindt elke zaterdag plaats.
+ * Na 19:00 is de uitslag beschikbaar via nederlandseloterij.nl/lotto/uitslagen.
+ * Deze functie herinnert de beheerder om de nummers in te voeren in de app.
+ *
+ * Architectuurkeuze: vaste herinnering op zaterdagavond i.p.v. web scraping.
+ * Scraping is breekbaar en juridisch grijs; een herinnering is gratis,
+ * betrouwbaar en voldoende voor een kleine vereniging.
+ */
+export const onTrekkingHerinnering = functions.scheduler.onSchedule(
+  {
+    schedule: '30 19 * * 6', // elke zaterdag 19:30
+    timeZone: 'Europe/Amsterdam',
+  },
+  async () => {
+    functions.logger.info('Trekking-herinnering versturen naar beheerders…');
+
+    // Stuur alleen naar beheerders (rol === 'beheerder')
+    const usersSnap = await db.collection('users')
+      .where('actief', '==', true)
+      .where('rol', '==', 'beheerder')
+      .get();
+
+    let aantalVerstuurd = 0;
+
+    for (const userDoc of usersSnap.docs) {
+      const tokens = await getFcmTokens(userDoc.id, 'trekkingResultaten');
+      if (tokens.length > 0) {
+        await sendToTokens(tokens, {
+          title: '🎱 Lotto-uitslag invoeren',
+          body: 'De trekking van vanavond is beschikbaar. Voer de nummers in via de app.',
+        }, { path: '/trekkingen' });
+        aantalVerstuurd++;
+      }
+    }
+
+    functions.logger.info(`Trekking-herinnering verstuurd naar ${aantalVerstuurd} beheerder(s).`);
   }
 );

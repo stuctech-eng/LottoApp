@@ -8,6 +8,9 @@ import { subscribeAlleTrekkingen, slaaTrekkingOpEnVerwerk } from '@/lib/firestor
 import { subscribeSpelConfig, subscribePrijsConfig, DEFAULT_SPELCONFIG, DEFAULT_PRIJSCONFIG } from '@/lib/firestore-spelconfig';
 import { Trekking, Seizoen, SpelConfig, PrijsConfig } from '@/lib/types';
 
+// Officiële Nederlandse Lotto uitslag pagina — handig bij het invoeren van een trekking
+const LOTTO_UITSLAG_URL = 'https://www.nederlandseloterij.nl/lotto/uitslagen';
+
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen', active: true },
@@ -59,7 +62,6 @@ function TrekkingInvoerModal({
       setError(null);
       setSucces(false);
       setFoutieveIndexen(new Set());
-      // Auto-focus eerste veld zodra modal opent
       setTimeout(() => inputRefs.current[0]?.focus(), 350);
     }
   }, [open, spelConfig.aantalGetallen]);
@@ -73,13 +75,10 @@ function TrekkingInvoerModal({
     setNummers(n);
     setFoutieveIndexen(prev => { const s = new Set(prev); s.delete(i); return s; });
 
-    // Auto-advance: spring door zodra het veld een geldig getal bevat
-    // dat niet meer groter kan worden zonder over het maximum te gaan.
     if (i < nummers.length - 1 && schoon.length > 0) {
       const waarde = parseInt(schoon, 10);
       const kanNogGroeien = schoon.length === 1 && waarde * 10 <= spelConfig.maxGetal;
       if (schoon.length === 2 || !kanNogGroeien) {
-        // Kleine delay zodat de waarde eerst zichtbaar wordt
         setTimeout(() => inputRefs.current[i + 1]?.focus(), 50);
       }
     }
@@ -153,7 +152,21 @@ function TrekkingInvoerModal({
             ✕
           </button>
         </div>
-        <div style={{ height: 10 }} />
+
+        {/* Lotto uitslag link */}
+        <a
+          href={LOTTO_UITSLAG_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, textDecoration: 'none' }}
+        >
+          <span style={{ fontSize: 18 }}>🔗</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Officiële uitslag opzoeken</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>nederlandseloterij.nl → Lotto uitslagen</div>
+          </div>
+          <span style={{ fontSize: 14, color: 'var(--muted)' }}>↗</span>
+        </a>
 
         {succes ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
