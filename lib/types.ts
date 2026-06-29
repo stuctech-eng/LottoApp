@@ -34,15 +34,13 @@ export interface SpelConfig {
 // ─────────────────────── PrijsConfig ───────────────────────
 
 export type PrijsConfigModus =
-  | 'hoogste_score_wint'   // hoogste score = 1 winnaar (of meerdere bij gelijkspel)
-  | 'meerdere_winnaars'    // iedereen met score >= drempel wint
-  | 'vaste_prijzen';       // vaste uitbetaling per score (bijv. 5 goed = €25)
+  | 'hoogste_score_wint'
+  | 'meerdere_winnaars'
+  | 'vaste_prijzen';
 
 export interface PrijsConfig {
   modus: PrijsConfigModus;
-  /** Alleen bij modus='vaste_prijzen': score -> uitbetaling in euro */
   vastePrijzen?: Record<number, number>;
-  /** Alleen bij modus='meerdere_winnaars': minimale score om te winnen */
   minimumScore?: number;
 }
 
@@ -75,17 +73,13 @@ export interface Trekking {
   nummers: number[];
   bonusBal: number | null;
   datum: Timestamp | null;
-  ingevoerdDoor: string;   // userId
+  ingevoerdDoor: string;
   ingevoerdDoorNaam: string;
   verwerkt: boolean;
 }
 
 // ─────────────────────── Resultaat ───────────────────────
 
-/**
- * Opgeslagen resultaat per ticket per ronde.
- * Geschreven door de controle-engine na verwerking van een trekking.
- */
 export interface Resultaat {
   id: string;
   userId: string;
@@ -95,7 +89,7 @@ export interface Resultaat {
   rondeId: string;
   seizoenId: string;
   trekkingId: string;
-  nummersGoed: number[];   // welke nummers klopten
+  nummersGoed: number[];
   aantalGoed: number;
   bonusGoed: boolean;
   punten: number;
@@ -151,6 +145,7 @@ export type AuditAction =
   | 'ticket_gewijzigd'
   | 'ticket_verwijderd'
   | 'rol_gewijzigd'
+  | 'profiel_gewijzigd'
   | 'betaling_gemeld'
   | 'betaling_bevestigd'
   | 'betaling_afgewezen'
