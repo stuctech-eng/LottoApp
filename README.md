@@ -1,12 +1,12 @@
 # LottoClub 🎱
 
-Digitale lottovereniging app — Next.js 14, TypeScript, Tailwind CSS, Firebase
+Digitale lottovereniging app — Next.js 15, TypeScript, Tailwind CSS, Firebase
 
 ## Live
 🌐 https://lotto-app-eight-chi.vercel.app
 
 ## Stack
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 15 (App Router)
 - **Styling**: Tailwind + custom CSS (1-op-1 uit HTML prototypes)
 - **Language**: TypeScript
 - **Auth + DB**: Firebase (Auth + Firestore)
@@ -18,8 +18,8 @@ Digitale lottovereniging app — Next.js 14, TypeScript, Tailwind CSS, Firebase
 Vijf inlogmethoden actief en getest op iPhone:
 - ✅ Email + wachtwoord (login + registratie)
 - ✅ Wachtwoord vergeten (reset via email)
-- ✅ Magic link (passwordless via email)
-- ✅ Google Sign-In — popup in standalone PWA, redirect in gewone Safari (zie status-sectie onderaan voor de fix-geschiedenis)
+- ✅ Magic link (passwordless via email) — useRef-guard fix toegepast (29 juni)
+- ✅ Google Sign-In — popup in standalone PWA, redirect in gewone Safari (fix toegepast 19 juni)
 - ✅ Uitloggen
 - ✅ Beveiligde routes (niet ingelogd = redirect naar `/`)
 
@@ -36,356 +36,219 @@ Bij registratie/eerste Google login wordt automatisch een gebruikersdocument aan
   - lidSinds: Timestamp
   - ranglijstPunten: number
   - actief: boolean
-```
+  - telefoon?: string
+  - notificationSettings?: NotificationSettings
 
-Schema voor toekomstige fases staat al klaar in `lib/types.ts`
-(Seizoen, Ronde, Betaling, Trekking, Kasmutatie, SpelConfig, PrijsConfig) —
-collecties worden pas aangemaakt zodra de bijbehorende beheerflow bestaat
-(Fase 3-5), om lege placeholder-data te voorkomen.
+/spelConfig/default
+  - naam, aantalGetallen, minGetal, maxGetal, bonusBal
+
+/prijsConfig/default
+  - modus: hoogste_score_wint | meerdere_winnaars | vaste_prijzen
+
+/paymentConfig/main
+  - activeProvider: string
+  - providers: { [id]: { enabled: boolean } }
+  - tikkieLink?: string   ← nieuw, 29 juni
+
+/seizoenen/{id}
+  - naam, startDatum, eindDatum, status
+
+/trekkingen/{id}
+  - nummers[], bonusBal, seizoenId, verwerkt, ingevoerdDoor
+
+/resultaten/{id}
+  - userId, ticketId, aantalGoed, nummersGoed, isWinnaar, punten
+
+/betalingen/{id}
+  - bedrag, omschrijving, provider, status, userId, userNaam
+
+/kasmutaties/{id}
+  - bedrag (+ of −), type, datum, omschrijving
+
+/auditLog/{id}
+  - actie, omschrijving, userId, datum
+```
 
 Security rules: `firestore.rules` — ingelogde users mogen alles lezen, alleen eigen documenten schrijven.
 
-## Rollen & toegang (Fase 2B)
-- **Lid**: `/dashboard`, `/profiel`, `/trekkingen`, `/ranglijst`, `/kas`, `/betalen`
+## Rollen & toegang
+- **Lid**: `/dashboard`, `/profiel`, `/trekkingen`, `/ranglijst`, `/hall-of-fame`, `/kas`, `/betalen`
 - **Kashouder**: + `/kashouder`, `/kashouder/financieel`, `/leden`
-- **Beheerder**: + `/beheerder`, `/beheerder/admin`, `/leden` (incl. rollen wijzigen)
+- **Beheerder**: + `/beheerder`, `/beheerder/admin`, `/leden` (incl. rollen wijzigen), trekking invoeren
 
 `/dashboard` is een rol-router: kashouder → `/kashouder`, beheerder → `/beheerder`, lid → eigen dashboard.
-Route-toegang wordt afgedwongen via `ProtectedRoute` met `allowedRoles`. Bij ongeldige rol → redirect naar `/dashboard`.
 
-**Rollen wijzigen**: beheerder kan op `/leden` de rol van elk lid direct aanpassen via een dropdown (lid/kashouder/beheerder). Elke wijziging wordt gelogd in `/auditLog` (`rol_gewijzigd`).
+**Systeemvoorwaarde:** altijd minimaal 1 beheerder. Laatste beheerder kan niet gedemote worden.
 
-**Systeemvoorwaarde — altijd minstens 1 beheerder**: het wijzigen van de rol van de **laatste beheerder** naar iets anders wordt geblokkeerd met een waarschuwing. Dit voorkomt dat het systeem onbestuurbaar wordt (geen enkele beheerder meer over om rollen te wijzigen). Wijs eerst een andere gebruiker aan als beheerder voordat je de huidige laatste beheerder demote.
-
-⚠️ **Eenmalige bootstrap**: de allereerste beheerder moet handmatig via Firebase Console → Firestore → `users/{uid}` → `rol: "beheerder"` ingesteld worden (er is nog niemand om dit via de app te doen). Daarna geldt de bovenstaande bescherming en is Firebase Console niet meer nodig voor rolbeheer.
-
-## Tickets (Fase 2C)
-Elk lid beheert eigen lotto-tickets via `/profiel`:
-- Ticket toevoegen, bewerken, verwijderen
-- Validatie: 7 unieke nummers, 1-45 (zie `lib/constants.ts`)
-- **Aanname**: ticket-validatie (6 nummers, 1-45) is nu live uit `/spelConfig` in Firestore (Fase 4 ✅).
+**Bootstrap:** eerste beheerder handmatig instellen via Firebase Console → Firestore → `users/{uid}` → `rol: "beheerder"`.
 
 ## Pagina's
 
-| Route | Beschrijving |
-|---|---|
-| `/` | Login (email/wachtwoord, magic link, Google) |
-| `/dashboard` | Dashboard lid |
-| `/profiel` | Persoonlijk profiel + uitloggen |
-| `/trekkingen` | Trekking overzicht |
-| `/trekkingen/[id]` | Trekking detail |
-| `/ranglijst` | Seizoen ranglijst |
-| `/hall-of-fame` | Hall of Fame |
-| `/kas` | Kasboek |
-| `/betalen` | iDEAL betaalflow |
-| `/leden` | Ledenbeheer |
-| `/kashouder` | Kashouder dashboard |
-| `/kashouder/financieel` | Financieel beheer |
-| `/beheerder` | Beheerder dashboard |
-| `/beheerder/admin` | Admin paneel |
+| Route | Beschrijving | Rol |
+|---|---|---|
+| `/` | Login | Iedereen |
+| `/dashboard` | Rol-router naar juist dashboard | Ingelogd |
+| `/profiel` | Profiel + tickets + notificaties | Lid+ |
+| `/trekkingen` | Trekking overzicht + invoer | Lid+ (invoer: beheerder) |
+| `/trekkingen/[id]` | Trekking detail + resultaten | Lid+ |
+| `/ranglijst` | Seizoen ranglijst | Lid+ |
+| `/hall-of-fame` | All-time records | Lid+ |
+| `/kas` | Kasboek | Lid+ |
+| `/betalen` | Betaalflow | Lid+ |
+| `/leden` | Ledenbeheer + rollen | Kashouder+ |
+| `/kashouder` | Kashouder dashboard (live) | Kashouder+ |
+| `/kashouder/financieel` | Financieel beheer + WhatsApp | Kashouder+ |
+| `/beheerder` | Beheerder dashboard (live) | Beheerder |
+| `/beheerder/admin` | Admin paneel | Beheerder |
+| `/debug-fcm` | FCM diagnostiek (PWA only) | Ingelogd |
+| `/debug-auth` | Auth diagnostiek (PWA only) | Ingelogd |
 
-## Voortgang
+## Cloud Functions
 
-- **Fase 0** ✅ UI Prototype (14 HTML schermen)
-- **Fase 0b** ✅ Next.js structuur gebouwd
-- **Fase 0c** ✅ Live op Vercel + styling 1-op-1 prototypes
-- **Fase 1** ✅ Firebase Auth volledig getest op iPhone (email/wachtwoord, wachtwoord-vergeten, magic link, Google redirect, uitloggen, beveiligde routes) + Firestore
-- **Fase 2** ✅ Echte ledendata uit Firestore (2A) + rol-gebaseerde routing/toegang (2B) + ticketbeheer per lid (2C). Schema voor seizoenen/rondes/trekkingen/kas/uitbetalingen/Hall of Fame staat klaar in `types.ts`, nog niet aan UI gekoppeld.
-- **Fase 3** ✅ Provider-architectuur betalingen (`offline` actief, `mollie` stub) + WhatsApp-provider + `/betalingen`, `/kasmutaties`, `/auditLog`, `/paymentConfig` (Firestore)
-- **Fase 4** ✅ SpelConfig + PrijsConfig uit Firestore, seizoenen aanmaken/afsluiten, trekkingen invoeren, controle-engine (pure functie, platform-onafhankelijk), resultaten per ticket per ronde, ranglijstpunten automatisch bijgewerkt
-- **Fase 5** ✅ Ranglijst + Hall of Fame live data (ranglijstPunten, resultaten, all-time records uit Firestore)
-- **Fase 6** ✅ Cloud Functions (server-side), push notificaties, GitHub Actions CI/CD, FCM tokens
+| Functie | Trigger | Wat doet het |
+|---|---|---|
+| `onTrekkingVerwerkt` | Nieuwe trekking in Firestore | Controle-engine, resultaten opslaan, push naar alle leden |
+| `onBetalingBevestigd` | Betaling status → 'betaald' | Push notificatie naar lid |
+| `onBetalingsHerinnering` | Elke vrijdag 09:00 | Push herinnering naar leden met open betaling |
+| `onTrekkingHerinnering` | Elke zaterdag 19:30 | Push herinnering naar beheerders om uitslag in te voeren |
 
-## Push Notificaties — Firebase Cloud Messaging (Fase 6)
+**Runtime:** Node.js 22 (geüpgraded 29 juni, deadline was Oct 30 2026)
 
-### Hoe het werkt
+## Push Notificaties — Firebase Cloud Messaging
 
-```
-Beheerder voert trekking in
-  ↓ Firestore /trekkingen (verwerkt: false)
-  ↓ Cloud Function onTrekkingVerwerkt getriggerd
-  ↓ Controle-engine berekent resultaten
-  ↓ FCM token ophalen uit /users/{uid}/fcmTokens
-  ↓ Push notificatie verstuurd via Firebase Admin SDK
-  ↓ Notificatie verschijnt op vergrendeld iPhone scherm
-```
+### DATA-ONLY PAYLOAD (architectuurregel, bugfix 19 juni)
+Cloud Functions sturen push-payloads **altijd alleen via `data`**, nooit via een top-level `notification`-veld. Een top-level `notification`-veld laat FCM automatisch een notificatie tonen, wat samen met `showNotification()` in de service worker dubbele meldingen veroorzaakte.
 
-### Vereisten
+```javascript
+// ✅ Correct
+sendEachForMulticast({ tokens, data: { title, body }, webpush: { fcmOptions } })
 
-**iOS Push Notificaties werken ALLEEN als:**
-1. De app is geïnstalleerd als PWA (via Safari → Deel → "Zet op beginscherm")
-2. De gebruiker toestemming heeft gegeven in de app
-3. De VAPID key correct is ingesteld (publieke sleutel, begint met `B`)
-
-**Niet via gewone Safari browser** — alleen via het beginscherm-icoon (standalone PWA).
-
-### Setup checklist
-
-- [x] VAPID key genereren: Firebase Console → ⚙️ → Project Settings → Cloud Messaging → Web Push certificates → **Key pair** (publiek, begint met `B`)
-- [x] VAPID key opslaan in Vercel: `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (niet sensitive)
-- [x] Firestore rules voor `fcmTokens` subcollectie aanwezig
-- [x] `public/firebase-messaging-sw.js` aanwezig (service worker)
-- [x] App geïnstalleerd als PWA op beginscherm
-
-### Veelgemaakte fout — VAPID key
-
-```
-❌ Fout: "Show private key" kopiëren → begint NIET met 'B' → getToken() faalt
-✅ Goed: "Key pair" kopiëren → begint met 'B' → werkt correct
+// ❌ Fout — geeft dubbele notificatie
+sendEachForMulticast({ tokens, notification: { title, body }, webpush: { notification } })
 ```
 
-Foutmelding als VAPID key ongeldig is:
-```
-applicationServerKey must contain a valid P-256 public key
-```
+### iOS vereisten
+- iOS 16.4+
+- PWA geïnstalleerd via Safari → Deel → "Zet op beginscherm"
+- App geopend via beginscherm-icoon (NIET Safari browser)
+- Toestemming gegeven in app
 
-### FCM Diagnostiek pagina
+### VAPID key
+Firebase Console → Project Settings → Cloud Messaging → Web Push certificates → **Key pair** (begint met `B`, NIET "Show private key")
 
-De app bevat een ingebouwde diagnostiek pagina: `/debug-fcm`
-
-**Alleen toegankelijk via PWA** (beginscherm-icoon), niet via Safari.
-
-Toont stap voor stap:
-1. User ID (ingelogd?)
-2. Notification.permission (granted/denied/default)
-3. Standalone modus (PWA of Safari?)
-4. PushManager beschikbaar?
-5. VAPID key aanwezig?
-6. Toestemming na request
-7. Service Worker geregistreerd
-8. Firestore write test (los van FCM)
-9. getToken() resultaat
-10. Token opgeslagen in Firestore
-
-**Gebruik bij problemen:** open `/debug-fcm` → "Start diagnostiek" → screenshot → diagnose in één oogopslag.
-
-### Firestore structuur FCM tokens
-
+### FCM token structuur
 ```
 /users/{userId}/fcmTokens/{token}
-  token: "dxZsO9D0d0HZMSMMcmkgcw:APA91b..."
+  token: string
   platform: "ios"
   aangemaakt: Timestamp
   actief: true
 ```
 
-Meerdere apparaten per gebruiker worden ondersteund — elk apparaat heeft zijn eigen token document.
-
-### Push payload — DATA-ONLY (sinds 19 juni, bugfix dubbele notificatie)
-
-**Belangrijke architectuurregel:** Cloud Functions sturen push-payloads **altijd alleen via `data`**, nooit via een top-level `notification`-veld.
-
-Reden: een top-level `notification`-veld in het FCM-payload laat de browser/OS **automatisch** een notificatie tonen. Omdat `firebase-messaging-sw.js` in `onBackgroundMessage` ZELF ook `self.registration.showNotification()` aanroept, zorgde de combinatie van beide voor **2x dezelfde notificatie** per verzonden bericht (bevestigd: 1 token, 1 functie-invocatie, toch 2 meldingen op het scherm — root cause gevonden in Cloud Logging + service worker code, 19 juni).
-
-```javascript
-// ✅ Goed — alleen data, service worker toont 1x
-await messaging.sendEachForMulticast({
-  tokens,
-  data: { title, body, ...extra },
-  webpush: { fcmOptions: { link: '/' } },
-});
-
-// ❌ Fout — top-level notification + eigen showNotification() = dubbel
-await messaging.sendEachForMulticast({
-  tokens,
-  notification: { title, body },  // FCM toont automatisch...
-  webpush: { notification: { ... } },
-});
-// ...en service worker toont via showNotification() óók nog een keer
-```
-
-Geldt voor alle drie notificatie-typen via de gedeelde `sendToTokens()`-helper: `betalingBevestigd`, `trekkingResultaten`, `herinneringen`.
-
 ### Service Worker versie
+Firebase **11.10.0 of hoger** — versie 10.x heeft iOS token problemen.
 
-```javascript
-// public/firebase-messaging-sw.js
-importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/11.10.0/firebase-messaging-compat.js');
-```
+## Betalingen & Kas
 
-⚠️ Gebruik Firebase versie **11.10.0 of hoger** — versie 10.0.0 heeft iOS token problemen.
+**Provider-architectuur** (`lib/providers/payments/`):
+- `offline` (actief): lid meldt → kashouder bevestigt → kasmutatie + auditLog + push
+- `mollie` (stub): klaar voor activatie zodra API-key beschikbaar
+- `tikkie`/`stripe`/`incasso`: placeholders
 
-## Firebase setup (uitgevoerd)
-- Project: `lottoclub`
-- Authentication: Email/Password, Email link, Google — alle 3 actief
-- Firestore: eur3 (europe-west), test mode
-- Web app geregistreerd, config in `lib/firebase.ts`
+**Tikkie-link:** beheerder stelt eenmalig in via `/beheerder/admin` → tab Instellingen → "Tikkie-link". Wordt automatisch opgenomen in WhatsApp-herinneringen.
 
-## Betalingen & Kas (Fase 3)
+**Regel:** `kasSaldo` wordt NOOIT opgeslagen — altijd `berekenKasSaldo(kasmutaties)`.
 
-**Provider-architectuur** (`lib/providers/payments/`, `lib/providers/notifications/`):
-- `offline` (actief): lid meldt betaling → kashouder bevestigt → kasmutatie + auditLog
-- `mollie` (stub, niet actief): klaar voor activatie zodra Mollie API-key beschikbaar is — vereist server-side API-route + webhook (niet gebouwd)
-- `tikkie`/`stripe`/`incasso`: placeholders, nog niet geïmplementeerd
-- `whatsapp` notificatie-provider: genereert `wa.me`-links (geen Business API, geen kosten)
+**Flow:**
+1. Lid betaalt via Tikkie/overboeking → meldt in app (`/betalen`)
+2. Kashouder bevestigt (`/kashouder` of `/kashouder/financieel`)
+3. Kasmutatie (+€X) + auditLog aangemaakt
+4. Lid krijgt push: "✅ Betaling bevestigd"
 
-**Firestore collecties (nieuw):**
-```
-/betalingen/{id}     — bedrag, omschrijving, provider, status, userId
-/kasmutaties/{id}    — bedrag (+ of −), type, datum, omschrijving
-/auditLog/{id}       — actie, omschrijving, userId, datum
-/paymentConfig/main  — activeProvider + per-provider enabled (valt terug op
-                        DEFAULT_PAYMENT_CONFIG als doc niet bestaat)
-```
+**WhatsApp herinneringen:** kashouder stuurt via `/kashouder/financieel` → inclusief Tikkie-link als ingesteld in `/paymentConfig/main`.
 
-**Belangrijke regel:** `kasSaldo` wordt nooit opgeslagen — altijd `som(kasmutaties.bedrag)`, zie `berekenKasSaldo()` in `lib/firestore-payments.ts`.
+## Trekkingen & Controle-engine
 
-**Flow (offline, huidige MVP):**
-1. Lid → `/betalen` → "Ik heb betaald €4" → Betaling met status `verificatie`
-2. Kashouder → `/kashouder/financieel` → "Te verifiëren betalingen" → ✓ bevestigen
-3. Bevestiging schrijft kasmutatie (+€4, type `inleg`) + auditLog-entry
-4. `/kas` toont live kasSaldo + kasboek
+**Architectuurregel:** alle berekeningen server-side (Cloud Functions). Controle-engine is pure functie zonder Firestore/React afhankelijkheden.
 
-**WhatsApp herinneringen**: kashouder kan via `/kashouder/financieel` een vooraf ingevuld WhatsApp-bericht openen naar leden met een telefoonnummer (in te stellen via `/profiel`).
-
-**Mollie activeren (toekomst):** zet in Firestore `/paymentConfig/main`:
-```
-activeProvider: "mollie"
-providers.mollie.enabled: true
-```
-plus een server-side API-route + webhook (Fase 3D, nog te bouwen zodra API-key beschikbaar is).
-
-## Audit log (Fase 3E)
-Actief gelogd: `gebruiker_aangemaakt`, `ticket_toegevoegd/gewijzigd/verwijderd`, `betaling_gemeld/bevestigd/afgewezen`, `uitbetaling_geregistreerd`, `kascorrectie`.
-Gedefinieerd maar nog niet getriggerd (wachten op Fase 4/5 UI): `gebruiker_verwijderd`, `rol_gewijzigd`, `trekking_ingevoerd/gewijzigd`, `seizoen_gestart/gesloten`.
-Zichtbaar in `/beheerder/admin` → tab "Audit log".
-
-
-## Belangrijke opmerking voor volgende fase
-Firestore staat nog in **test mode** — dit verloopt na 30 dagen of moet handmatig naar de rules in `firestore.rules`. `firestore.rules` is al uitgebreid met rollen-checks voor `/betalingen`, `/kasmutaties`, `/auditLog`, `/paymentConfig` — controleer of deze in de Firebase Console actief staan vóór test-mode verloopt.
-
-## Trekkingen & Controle-engine (Fase 4)
-
-**Architectuurregel:**
-> *Alle berekeningen die invloed hebben op geld, winnaars of ranglijsten draaien server-side (toekomst: Cloud Functions). De controle-engine is gebouwd as pure functie zonder Firestore/React/Next.js afhankelijkheden zodat migratie later kosteloos is.*
-
-**`lib/controle-engine.ts`** — pure functie:
+**`lib/controle-engine.ts`:**
 ```
 verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 → { resultaten, winnaars, ranglijstUpdates }
 ```
 
-**Nieuwe Firestore collecties:**
-```
-/spelConfig/default    — naam, aantalGetallen, minGetal, maxGetal, bonusBal
-/prijsConfig/default   — modus: hoogste_score_wint | meerdere_winnaars | vaste_prijzen
-/seizoenen/{id}        — naam, startDatum, eindDatum, status
-/rondes/{id}           — seizoenId, nummer, inleg, status (nog niet in UI gekoppeld)
-/trekkingen/{id}       — nummers[], bonusBal, seizoenId, verwerkt, ingevoerdDoor
-/resultaten/{id}       — userId, ticketId, aantalGoed, nummersGoed, isWinnaar, punten
-```
-
 **Flow:**
-1. Beheerder voert nummers in → `/trekkingen` → "+ Invoeren"
-2. Controle-engine vergelijkt alle tickets van alle actieve leden
-3. Resultaten worden atomisch opgeslagen (Firestore batch)
-4. RanglijstPunten per user automatisch bijgewerkt (`increment`)
-5. AuditLog entry aangemaakt
+1. Beheerder krijgt zaterdagse push-herinnering (19:30)
+2. Opent `/trekkingen` → tikt "🔗 Officiële uitslag opzoeken" voor nummers
+3. Voert nummers in → "+ Invoeren"
+4. Cloud Function `onTrekkingVerwerkt` vergelijkt alle tickets
+5. Resultaten atomisch opgeslagen, ranglijstpunten bijgewerkt
+6. Push naar alle leden met hun persoonlijk resultaat
 
-**Stap 2 (toekomst):** zelfde controle-engine naar Firebase Cloud Functions verplaatsen. Vereist Blaze plan — acceptabel zodra echte leden meedoen.
+## Spelconfiguratie
 
-## Bekende aandachtspunten (Fase 4)
-- Rondes zijn nog niet gekoppeld aan trekkingen in de UI — trekking wordt direct onder een seizoen gezet zonder expliciete ronde-selectie. Wordt gekoppeld in Fase 5/6 wanneer betalingen per ronde nodig zijn.
+Beheerbaar via `/beheerder/admin` → tab "Spel":
+- Aantal getallen (standaard: 6)
+- Min. getal (standaard: 1)
+- Max. getal (standaard: 45)
+- Bonusbal aan/uit
 
-- Aanname over validatie ticket-nummers (6 uit 45) is nu vervangen door live spelConfig uit Firestore.
-- Eerste account dat je aanmaakt krijgt automatisch rol `lid`. Wil je jezelf als `beheerder` of `kashouder` instellen om die schermen te testen, pas dit handmatig aan in Firebase Console → Firestore → `users/{jouw-uid}` → veld `rol`.
-- `/betalen` gebruikt een vaste `STANDAARD_INLEG` (€4, `lib/constants.ts`) — er bestaat nog geen "ronde" met eigen inlegbedrag (volgt in Fase 4).
-- `mockUser`/`mockLeden` in `lib/mock-data.ts` worden nog gebruikt door `/trekkingen`, `/trekkingen/[id]`, `/ranglijst`, `/hall-of-fame` — bewust niet aangepast, deze pagina's krijgen hun eigen Firestore-koppeling in Fase 4/5.
-- WhatsApp-herinneringen werken alleen voor leden die een telefoonnummer hebben ingevuld via `/profiel`.
+## Documentatie
+
+- `README.md` — dit bestand, projectgeheugen voor Claude
+- `HANDLEIDING.md` — gebruikershandleiding voor leden/kashouder/beheerder
+
+## Firebase setup
+- Project: `lottoclub` (projectnummer: 455488693325)
+- Authentication: Email/Password, Email link, Google — alle 3 actief
+- Firestore: eur3 (europe-west), test mode
+- Web app config: `lib/firebase.ts`
+
+## GitHub / Deploy
+- Repo: `github.com/stuctech-eng/LottoApp`
+- Branch `main` = productie
+- GitHub Actions deployt automatisch Cloud Functions + Vercel bij push naar main
+
+## Bekende aandachtspunten
+- Firestore staat nog in **test mode** — verloopt na 30 dagen. `firestore.rules` is bijgewerkt met rollen-checks — controleer of die actief staan in Firebase Console vóór test-mode verloopt.
+- Rondes zijn nog niet gekoppeld aan trekkingen in de UI — trekking wordt direct onder een seizoen gezet zonder expliciete ronde-selectie.
 
 ---
 
-## STATUS PER 19 juni 2026 — WAAR WE NU MEE BEZIG ZIJN
+## STATUS PER 29 juni 2026
 
 ### Volledig werkend en getest
-- ✅ Fase 0-6 alle gebouwd en gepusht naar productie (`main` branch)
-- ✅ Cloud Functions live: `onTrekkingVerwerkt`, `onBetalingBevestigd`, `onBetalingsHerinnering`
-- ✅ GitHub Actions CI/CD werkt — push naar `main` deployt automatisch Cloud Functions + Vercel
-- ✅ Push notificaties werken end-to-end bevestigd:
-  - Trekking ingevoerd → "🎱 Trekking resultaten" notificatie ontvangen
-  - Betaling bevestigd → "✅ Betaling bevestigd" notificatie ontvangen
-- ✅ Tweede echt lid toegevoegd: Wim Kraaij (naast Dick Veerman als beheerder)
-- ✅ "Laatste beheerder" safeguard werkt zichtbaar in `/leden`
-- ✅ Modal trekking-invoer verbeterd: sluitknop (✕), auto-focus, auto-advance bij 2 cijfers, rode validatie-randen
-- ✅ Beheerder-dashboard heeft nu ook "💳 Mijn inleg betalen" knop (kon eerst niet als beheerder zelf betalen)
+- ✅ Fase 0-6 gebouwd en in productie
+- ✅ Cloud Functions live: `onTrekkingVerwerkt`, `onBetalingBevestigd`, `onBetalingsHerinnering`, `onTrekkingHerinnering` (nieuw)
+- ✅ GitHub Actions CI/CD werkt
+- ✅ Push notificaties werken end-to-end (dubbele notificatie bug opgelost 19 juni)
+- ✅ Google Sign-In fix standalone PWA (19 juni)
+- ✅ Magic link prompt fix useRef-guard (19 juni)
+- ✅ Volledige regressietest alle 5 inlogmethodes (19 juni)
+- ✅ onBetalingsHerinnering bevestigd werkend (26 juni, 09:00)
+- ✅ Node.js 20 → 22 upgrade (29 juni)
+- ✅ Tikkie-link instelling toegevoegd aan `/beheerder/admin` (29 juni)
+- ✅ Kashouder dashboard live data gekoppeld (29 juni)
+- ✅ Beheerder dashboard live data gekoppeld (29 juni)
+- ✅ Lotto uitslag link toegevoegd aan trekking-invoer modal (29 juni)
+- ✅ Firestore cleanup uitgevoerd — app schoon voor echte leden
 
-### ✅ OPGELOST — 19 juni 2026: dubbele push notificatie bij betalingsbevestiging
+### Gebruikers (productie)
+- Dick Veerman — beheerder (`t.e.veerman@ziggo.nl`)
+- stuctech — lid (`stuctech@gmail.com`) — apart speel-account, bewust laten staan
+- Wim Kraaij — lid
 
-**Probleem (gerapporteerd):** bij het bevestigen van een betaling kwamen er 2x dezelfde push notificatie binnen.
+### Nog te doen / open punten
+- ⏳ `onBetalingsHerinnering` vandaag (29 juni) niet gedraaid om 09:00 — reminder staat op 3 juli 09:15 om te bevestigen of dit eenmalig was of structureel
+- ❓ `/debug-fcm` en `/debug-auth` staan live in productie — bewust gelaten als ingebouwde diagnostiek tools
+- ❓ Firestore test mode verloopt — production rules activeren voor verloop
+- ❓ Mollie activeren: zet in `/paymentConfig/main` `activeProvider: "mollie"` + bouw server-side API-route + webhook zodra API-key beschikbaar
+- ❓ Rondes koppelen aan trekkingen in UI (voor betalingen per ronde)
+- ❓ Auto-advance in trekking-modal bij 1-cijferige getallen werkt niet helemaal goed op iOS
 
-**Onderzoek (Guardian Mode — root cause analyse, geen quick fix):**
-1. ✅ Gecontroleerd `users/{dick-uid}/fcmTokens` in Firestore Console → **slechts 1 token-document** → hypothese "meerdere geregistreerde tokens" weerlegd
-2. ✅ Gecontroleerd Cloud Function logs in Google Cloud Logging voor `onBetalingBevestigd` rond testmoment (19 juni, ±09:11) → **functie 1x getriggerd** (1x `logger.info('Betaling bevestigd voor...')` regel, naast standaard cold-start logs) → hypothese "dubbele Firestore-write / dubbele trigger" weerlegd
-3. ✅ Service worker code (`firebase-messaging-sw.js`) gecontroleerd → **root cause gevonden**:
-   - Cloud Function stuurde een top-level `notification`-veld mee in het FCM-payload → FCM toont dit **automatisch**
-   - Service worker's `onBackgroundMessage` riep **zelf ook** `self.registration.showNotification()` aan
-   - Resultaat: 1 functie-aanroep, 1 token → 2 zichtbare notificaties (FCM automatisch + service worker handmatig)
-
-**Fix toegepast (19 juni):**
-- `functions/src/index.ts` → `sendToTokens()`: top-level `notification`-veld verwijderd, alles via `data` verstuurd (data-only payload)
-- `public/firebase-messaging-sw.js` → `onBackgroundMessage` leest title/body nu uit `payload.data` i.p.v. `payload.notification`
-- Geldt voor alle drie notificatie-typen (gedeelde `sendToTokens()`-helper): `betalingBevestigd`, `trekkingResultaten`, `herinneringen`
-- Architectuurregel toegevoegd aan README (zie sectie "Push payload — DATA-ONLY")
-
-**Risico van de fix:** LOW — alleen payload-formaat gewijzigd, geen Firestore-structuur/architectuur/UI-routes geraakt.
-
-**✅ Bevestigd na deploy (19 juni):** 2x herhaalde test (betaling melden → bevestigen → telefoon vergrendeld) — beide keren precies 1x notificatie op het vergrendelscherm. Fix werkt, definitief afgesloten.
-
-### Nog niet getest
-- ❓ `onBetalingsHerinnering` (wekelijkse scheduled function, draait vrijdag 09:00) — nog nooit gecontroleerd of deze daadwerkelijk afgaat
-- ❓ De FCM debug pagina (`/debug-fcm`) staat nog live in productie — beslissen of die blijft staan als ingebouwde tool of verwijderd wordt
-- ✅ Node.js 20 → 22 upgrade voor Cloud Functions — uitgevoerd 29 juni 2026 (deadline was Oct 30, 2026)
-- ❓ Auto-advance in trekking-modal bij 1-cijferige getallen werkt niet helemaal goed op iOS (2-cijferige werkt wel) — bewust uitgesteld naar "volgende stap", nooit opgepakt
-
-### 🔧 FIX TOEGEPAST, NOG TE BEVESTIGEN — 19 juni 2026: Google Sign-In faalt stil in standalone PWA
-
-**Probleem (gerapporteerd):** bij inloggen met Google in de PWA (beginscherm-icoon) doorloop je Google's eigen inlogscherm volledig, maar je komt daarna terug op het gewone LottoClub inlogscherm — alsof er niets gebeurd is. Geen zichtbare foutmelding.
-
-**Root cause:** `loginWithGoogle()` gebruikte `signInWithRedirect()`, wat een volledige paginanavigatie naar Google vereist. In een standalone iOS PWA verliest die navigatie regelmatig de sessie/storage-context, waardoor `getRedirectResult()` bij terugkomst niets vindt. De fout werd alleen naar `console.error` gelogd — onzichtbaar voor de gebruiker, dus de login "faalde stil."
-
-**Fix toegepast (19 juni):**
-- `lib/auth-context.tsx` → nieuwe `isStandalonePwa()` detectie (via `window.navigator.standalone` en `matchMedia('(display-mode: standalone)')`)
-- `loginWithGoogle()`: in standalone PWA → `signInWithPopup()` (blijft binnen dezelfde JS-context, geen navigatie-verlies). In gewone Safari → ongewijzigd `signInWithRedirect()` (werkte daar al goed, README bevestigt dit)
-- Nieuwe `googleSignInError` state + `clearGoogleSignInError()` toegevoegd aan `AuthContextType`, zodat een mislukte Google-login niet langer stil verdwijnt in de console
-- Nieuwe diagnostiek pagina **`/debug-auth`** (alleen relevant via PWA): toont auth-status, standalone-detectie resultaat, en heeft een "Test Google login" knop met live logging
-
-**Impact:** LOW-MEDIUM — raakt alleen `loginWithGoogle()` en de redirect-`useEffect` in `auth-context.tsx`. Email/wachtwoord/magic-link ongewijzigd.
-
-### ✅ BEVESTIGD — Google Sign-In fix werkt (19 juni 2026)
-- PWA (standalone, beginscherm-icoon): popup-methode getest, werkt in 1x, geen terugval naar inlogscherm meer
-- Gewone Safari: redirect-methode getest, ongewijzigd werkend gedrag bevestigd
-- Beide paden bevestigd via praktijktest, niet alleen via `/debug-auth`
-
-### 🔐 Volledige regressietest inlogmethodes (19 juni 2026)
-| # | Methode | Status |
-|---|---|---|
-| 1 | Email + wachtwoord (login) | ✅ bevestigd |
-| 2 | Email + wachtwoord (registratie) | ✅ bevestigd |
-| 3 | Wachtwoord vergeten | ✅ bevestigd |
-| 4 | Magic link | ✅ bevestigd ná fix (zie hieronder) |
-| 5 | Google Sign-In (PWA + Safari) | ✅ bevestigd, beide werken |
-
-**Let op — los account ontstaan tijdens test:** tijdens het testen van Google Sign-In in de PWA werd per ongeluk op een ander Google-account (`stuctech@gmail.com`) ingelogd, wat een nieuw los account aanmaakte (rol `lid`, 0 punten, 0 tickets) naast het bestaande beheerder-account (`t.e.veerman@ziggo.nl`). Bewust besloten dit te laten staan als eventueel toekomstig "speel-account", gescheiden van het beheerder-account — dit is verwacht Firebase-gedrag (matching gebeurt op exact email-adres, geen automatische koppeling tussen verschillende adressen).
-
-### ✅ OPGELOST — 19 juni 2026: magic-link prompt verscheen meerdere keren
-
-**Probleem (ontdekt tijdens regressietest):** bij het inloggen via magic link verscheen de prompt "Bevestig je e-mailadres om in te loggen" 3x achter elkaar, waarbij elke keer opnieuw het e-mailadres ingetikt moest worden. Hierdoor verliep de magic link voordat de aanmelding kon worden afgerond.
-
-**Root cause:** de `useEffect` in `app/page.tsx` die de magic-link-URL detecteert en verwerkt, had geen vlag om bij te houden of de verwerking al gestart was. Bij een re-render (bijv. wanneer `completeMagicLinkSignIn` of `router` een nieuwe referentie kreeg) liep de effect opnieuw, en daarmee ook `window.prompt()` opnieuw — telkens met een leeg veld.
-
-**Fix toegepast (19 juni):**
-- `app/page.tsx` → nieuwe `useRef(false)` (`magicLinkHandled`) die bijhoudt of de magic-link-verwerking al gestart is binnen deze paginasessie
-- De `handleMagicLink()`-functie checkt deze ref vóór de `window.prompt()`-aanroep en stopt als de verwerking al loopt
-- Geen wijziging aan andere inlogmethodes
-
-**Impact:** LOW — raakt alleen de magic-link `useEffect`, geen andere flow.
-
-**⏳ Nog te bevestigen na deploy:** nieuwe (verse) magic link aanvragen en testen of de prompt nog maar 1x verschijnt.
-
-
-### Handige links/IDs voor volgende sessie
+### Handige links
 - Live app: https://lotto-app-eight-chi.vercel.app
-- Repo: github.com/stuctech-eng/LottoApp (branch: main is productie, develop bestaat ook maar wordt nauwelijks gebruikt)
-- Firebase project: `lottoclub` (project nummer 455488693325)
-- Test-gebruikers: Dick Veerman (beheerder, t.e.veerman@ziggo.nl), Wim Kraaij (lid)
+- Repo: github.com/stuctech-eng/LottoApp
+- Firebase project: lottoclub (455488693325)
+- Firebase Console: console.firebase.google.com
+- Google Cloud Console: console.cloud.google.com
