@@ -9,7 +9,7 @@ import { subscribeSpelConfig, subscribePrijsConfig, DEFAULT_SPELCONFIG, DEFAULT_
 import { Trekking, Seizoen, SpelConfig, PrijsConfig } from '@/lib/types';
 
 // Officiële Nederlandse Lotto uitslag pagina — handig bij het invoeren van een trekking
-const LOTTO_UITSLAG_URL = 'https://www.nederlandseloterij.nl/lotto/uitslagen';
+const LOTTO_UITSLAG_URL = 'https://lotto.nederlandseloterij.nl/trekkingsuitslag';
 
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
