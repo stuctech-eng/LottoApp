@@ -30,6 +30,19 @@ export function buildWhatsappBetaalverzoek(naam: string, bedrag: number, omschri
   return `🎱 LottoClub\n\nHallo ${naam},\n\n${omschrijving}\nBedrag: €${bedrag.toFixed(2)}\n\nJe kunt dit melden in de app via "Betalen" zodra je hebt betaald.\n\nSucces!`;
 }
 
-export function buildWhatsappHerinnering(naam: string, bedrag: number, omschrijving: string): string {
-  return `🎱 LottoClub\n\nHerinnering voor ${naam}:\n\nJe betaling staat nog open.\n${omschrijving}\nBedrag: €${bedrag.toFixed(2)}\n\nMeld je betaling in de app via "Betalen" zodra je hebt betaald.`;
+/**
+ * Bouw een WhatsApp-herinnering met optionele Tikkie-link.
+ * Als tikkieLink is ingesteld in /paymentConfig/main, wordt die
+ * automatisch toegevoegd aan het bericht zodat het lid direct kan betalen.
+ */
+export function buildWhatsappHerinnering(
+  naam: string,
+  bedrag: number,
+  omschrijving: string,
+  tikkieLink?: string
+): string {
+  const tikkie = tikkieLink
+    ? `\n💳 Betaal direct via Tikkie:\n${tikkieLink}\n`
+    : '';
+  return `🎱 LottoClub\n\nHerinnering voor ${naam}:\n\nJe betaling staat nog open.\n${omschrijving}\nBedrag: €${bedrag.toFixed(2)}\n${tikkie}\nMeld je betaling in de app via "Betalen" zodra je hebt betaald.`;
 }

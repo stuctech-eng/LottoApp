@@ -13,9 +13,10 @@ import {
   registreerCorrectie,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
+import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { whatsappLink, buildWhatsappHerinnering } from '@/lib/providers/notifications';
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
-import { Betaling, Kasmutatie, User } from '@/lib/types';
+import { Betaling, Kasmutatie, User, PaymentConfig } from '@/lib/types';
 
 const NAV = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
@@ -31,6 +32,7 @@ function FinancieelPageContent() {
   const [mutaties, setMutaties] = useState<Kasmutatie[]>([]);
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [leden, setLeden] = useState<User[]>([]);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
 
   // Uitbetaling form
   const [uitbBedrag, setUitbBedrag] = useState('');
@@ -49,7 +51,8 @@ function FinancieelPageContent() {
     const u1 = subscribeKasmutaties(setMutaties);
     const u2 = subscribeBetalingen(setBetalingen);
     const u3 = subscribeAllUsers(setLeden);
-    return () => { u1(); u2(); u3(); };
+    const u4 = subscribePaymentConfig(setPaymentConfig);
+    return () => { u1(); u2(); u3(); u4(); };
   }, []);
 
   const saldo = berekenKasSaldo(mutaties);
@@ -64,6 +67,9 @@ function FinancieelPageContent() {
   const teVerifieren = betalingen.filter(b => b.status === 'verificatie');
   const ledenZonderTelefoon = leden.filter(l => l.actief && !l.telefoon);
   const ledenMetTelefoon = leden.filter(l => l.actief && l.telefoon);
+
+  // Tikkie-link uit paymentConfig — undefined als niet ingesteld
+  const tikkieLink = (paymentConfig as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
 
@@ -171,7 +177,15 @@ function FinancieelPageContent() {
 
         {/* WhatsApp herinneringen */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
-          <div className="section-title">Betaalherinnering versturen (WhatsApp)</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>Betaalherinnering (WhatsApp)</div>
+            {tikkieLink && <span style={{ fontSize: 11, background: 'var(--success-soft)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>💳 Tikkie actief</span>}
+          </div>
+          {!tikkieLink && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 10, lineHeight: 1.5 }}>
+              💡 Voeg een Tikkie-link toe via Beheerder → Admin → Instellingen voor een directe betaallink in het bericht.
+            </div>
+          )}
           {ledenMetTelefoon.length === 0 && (
             <div className="card" style={{ padding: '20px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
               Nog geen leden met telefoonnummer. Leden kunnen dit toevoegen via hun profiel.
@@ -184,7 +198,7 @@ function FinancieelPageContent() {
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>{lid.telefoon}</div>
               </div>
               <a
-                href={whatsappLink(lid.telefoon!, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING))}
+                href={whatsappLink(lid.telefoon!, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING, tikkieLink))}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
@@ -208,7 +222,7 @@ function FinancieelPageContent() {
             <input type="text" inputMode="decimal" placeholder="€25,00" className="form-input" value={uitbBedrag} onChange={e => setUitbBedrag(e.target.value)} />
             <label className="form-label">Omschrijving</label>
             <input type="text" placeholder="Bijv. Prijs winnaar ronde 22" className="form-input" value={uitbOmschrijving} onChange={e => setUitbOmschrijving(e.target.value)} />
-            <button onClick={handleUitbetaling} disabled={uitbBezig} style={{ width: '100%', background: uitbOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--success),#1a8a50)', color: 'white', border: 'none', borderRadius: 14, padding: 15, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: uitbBezig ? 0.6 : 1 }}>
+            <button onClick={handleUitbetaling} disabled={uitbBezig} style={{ width: '100%', background: 'linear-gradient(135deg,var(--success),#1a8a50)', color: 'white', border: 'none', borderRadius: 14, padding: 15, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: uitbBezig ? 0.6 : 1 }}>
               {uitbOk ? '✓ Geregistreerd' : uitbBezig ? 'Bezig…' : '💸 Uitbetaling registreren'}
             </button>
           </div>

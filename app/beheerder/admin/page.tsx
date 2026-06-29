@@ -35,9 +35,19 @@ function AdminPageContent() {
   const [spelBezig, setSpelBezig] = useState(false);
   const [spelOk, setSpelOk] = useState(false);
 
+  // Tikkie-link state
+  const [tikkieLink, setTikkieLink] = useState('');
+  const [tikkieBezig, setTikkieBezig] = useState(false);
+  const [tikkieOk, setTikkieOk] = useState(false);
+
   useEffect(() => {
     const u1 = subscribeAuditLog(setAuditLog, 50);
-    const u2 = subscribePaymentConfig(setPaymentConfig);
+    const u2 = subscribePaymentConfig((config) => {
+      setPaymentConfig(config);
+      // Laad Tikkie-link uit paymentConfig indien aanwezig
+      const cfg = config as PaymentConfig & { tikkieLink?: string };
+      setTikkieLink(cfg.tikkieLink ?? '');
+    });
     const u3 = subscribeSpelConfig(setSpelConfig);
     const u4 = subscribePrijsConfig(setPrijsConfig);
     const u5 = subscribeAlleSeizoenen(setSeizoenen);
@@ -53,6 +63,17 @@ function AdminPageContent() {
       setTimeout(() => setSpelOk(false), 2000);
     } finally {
       setSpelBezig(false);
+    }
+  };
+
+  const handleTikkie = async () => {
+    setTikkieBezig(true);
+    try {
+      await setDoc(doc(db, 'paymentConfig', 'main'), { tikkieLink: tikkieLink.trim() }, { merge: true });
+      setTikkieOk(true);
+      setTimeout(() => setTikkieOk(false), 2000);
+    } finally {
+      setTikkieBezig(false);
     }
   };
 
@@ -149,6 +170,38 @@ function AdminPageContent() {
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5, padding: '0 4px' }}>
                 Wijzigen van de actieve provider gebeurt via Firestore Console (`/paymentConfig/main`) totdat Tikkie, Stripe of Mollie volledig geïmplementeerd zijn.
+              </div>
+            </div>
+
+            {/* Tikkie-link instelling */}
+            <div style={{ marginBottom: 20 }}>
+              <div className="section-title">Tikkie-link</div>
+              <div className="card" style={{ padding: 18 }}>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+                  Voeg hier de Tikkie-link in van de kashouder. Deze wordt automatisch toegevoegd aan WhatsApp-herinneringen zodat leden direct kunnen betalen.
+                </div>
+                <label className="form-label">Tikkie-link</label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  className="form-input"
+                  placeholder="https://tikkie.me/pay/..."
+                  value={tikkieLink}
+                  onChange={e => setTikkieLink(e.target.value)}
+                  style={{ marginBottom: 12 }}
+                />
+                {tikkieLink && (
+                  <div style={{ fontSize: 11, color: 'var(--success)', marginBottom: 12, wordBreak: 'break-all' }}>
+                    ✓ Link ingesteld: {tikkieLink}
+                  </div>
+                )}
+                <button
+                  onClick={handleTikkie}
+                  disabled={tikkieBezig}
+                  style={{ width: '100%', background: tikkieOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: tikkieBezig ? 0.6 : 1 }}
+                >
+                  {tikkieOk ? '✓ Opgeslagen' : tikkieBezig ? 'Opslaan…' : '💳 Tikkie-link opslaan'}
+                </button>
               </div>
             </div>
 
