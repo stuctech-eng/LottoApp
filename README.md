@@ -15,11 +15,11 @@ Digitale lottovereniging app — Next.js 14, TypeScript, Tailwind CSS, Firebase
 - **Betalingen**: provider-architectuur — `offline` (actief, MVP) + `mollie` (stub, klaar voor activatie)
 
 ## Authenticatie
-Drie inlogmethoden actief en getest op iPhone:
+Vijf inlogmethoden actief en getest op iPhone:
 - ✅ Email + wachtwoord (login + registratie)
 - ✅ Wachtwoord vergeten (reset via email)
 - ✅ Magic link (passwordless via email)
-- ✅ Google Sign-In (via redirect, werkt op mobiele Safari)
+- ✅ Google Sign-In — popup in standalone PWA, redirect in gewone Safari (zie status-sectie onderaan voor de fix-geschiedenis)
 - ✅ Uitloggen
 - ✅ Beveiligde routes (niet ingelogd = redirect naar `/`)
 
@@ -335,9 +335,8 @@ verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig })
 ### Nog niet getest
 - ❓ `onBetalingsHerinnering` (wekelijkse scheduled function, draait vrijdag 09:00) — nog nooit gecontroleerd of deze daadwerkelijk afgaat
 - ❓ De FCM debug pagina (`/debug-fcm`) staat nog live in productie — beslissen of die blijft staan als ingebouwde tool of verwijderd wordt
-- ❓ Node.js 20 → 22 upgrade voor Cloud Functions (deprecation warning in build logs, nog niet kritiek)
+- ✅ Node.js 20 → 22 upgrade voor Cloud Functions — uitgevoerd 29 juni 2026 (deadline was Oct 30, 2026)
 - ❓ Auto-advance in trekking-modal bij 1-cijferige getallen werkt niet helemaal goed op iOS (2-cijferige werkt wel) — bewust uitgesteld naar "volgende stap", nooit opgepakt
-- ❓ **Nieuw, 19 juni:** Google Sign-In fix (zie hieronder) nog te bevestigen via `/debug-auth` na deploy — eerstvolgende sessie
 
 ### 🔧 FIX TOEGEPAST, NOG TE BEVESTIGEN — 19 juni 2026: Google Sign-In faalt stil in standalone PWA
 
