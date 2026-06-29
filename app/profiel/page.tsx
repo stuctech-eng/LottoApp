@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { updateUserTickets, updateUserTelefoon, formatLidSinds } from '@/lib/firestore-users';
 import { logAudit } from '@/lib/firestore-audit';
-import { activeerNotificaties, deactiveerNotificaties, notificatiesIngeschakeld } from '@/lib/firebase-messaging';
-import { doc, setDoc } from 'firebase/firestore';
+import { activeerNotificaties, deactiveerNotificaties } from '@/lib/firebase-messaging';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
 
@@ -31,24 +31,52 @@ function ProfielPageContent() {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [editTicket, setEditTicket] = useState<Ticket | null>(null);
+
+  // Naam
+  const [naam, setNaam] = useState('');
+  const [naamBezig, setNaamBezig] = useState(false);
+  const [naamOk, setNaamOk] = useState(false);
+
+  // Telefoon
   const [telefoon, setTelefoon] = useState('');
   const [telefoonOpgeslagen, setTelefoonOpgeslagen] = useState(false);
+
+  // Notificaties
   const [notifActief, setNotifActief] = useState(false);
   const [notifBezig, setNotifBezig] = useState(false);
   const [notifToast, setNotifToast] = useState<string | null>(null);
 
   useEffect(() => {
+    if (profile?.naam) setNaam(profile.naam);
     if (profile?.telefoon) setTelefoon(profile.telefoon);
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setNotifActief(Notification.permission === 'granted');
     }
-  }, [profile?.telefoon]);
+  }, [profile?.naam, profile?.telefoon]);
 
   useEffect(() => {
     if (notifActief && user) {
       activeerNotificaties(user.uid).catch(console.error);
     }
   }, [notifActief, user]);
+
+  const handleSaveNaam = async () => {
+    if (!user || !profile || !naam.trim() || naam.trim() === profile.naam) return;
+    setNaamBezig(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { naam: naam.trim() });
+      await logAudit(
+        'profiel_gewijzigd',
+        `${profile.naam} wijzigde naam naar "${naam.trim()}"`,
+        { uid: user.uid, naam: profile.naam },
+        { doelUserId: user.uid }
+      );
+      setNaamOk(true);
+      setTimeout(() => setNaamOk(false), 2000);
+    } finally {
+      setNaamBezig(false);
+    }
+  };
 
   const handleNotificaties = async () => {
     if (!user) return;
@@ -79,10 +107,6 @@ function ProfielPageContent() {
       setNotifBezig(false);
     }
   };
-
-  useEffect(() => {
-    if (profile?.telefoon) setTelefoon(profile.telefoon);
-  }, [profile?.telefoon]);
 
   const handleSaveTelefoon = async () => {
     if (!user) return;
@@ -167,6 +191,32 @@ function ProfielPageContent() {
         </div>
 
         <div style={{ height: 20 }} />
+
+        {/* Naam wijzigen */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">Naam</div>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Je naam wordt getoond op de ranglijst en Hall of Fame.
+            </div>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Jouw naam"
+              value={naam}
+              onChange={e => setNaam(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+            <button
+              onClick={handleSaveNaam}
+              disabled={naamBezig || !naam.trim() || naam.trim() === profile?.naam}
+              className="btn-primary"
+              style={{ background: naamOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : undefined, opacity: (!naam.trim() || naam.trim() === profile?.naam) ? 0.5 : 1 }}
+            >
+              {naamOk ? '✓ Naam opgeslagen' : naamBezig ? 'Opslaan…' : 'Naam opslaan'}
+            </button>
+          </div>
+        </div>
 
         {/* Tickets */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
@@ -263,7 +313,7 @@ function ProfielPageContent() {
           </Link>
         </div>
 
-        {/* Debug link - tijdelijk */}
+        {/* Debug link */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
           <a href="/debug-fcm" style={{ display: 'block', textAlign: 'center', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>🔍 FCM Diagnostiek</a>
         </div>
