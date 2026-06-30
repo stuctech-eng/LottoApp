@@ -39,6 +39,7 @@ function AdminPageContent() {
   const [tikkieLink, setTikkieLink] = useState('');
   const [tikkieBezig, setTikkieBezig] = useState(false);
   const [tikkieOk, setTikkieOk] = useState(false);
+  const [tikkieError, setTikkieError] = useState<string | null>(null);
 
   useEffect(() => {
     const u1 = subscribeAuditLog(setAuditLog, 50);
@@ -66,7 +67,42 @@ function AdminPageContent() {
     }
   };
 
+  /**
+   * Valideert of de ingevoerde tekst een kale, geldige URL is.
+   *
+   * BELANGRIJK — waarom dit nodig is:
+   * Bij het kopiëren vanuit Tikkie wordt vaak de hele berichttekst
+   * meegekopieerd ("Wil je mij alsjeblieft €4.00 betalen voor... via
+   * https://tikkie.me/pay/xxx. Deze link is geldig t/m..."), niet
+   * alleen de URL zelf. Als die hele tekst wordt opgeslagen, geeft de
+   * Tikkie-knop op /betalen een 404 omdat de browser probeert te
+   * navigeren naar een ongeldige "URL" die met platte tekst begint.
+   * Deze validatie vangt dat af voordat het wordt opgeslagen.
+   */
+  function valideerTikkieUrl(input: string): string | null {
+    const waarde = input.trim();
+    if (!waarde) return null; // leeg is toegestaan (link uitschakelen)
+    try {
+      const url = new URL(waarde);
+      if (url.protocol !== 'https:') {
+        return 'Link moet beginnen met https://';
+      }
+      if (waarde.includes(' ')) {
+        return 'Link mag geen spaties bevatten — plak alleen de URL, niet de hele Tikkie-tekst';
+      }
+      return null; // geldig
+    } catch {
+      return 'Dit is geen geldige link. Plak alleen de URL (bijv. https://tikkie.me/pay/...), niet de hele Tikkie-berichttekst';
+    }
+  }
+
   const handleTikkie = async () => {
+    const fout = valideerTikkieUrl(tikkieLink);
+    if (fout) {
+      setTikkieError(fout);
+      return;
+    }
+    setTikkieError(null);
     setTikkieBezig(true);
     try {
       await setDoc(doc(db, 'paymentConfig', 'main'), { tikkieLink: tikkieLink.trim() }, { merge: true });
@@ -187,9 +223,15 @@ function AdminPageContent() {
                   className="form-input"
                   placeholder="https://tikkie.me/pay/..."
                   value={tikkieLink}
-                  onChange={e => setTikkieLink(e.target.value)}
-                  style={{ marginBottom: 12 }}
+                  onChange={e => { setTikkieLink(e.target.value); setTikkieError(null); }}
+                  style={{ marginBottom: 12, borderColor: tikkieError ? 'var(--error)' : undefined }}
                 />
+                {tikkieError && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+                    <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
+                    <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.5 }}>{tikkieError}</span>
+                  </div>
+                )}
                 {tikkieLink && (
                   <div style={{ fontSize: 11, color: 'var(--success)', marginBottom: 12, wordBreak: 'break-all' }}>
                     ✓ Link ingesteld: {tikkieLink}

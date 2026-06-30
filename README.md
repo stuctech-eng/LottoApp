@@ -228,6 +228,8 @@ Beheerbaar via `/beheerder/admin` → tab "Spel":
 - ✅ onBetalingsHerinnering bevestigd werkend (26 juni, 09:00)
 - ✅ Node.js 20 → 22 upgrade (29 juni)
 - ✅ Tikkie-link instelling toegevoegd aan `/beheerder/admin` (29 juni)
+- ✅ Tikkie-knop toegevoegd aan `/betalen` pagina (30 juni)
+- ✅ Tikkie-link URL-validatie toegevoegd (30 juni) — voorkomt 404 door per ongeluk de hele Tikkie-berichttekst plakken i.p.v. alleen de URL
 - ✅ Kashouder dashboard live data gekoppeld (29 juni)
 - ✅ Beheerder dashboard live data gekoppeld (29 juni)
 - ✅ Lotto uitslag link toegevoegd aan trekking-invoer modal (29 juni)
