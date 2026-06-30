@@ -19,6 +19,9 @@ function BetalenPageContent() {
   const [omschrijving, setOmschrijving] = useState(STANDAARD_OMSCHRIJVING);
   const [error, setError] = useState<string | null>(null);
 
+  // Tikkie-link uit paymentConfig — undefined als niet ingesteld
+  const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
+
   useEffect(() => {
     const unsub = subscribePaymentConfig(setConfig);
     return unsub;
@@ -129,6 +132,29 @@ function BetalenPageContent() {
           </div>
         </div>
 
+        {/* Tikkie betaalknop — alleen zichtbaar als beheerder een link heeft ingesteld */}
+        {tikkieLink && (
+          <div style={{ padding: '0 20px', marginBottom: 16 }}>
+            <a
+              href={tikkieLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                width: '100%', background: 'linear-gradient(135deg,#34c97a,#1a8a50)',
+                color: 'white', border: 'none', borderRadius: 16, padding: 16,
+                fontSize: 15, fontWeight: 700, fontFamily: "'DM Sans',sans-serif",
+                textDecoration: 'none', boxShadow: '0 6px 20px rgba(52,201,122,0.3)',
+              }}
+            >
+              💳 Betaal nu via Tikkie
+            </a>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, textAlign: 'center', lineHeight: 1.5 }}>
+              Betaal eerst via Tikkie, meld het daarna hieronder als "Ik heb betaald"
+            </div>
+          </div>
+        )}
+
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
           <div className="section-title">Omschrijving</div>
           <input
@@ -149,7 +175,9 @@ function BetalenPageContent() {
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
                 {config.activeProvider === 'offline'
-                  ? 'Betaal contant of via overschrijving, en meld dit hieronder. De kashouder bevestigt je betaling.'
+                  ? tikkieLink
+                    ? 'Betaal via de Tikkie-knop hierboven of via overschrijving, en meld dit hieronder. De kashouder bevestigt je betaling.'
+                    : 'Betaal contant of via overschrijving, en meld dit hieronder. De kashouder bevestigt je betaling.'
                   : 'Online betalen is nog niet beschikbaar — meld je betaling handmatig.'}
               </div>
             </div>
