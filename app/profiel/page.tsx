@@ -221,15 +221,23 @@ function ProfielPageContent() {
         {/* Tickets */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="section-title" style={{ marginBottom: 0 }}>Lotto tickets</div>
-            <span onClick={openNieuwTicket} style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, cursor: 'pointer' }}>+ Toevoegen</span>
+            <div className="section-title" style={{ marginBottom: 0 }}>Lotto ticket</div>
+            {tickets.length === 0 && (
+              <span onClick={openNieuwTicket} style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, cursor: 'pointer' }}>+ Toevoegen</span>
+            )}
           </div>
 
           {tickets.length === 0 && (
             <div className="card" style={{ padding: '24px 18px', textAlign: 'center' }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>🎱</div>
-              <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 14 }}>Je hebt nog geen tickets toegevoegd</div>
-              <button onClick={openNieuwTicket} className="btn-primary">+ Eerste ticket toevoegen</button>
+              <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 14 }}>Je hebt nog geen ticket toegevoegd</div>
+              <button onClick={openNieuwTicket} className="btn-primary">+ Ticket toevoegen</button>
+            </div>
+          )}
+
+          {tickets.length >= 1 && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Je hebt 1 ticket per persoon — tik op je ticket hieronder om de nummers te wijzigen.
             </div>
           )}
 

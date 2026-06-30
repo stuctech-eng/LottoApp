@@ -11,7 +11,7 @@ export const DEFAULT_SPELCONFIG: SpelConfig = {
 };
 
 export const DEFAULT_PRIJSCONFIG: PrijsConfig = {
-  modus: 'hoogste_score_wint',
+  modus: 'alle_goed_wint',
 };
 
 /** Live-luisteren naar /spelConfig/default. Valt terug op DEFAULT als doc niet bestaat. */

@@ -298,12 +298,15 @@ function AdminPageContent() {
             <div className="card" style={{ padding: 18 }}>
               <label className="form-label">Modus</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                {([['hoogste_score_wint','🏆 Hoogste score wint (standaard)'],['meerdere_winnaars','👥 Meerdere winnaars'],['vaste_prijzen','💰 Vaste prijzen per score']] as const).map(([modus, label]) => (
+                {([['alle_goed_wint','🎯 Alleen alle nummers goed wint (standaard)'],['hoogste_score_wint','🏆 Hoogste score wint'],['meerdere_winnaars','👥 Meerdere winnaars'],['vaste_prijzen','💰 Vaste prijzen per score']] as const).map(([modus, label]) => (
                   <div key={modus} onClick={() => setPrijsConfig(p => ({...p, modus}))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${prijsConfig.modus === modus ? 'var(--accent)' : 'var(--border)'}`, background: prijsConfig.modus === modus ? 'var(--accent-soft)' : 'var(--surface2)', cursor: 'pointer' }}>
                     <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--white)' }}>{label}</span>
                     {prijsConfig.modus === modus && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
                   </div>
                 ))}
+              </div>
+              <div style={{ background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 11, color: 'var(--accent)', lineHeight: 1.5 }}>
+                💡 Bij &quot;Alleen alle nummers goed wint&quot;: is er geen winnaar met een volledig juist ticket, dan is er die ronde geen winnaar — de pot blijft staan voor de volgende ronde (rollover).
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
                 Prijsconfiguratie wordt opgeslagen via de spelConfig. Neem contact op met de beheerder voor geavanceerde prijsinstellingen.

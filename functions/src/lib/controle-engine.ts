@@ -80,11 +80,21 @@ function berekenPunten(aantalGoed: number, bonusGoed: boolean): number {
 
 function bepaalWinnaars(
   scores: { userId: string; userNaam: string; ticketId: string; ticketNaam: string; aantalGoed: number; bonusGoed: boolean; punten: number }[],
-  prijsConfig: PrijsConfig
+  prijsConfig: PrijsConfig,
+  spelConfig: SpelConfig
 ): { userId: string; userNaam: string; ticketNaam: string; aantalGoed: number; punten: number }[] {
   if (scores.length === 0) return [];
 
   switch (prijsConfig.modus) {
+    case 'alle_goed_wint': {
+      // Alleen winnen bij ALLE nummers goed (aantalGoed === aantalGetallen
+      // uit de spelconfig). Geen enkele score gehaald → geen winnaar deze
+      // ronde, pot blijft staan voor de volgende ronde (rollover).
+      return scores
+        .filter(s => s.aantalGoed === spelConfig.aantalGetallen)
+        .map(s => ({ userId: s.userId, userNaam: s.userNaam, ticketNaam: s.ticketNaam, aantalGoed: s.aantalGoed, punten: s.punten }));
+    }
+
     case 'hoogste_score_wint': {
       const maxPunten = Math.max(...scores.map(s => s.punten));
       if (maxPunten === 0) return [];
@@ -178,7 +188,7 @@ export function verwerkTrekking(input: ControleInput): ControleOutput {
     }
   }
 
-  const winnaars = bepaalWinnaars(alleScores, prijsConfig);
+  const winnaars = bepaalWinnaars(alleScores, prijsConfig, spelConfig);
   const winnaarKeys = new Set(winnaars.map(w => `${w.userId}-${w.ticketNaam}`));
 
   // Markeer winnaars in resultaten

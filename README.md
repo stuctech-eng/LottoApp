@@ -230,6 +230,17 @@ Beheerbaar via `/beheerder/admin` → tab "Spel":
 - ✅ Tikkie-link instelling toegevoegd aan `/beheerder/admin` (29 juni)
 - ✅ Tikkie-knop toegevoegd aan `/betalen` pagina (30 juni)
 - ✅ Tikkie-link URL-validatie toegevoegd (30 juni) — voorkomt 404 door per ongeluk de hele Tikkie-berichttekst plakken i.p.v. alleen de URL
+- ✅ Nieuwe prijsmodus "alle_goed_wint" toegevoegd als default (30 juni) — alleen winnen bij ALLE nummers goed, geen winnaar = rollover naar volgende ronde
+- ✅ 1 ticket per persoon ingesteld (30 juni) — "+ Toevoegen" knop verdwijnt zodra een lid al 1 ticket heeft, voor gelijke kansen tussen leden
+
+## Prijsmodus — belangrijk om te weten
+Vier prijsmodi beschikbaar via `/beheerder/admin` → tab Prijzen:
+- **🎯 Alleen alle nummers goed wint (standaard/default)** — winnen kan alleen met een volledig correct ticket (alle 6 nummers). Geen winnaar deze ronde → pot blijft staan (rollover).
+- 🏆 Hoogste score wint — wie de meeste nummers goed heeft wint, ook bij een gedeeltelijke score
+- 👥 Meerdere winnaars — iedereen boven een ingestelde minimumscore wint
+- 💰 Vaste prijzen per score — vast bedrag per aantal goed
+
+**Let op:** de DEFAULT_PRIJSCONFIG in code is aangepast naar `alle_goed_wint`, maar als er al een `/prijsConfig/default` document in Firestore staat met de oude waarde (`hoogste_score_wint`), moet dat APART handmatig aangepast worden via Firebase Console of via de admin-UI — de codewijziging overschrijft geen bestaand Firestore-document.
 - ✅ Kashouder dashboard live data gekoppeld (29 juni)
 - ✅ Beheerder dashboard live data gekoppeld (29 juni)
 - ✅ Lotto uitslag link toegevoegd aan trekking-invoer modal (29 juni)

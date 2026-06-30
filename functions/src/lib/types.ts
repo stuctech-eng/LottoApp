@@ -19,6 +19,7 @@ export interface SpelConfig {
 }
 
 export type PrijsConfigModus =
+  | 'alle_goed_wint'
   | 'hoogste_score_wint'
   | 'meerdere_winnaars'
   | 'vaste_prijzen';
