@@ -34,13 +34,11 @@ function FinancieelPageContent() {
   const [leden, setLeden] = useState<User[]>([]);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
 
-  // Uitbetaling form
   const [uitbBedrag, setUitbBedrag] = useState('');
   const [uitbOmschrijving, setUitbOmschrijving] = useState('');
   const [uitbBezig, setUitbBezig] = useState(false);
   const [uitbOk, setUitbOk] = useState(false);
 
-  // Correctie form
   const [corType, setCorType] = useState<'plus' | 'min'>('plus');
   const [corBedrag, setCorBedrag] = useState('');
   const [corOmschrijving, setCorOmschrijving] = useState('');
@@ -68,7 +66,6 @@ function FinancieelPageContent() {
   const ledenZonderTelefoon = leden.filter(l => l.actief && !l.telefoon);
   const ledenMetTelefoon = leden.filter(l => l.actief && l.telefoon);
 
-  // Tikkie-link uit paymentConfig — undefined als niet ingesteld
   const tikkieLink = (paymentConfig as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
@@ -179,13 +176,24 @@ function FinancieelPageContent() {
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div className="section-title" style={{ marginBottom: 0 }}>Betaalherinnering (WhatsApp)</div>
-            {tikkieLink && <span style={{ fontSize: 11, background: 'var(--success-soft)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>💳 Tikkie actief</span>}
+            {tikkieLink && (
+              <a
+                href={tikkieLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, background: 'var(--success-soft)', color: 'var(--success)', padding: '5px 12px', borderRadius: 20, fontWeight: 600, textDecoration: 'none', border: '1px solid rgba(52,201,122,0.2)', display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                💳 Bekijk Tikkie ↗
+              </a>
+            )}
           </div>
+
           {!tikkieLink && (
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 10, lineHeight: 1.5 }}>
               💡 Voeg een Tikkie-link toe via Beheerder → Admin → Instellingen voor een directe betaallink in het bericht.
             </div>
           )}
+
           {ledenMetTelefoon.length === 0 && (
             <div className="card" style={{ padding: '20px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
               Nog geen leden met telefoonnummer. Leden kunnen dit toevoegen via hun profiel.
