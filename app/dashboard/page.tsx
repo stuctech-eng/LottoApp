@@ -259,7 +259,7 @@ function DashboardPageContent() {
         <div style={{ padding: '0 20px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div className="section-title" style={{ marginBottom: 0 }}>Deelnemers</div>
-            <Link href="/leden" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
+            <Link href="/deelnemers" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
           </div>
           <div className="card" style={{ padding: 16 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
