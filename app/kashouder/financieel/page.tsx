@@ -176,16 +176,7 @@ function FinancieelPageContent() {
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div className="section-title" style={{ marginBottom: 0 }}>Betaalherinnering (WhatsApp)</div>
-            {tikkieLink && (
-              <a
-                href={tikkieLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: 11, background: 'var(--success-soft)', color: 'var(--success)', padding: '5px 12px', borderRadius: 20, fontWeight: 600, textDecoration: 'none', border: '1px solid rgba(52,201,122,0.2)', display: 'flex', alignItems: 'center', gap: 5 }}
-              >
-                💳 Bekijk Tikkie ↗
-              </a>
-            )}
+            {tikkieLink && <span style={{ fontSize: 11, background: 'var(--success-soft)', color: 'var(--success)', padding: '3px 10px', borderRadius: 20, fontWeight: 600, border: '1px solid rgba(52,201,122,0.2)' }}>💳 Tikkie actief</span>}
           </div>
 
           {!tikkieLink && (
