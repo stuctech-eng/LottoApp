@@ -17,6 +17,23 @@ function SpelregelsContent() {
 
         <div style={{ padding: '0 20px', paddingBottom: 40 }}>
 
+          {/* Betaalcyclus */}
+          <div style={{ background: 'linear-gradient(135deg,#2a1c00,#0d1b2a)', border: '1px solid rgba(240,192,96,0.18)', borderRadius: 18, padding: '18px 20px', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 12, letterSpacing: '0.5px', textTransform: 'uppercase' }}>🔄 Wekelijkse cyclus</div>
+            {[
+              { icon: '🎱', tekst: 'Zaterdag — trekking verwerkt → nieuwe betalingen automatisch aangemaakt voor volgende week' },
+              { icon: '💳', tekst: 'Zondag t/m donderdag — betaal via Tikkie en meld het in de app' },
+              { icon: '⏰', tekst: 'Vrijdag 09:00 — automatische herinnering voor wie nog niet betaald heeft' },
+              { icon: '✅', tekst: 'Kashouder bevestigt betalingen — je doet mee met de trekking' },
+              { icon: '🎯', tekst: 'Zaterdag 19:30 — lotto-trekking, beheerder voert uitslag in' },
+            ].map((s, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
+                <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>{s.tekst}</div>
+              </div>
+            ))}
+          </div>
+
           {/* Regel 1 — Betaling */}
           <div style={{ background: 'linear-gradient(135deg,rgba(74,158,255,0.08),var(--surface))', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 18, padding: '18px 20px', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
@@ -57,7 +74,7 @@ function SpelregelsContent() {
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--white)' }}>Geen winnaar? Pot blijft staan</div>
             </div>
             <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.7 }}>
-              Is er geen winnaar deze week? Dan blijft de pot staan en groeit die de volgende week verder. De inleg van die week wordt er gewoon bij opgeteld. Zo kan de pot weken achter elkaar groeien.
+              Is er geen winnaar? Dan blijft de pot staan en groeit die de volgende week verder. De inleg van die week wordt er gewoon bij opgeteld. Zo kan de pot weken achter elkaar groeien.
             </div>
           </div>
 
@@ -79,7 +96,7 @@ function SpelregelsContent() {
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--white)' }}>Meerdere winnaars mogelijk</div>
             </div>
             <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.7 }}>
-              Hebben meerdere leden alle 6 nummers goed? Dan zijn er meerdere winnaars en wordt de pot gelijkelijk verdeeld. De kans hierop is klein, maar het kan.
+              Hebben meerdere leden alle 6 nummers goed? Dan zijn er meerdere winnaars en wordt de pot gelijkelijk verdeeld.
             </div>
           </div>
 
@@ -88,11 +105,12 @@ function SpelregelsContent() {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 12, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Samenvatting</div>
             {[
               '💳 Betaal elke week €4 via Tikkie of overboeking',
-              '📲 Meld je betaling in de app',
-              '✅ Kashouder bevestigt → je doet mee',
+              '📲 Meld je betaling in de app na het betalen',
+              '✅ Kashouder bevestigt → je doet mee deze week',
               '🎱 Zaterdag worden de nummers getrokken',
               '🏆 Alle 6 goed? Jij wint de hele pot',
               '🔄 Niet gewonnen? Pot blijft staan voor volgende week',
+              '⏰ Niet betaald? Vrijdag krijg je een herinnering',
             ].map((r, i) => (
               <div key={i} style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.7, paddingBottom: 6 }}>{r}</div>
             ))}

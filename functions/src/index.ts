@@ -368,3 +368,93 @@ export const onTrekkingHerinnering = functions.scheduler.onSchedule(
     functions.logger.info(`Trekking-herinnering verstuurd naar ${aantalVerstuurd} beheerder(s).`);
   }
 );
+
+// ─────────────────────── onBetalingenAanmaken ───────────────────────
+
+/**
+ * Triggered nadat een trekking is verwerkt (verwerkt === true).
+ * Maakt automatisch een betaling-document aan voor elk actief lid
+ * voor de volgende week, zodat:
+ * - De vrijdagse herinnering correct werkt (zoekt naar status 'open')
+ * - Leden direct kunnen melden via de app
+ * - De kashouder een compleet overzicht heeft
+ *
+ * BETAALCYCLUS:
+ * Zaterdag trekking verwerkt → betalingen aangemaakt (status: 'open')
+ * Lid betaalt → meldt in app → status: 'verificatie'
+ * Kashouder bevestigt → status: 'betaald'
+ * Vrijdag 09:00 → herinnering naar wie nog 'open' heeft
+ * Zaterdag nieuwe trekking → cyclus herhaalt
+ *
+ * Duplicaat-beveiliging: per lid per trekkingWeek wordt maximaal
+ * 1 betaling aangemaakt. Als er al een betaling bestaat voor die
+ * week, wordt er geen nieuwe aangemaakt.
+ */
+export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
+  'trekkingen/{trekkingId}',
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+
+    // Alleen triggeren als verwerkt net op true is gezet
+    if (!before || !after) return;
+    if (before.verwerkt === true) return; // al eerder getriggerd
+    if (after.verwerkt !== true) return;  // nog niet verwerkt
+
+    functions.logger.info(`Betalingen aanmaken na trekking ${event.params.trekkingId}`);
+
+    // Bepaal de volgende trekkingWeek (volgende zaterdag = volgende week)
+    const nu = new Date();
+    const volgendeWeekDatum = new Date(nu.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const startJaar = new Date(Date.UTC(volgendeWeekDatum.getUTCFullYear(), 0, 1));
+    const weekNr = Math.ceil(
+      ((volgendeWeekDatum.getTime() - startJaar.getTime()) / 86400000 + startJaar.getUTCDay() + 1) / 7
+    );
+    const volgendeWeek = `${volgendeWeekDatum.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
+
+    functions.logger.info(`Aanmaken betalingen voor week: ${volgendeWeek}`);
+
+    // Haal alle actieve leden op
+    const usersSnap = await db.collection('users').where('actief', '==', true).get();
+
+    // Check welke leden al een betaling hebben voor volgende week
+    const bestaandeBetalingen = await db.collection('betalingen')
+      .where('trekkingWeek', '==', volgendeWeek)
+      .get();
+    const alBetaling = new Set(bestaandeBetalingen.docs.map(d => d.data().userId as string));
+
+    // Maak betalingen aan voor leden zonder betaling voor volgende week
+    const batch = db.batch();
+    let aantalAangemaakt = 0;
+
+    for (const userDoc of usersSnap.docs) {
+      if (alBetaling.has(userDoc.id)) continue; // al een betaling voor deze week
+
+      const userData = userDoc.data();
+      const tickets = (userData.tickets ?? []) as { id: string; nummers: number[] }[];
+      if (tickets.length === 0) continue; // geen ticket = geen betaling aanmaken
+
+      const ref = db.collection('betalingen').doc();
+      batch.set(ref, {
+        userId: userDoc.id,
+        userNaam: userData.naam ?? 'Onbekend',
+        bedrag: 4, // standaard inleg
+        omschrijving: `Inleg LottoClub`,
+        provider: 'offline',
+        status: 'open',
+        trekkingWeek: volgendeWeek,
+        aangemaakt: admin.firestore.FieldValue.serverTimestamp(),
+        bevestigd: null,
+        bevestigdDoor: null,
+      });
+      aantalAangemaakt++;
+    }
+
+    if (aantalAangemaakt > 0) {
+      await batch.commit();
+      functions.logger.info(`${aantalAangemaakt} betalingen aangemaakt voor week ${volgendeWeek}`);
+    } else {
+      functions.logger.info(`Geen nieuwe betalingen nodig voor week ${volgendeWeek} — al aangemaakt`);
+    }
+  }
+);
