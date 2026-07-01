@@ -3,9 +3,10 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useState } from 'react';
 
-type Sectie = 'installatie' | 'inloggen' | 'lid' | 'kashouder' | 'beheerder' | 'notificaties' | 'betalen' | 'trekking' | 'faq';
+type Sectie = 'spelregels' | 'installatie' | 'inloggen' | 'lid' | 'kashouder' | 'beheerder' | 'notificaties' | 'betalen' | 'trekking' | 'faq';
 
 const SECTIES: { id: Sectie; icon: string; titel: string }[] = [
+  { id: 'spelregels', icon: '📋', titel: 'Spelregels' },
   { id: 'installatie', icon: '📲', titel: 'Installatie' },
   { id: 'inloggen', icon: '🔐', titel: 'Inloggen' },
   { id: 'lid', icon: '🎱', titel: 'Als lid' },
@@ -87,6 +88,30 @@ function HelpContent() {
 
         {/* Content */}
         <div style={{ padding: '0 20px', paddingBottom: 32 }}>
+
+          {actief === 'spelregels' && (
+            <>
+              <Blok titel="💳 Betaling = deelname">
+                <Info tekst="Je doet alleen mee als je de inleg van die week hebt betaald én de kashouder dit heeft bevestigd. Heb je niet betaald? Dan tellen je nummers die week niet mee — automatisch." />
+              </Blok>
+              <Blok titel="🎱 1 ticket per persoon">
+                <Info tekst="Iedereen heeft 1 ticket met 6 nummers. Gelijke kansen voor iedereen." />
+              </Blok>
+              <Blok titel="🏆 Alleen alle 6 goed is winnen">
+                <Info tekst="Je wint alleen als alle 6 nummers op je ticket overeenkomen met de getrokken nummers. Heb je 5 of minder goed? Dan is er geen winnaar deze week." />
+              </Blok>
+              <Blok titel="🔄 Geen winnaar? Pot blijft staan">
+                <Info tekst="Is er geen winnaar? Dan blijft de pot staan en groeit die de volgende week verder. Dit heet een rollover." />
+              </Blok>
+              <Blok titel="💰 Pot opgebouwd door betalers">
+                <Info tekst="Alleen de inleg van leden die betaald hebben telt mee voor de pot. Wie niet betaalt, legt niet in en doet niet mee — die week. De volgende week kun je gewoon weer instappen." />
+              </Blok>
+              <Blok titel="🎉 Meerdere winnaars mogelijk">
+                <Info tekst="Hebben meerdere leden alle 6 nummers goed? Dan zijn er meerdere winnaars en wordt de pot gelijkelijk verdeeld." />
+              </Blok>
+              <Tip tekst="Wil je de volledige spelregels zien? Ga naar Profiel → Spelregels." />
+            </>
+          )}
 
           {actief === 'installatie' && (
             <>

@@ -18,6 +18,22 @@ interface ActieUser {
   naam: string;
 }
 
+/**
+ * Geeft het ISO-weeknummer terug als string, bijv. "2026-W27".
+ * Wordt gebruikt om een betaling te koppelen aan de trekking van die week.
+ * De Cloud Function gebruikt dit om te bepalen wie er mee heeft betaald
+ * voor de trekking van die week — alleen die leden worden meegenomen
+ * in de controle-engine.
+ */
+export function huidigTrekkingWeek(): string {
+  const nu = new Date();
+  const startJaar = new Date(Date.UTC(nu.getUTCFullYear(), 0, 1));
+  const weekNr = Math.ceil(
+    ((nu.getTime() - startJaar.getTime()) / 86400000 + startJaar.getUTCDay() + 1) / 7
+  );
+  return `${nu.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
+}
+
 // ───────────────────────── Kasmutaties ─────────────────────────
 
 /** Live-luisteren naar alle kasmutaties, nieuwste eerst. */
@@ -109,7 +125,7 @@ export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) 
   );
 }
 
-/** Live-luisteren naar de betalingen van één gebruiker (client-side gesorteerd, geen composite index nodig). */
+/** Live-luisteren naar de betalingen van één gebruiker. */
 export function subscribeUserBetalingen(uid: string, callback: (betalingen: Betaling[]) => void) {
   const q = query(collection(db, 'betalingen'), where('userId', '==', uid));
   return onSnapshot(
@@ -145,8 +161,18 @@ export function subscribeUserBetalingen(uid: string, callback: (betalingen: Beta
   );
 }
 
-/** Lid meldt een betaling (offline provider) → status 'verificatie'. */
+/**
+ * Lid meldt een betaling (offline provider) → status 'verificatie'.
+ *
+ * trekkingWeek wordt automatisch ingevuld op basis van de huidige week
+ * (bijv. "2026-W27"). De Cloud Function gebruikt dit veld om bij de
+ * zaterdagse trekking te bepalen welke leden er voor die week betaald
+ * hebben. Alleen leden met een bevestigde betaling (status: 'betaald')
+ * voor de huidige trekkingWeek worden meegenomen in de controle-engine.
+ * Wie niet betaald heeft → ticket wordt die week genegeerd.
+ */
 export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving: string) {
+  const week = huidigTrekkingWeek();
   const ref = await addDoc(collection(db, 'betalingen'), {
     userId: user.uid,
     userNaam: user.naam,
@@ -154,13 +180,17 @@ export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving
     omschrijving,
     provider: 'offline',
     status: 'verificatie',
+    trekkingWeek: week,   // ← koppeling aan trekking van deze week
     aangemaakt: serverTimestamp(),
     bevestigd: null,
     bevestigdDoor: null,
   });
-  await logAudit('betaling_gemeld', `${user.naam} meldde een betaling van €${bedrag.toFixed(2)} (${omschrijving})`, user, {
-    doelUserId: user.uid,
-  });
+  await logAudit(
+    'betaling_gemeld',
+    `${user.naam} meldde een betaling van €${bedrag.toFixed(2)} (${omschrijving}) voor week ${week}`,
+    user,
+    { doelUserId: user.uid }
+  );
   return ref.id;
 }
 
@@ -179,9 +209,12 @@ export async function bevestigBetaling(betaling: Betaling, kashouder: ActieUser)
     betalingId: betaling.id,
     aangemaaktDoor: kashouder.uid,
   });
-  await logAudit('betaling_bevestigd', `${kashouder.naam} bevestigde betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)})`, kashouder, {
-    doelUserId: betaling.userId,
-  });
+  await logAudit(
+    'betaling_bevestigd',
+    `${kashouder.naam} bevestigde betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)})`,
+    kashouder,
+    { doelUserId: betaling.userId }
+  );
 }
 
 /** Kashouder wijst een betaling af → status 'afgewezen' + audit. */
@@ -191,9 +224,12 @@ export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
     bevestigd: serverTimestamp(),
     bevestigdDoor: kashouder.uid,
   });
-  await logAudit('betaling_afgewezen', `${kashouder.naam} wees betaling van ${betaling.userNaam} af (€${betaling.bedrag.toFixed(2)})`, kashouder, {
-    doelUserId: betaling.userId,
-  });
+  await logAudit(
+    'betaling_afgewezen',
+    `${kashouder.naam} wees betaling van ${betaling.userNaam} af (€${betaling.bedrag.toFixed(2)})`,
+    kashouder,
+    { doelUserId: betaling.userId }
+  );
 }
 
 // ───────────────────────── Uitbetalingen & correcties ─────────────────────────
@@ -211,14 +247,17 @@ export async function registreerUitbetaling(input: {
     userId: input.doelUserId,
     aangemaaktDoor: kashouder.uid,
   });
-  await logAudit('uitbetaling_geregistreerd', `${kashouder.naam} registreerde uitbetaling van €${Math.abs(input.bedrag).toFixed(2)} (${input.omschrijving})`, kashouder, {
-    doelUserId: input.doelUserId,
-  });
+  await logAudit(
+    'uitbetaling_geregistreerd',
+    `${kashouder.naam} registreerde uitbetaling van €${Math.abs(input.bedrag).toFixed(2)} (${input.omschrijving})`,
+    kashouder,
+    { doelUserId: input.doelUserId }
+  );
 }
 
 /** Kashouder voert een kascorrectie door (positief of negatief) + audit. */
 export async function registreerCorrectie(input: {
-  bedrag: number; // teken bepaalt + of -
+  bedrag: number;
   omschrijving: string;
 }, kashouder: ActieUser) {
   await maakKasmutatie({
@@ -227,5 +266,9 @@ export async function registreerCorrectie(input: {
     type: 'correctie',
     aangemaaktDoor: kashouder.uid,
   });
-  await logAudit('kascorrectie', `${kashouder.naam} voerde een correctie door: ${input.bedrag >= 0 ? '+' : ''}€${input.bedrag.toFixed(2)} (${input.omschrijving})`, kashouder);
+  await logAudit(
+    'kascorrectie',
+    `${kashouder.naam} voerde een correctie door: ${input.bedrag >= 0 ? '+' : ''}€${input.bedrag.toFixed(2)} (${input.omschrijving})`,
+    kashouder
+  );
 }

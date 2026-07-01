@@ -309,6 +309,18 @@ function ProfielPageContent() {
           </div>
         </div>
 
+        {/* Spelregels */}
+        <div style={{ padding: '0 20px', marginBottom: 12 }}>
+          <Link href="/spelregels" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--gold-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📋</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Spelregels</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Hoe werkt de pot, betaling en winnen?</div>
+            </div>
+            <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+          </Link>
+        </div>
+
         {/* Help */}
         <div style={{ padding: '0 20px', marginBottom: 12 }}>
           <Link href="/help" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>

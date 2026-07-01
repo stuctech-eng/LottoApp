@@ -20,14 +20,50 @@ async function getSpelConfig(): Promise<SpelConfig> {
 
 async function getPrijsConfig(): Promise<PrijsConfig> {
   const snap = await db.doc('prijsConfig/default').get();
-  if (!snap.exists) return { modus: 'hoogste_score_wint' };
+  if (!snap.exists) return { modus: 'alle_goed_wint' };
   const d = snap.data()!;
   return { modus: d.modus, vastePrijzen: d.vastePrijzen, minimumScore: d.minimumScore };
 }
 
 /**
- * Haal FCM tokens op van een gebruiker en filter op notificatievoorkeur.
+ * Geeft het ISO-weeknummer terug als string, bijv. "2026-W27".
+ * Identiek aan huidigTrekkingWeek() in lib/firestore-payments.ts.
+ * Gedupliceerd hier omdat Cloud Functions geen client-side imports gebruiken.
  */
+function getTrekkingWeek(datum: Date): string {
+  const startJaar = new Date(Date.UTC(datum.getUTCFullYear(), 0, 1));
+  const weekNr = Math.ceil(
+    ((datum.getTime() - startJaar.getTime()) / 86400000 + startJaar.getUTCDay() + 1) / 7
+  );
+  return `${datum.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
+}
+
+/**
+ * Haalt de userIds op van leden die een bevestigde betaling hebben
+ * voor de opgegeven trekkingWeek (bijv. "2026-W27").
+ *
+ * BETALING ALS TOEGANGSPOORT:
+ * Alleen leden met status 'betaald' EN trekkingWeek === huidige week
+ * worden meegenomen in de controle-engine. Wie niet betaald heeft,
+ * bestaat die week niet voor de trekking — automatisch, zonder actie
+ * van de kashouder.
+ */
+async function getBetalersVoorWeek(trekkingWeek: string): Promise<Set<string>> {
+  const snap = await db.collection('betalingen')
+    .where('status', '==', 'betaald')
+    .where('trekkingWeek', '==', trekkingWeek)
+    .get();
+
+  const betalers = new Set<string>();
+  snap.docs.forEach(d => {
+    const userId = d.data().userId as string;
+    if (userId) betalers.add(userId);
+  });
+
+  functions.logger.info(`Betalers voor week ${trekkingWeek}: ${betalers.size} leden`);
+  return betalers;
+}
+
 async function getFcmTokens(userId: string, setting: keyof NotificationSettings): Promise<string[]> {
   const userDoc = await db.doc(`users/${userId}`).get();
   if (!userDoc.exists) return [];
@@ -52,17 +88,9 @@ async function getAllFcmTokens(setting: keyof NotificationSettings): Promise<{ u
 }
 
 /**
- * Verstuurt een push notificatie naar de gegeven tokens.
- *
  * BELANGRIJK — DATA-ONLY PAYLOAD:
- * Er wordt bewust GEEN top-level `notification` veld meegestuurd.
- * Een top-level `notification` veld laat FCM zelf automatisch een
- * notificatie tonen aan de gebruiker, BOVENOP de notificatie die de
- * service worker zelf toont via self.registration.showNotification()
- * in onBackgroundMessage (zie public/firebase-messaging-sw.js).
- * Dat veroorzaakte de bug waarbij gebruikers 2x dezelfde notificatie
- * kregen. Door alles via `data` te sturen, toont alléén de service
- * worker de notificatie — precies 1x.
+ * Geen top-level `notification` veld — dat veroorzaakte dubbele notificaties.
+ * Alleen via `data` sturen → service worker toont precies 1x.
  */
 async function sendToTokens(tokens: string[], notification: { title: string; body: string }, data?: Record<string, string>) {
   if (tokens.length === 0) return;
@@ -78,7 +106,6 @@ async function sendToTokens(tokens: string[], notification: { title: string; bod
         fcmOptions: { link: data?.path ?? '/' },
       },
     });
-    // Verwijder ongeldige tokens
     const invalidTokens: string[] = [];
     response.responses.forEach((resp, idx) => {
       if (!resp.success && (resp.error?.code === 'messaging/invalid-registration-token' || resp.error?.code === 'messaging/registration-token-not-registered')) {
@@ -107,7 +134,12 @@ async function logAudit(actie: string, omschrijving: string, userId: string, use
 
 /**
  * Wordt getriggerd wanneer een nieuwe trekking wordt opgeslagen.
- * Voert de controle-engine uit server-side en schrijft resultaten atomisch.
+ *
+ * BETALING ALS TOEGANGSPOORT:
+ * Alleen leden met een bevestigde betaling voor de huidige trekkingWeek
+ * worden meegenomen in de controle-engine. Wie niet betaald heeft,
+ * wordt genegeerd die week — automatisch, zonder actie van de kashouder.
+ * De niet-betaler ontvangt een aparte push-notificatie met uitleg.
  *
  * ARCHITECTUURREGEL: alle berekeningen die invloed hebben op winnaars,
  * ranglijsten en Hall of Fame draaien hier — nooit client-side.
@@ -136,23 +168,56 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
 
     functions.logger.info(`Verwerken trekking ${trekkingId}: [${trekking.nummers.join(', ')}]`);
 
+    // Bepaal de trekkingWeek op basis van de trekking-datum
+    const trekkingDatum = trekking.datum ? trekking.datum.toDate() : new Date();
+    const trekkingWeek = getTrekkingWeek(trekkingDatum);
+    functions.logger.info(`TrekkingWeek: ${trekkingWeek}`);
+
     const [spelConfig, prijsConfig] = await Promise.all([getSpelConfig(), getPrijsConfig()]);
 
-    const usersSnap = await db.collection('users').where('actief', '==', true).get();
-    const deelnemers: LidTickets[] = usersSnap.docs
-      .map(d => {
-        const userData = d.data();
-        return {
-          userId: d.id,
-          userNaam: userData.naam as string ?? 'Onbekend',
-          tickets: ((userData.tickets ?? []) as { id: string; naam: string; nummers: number[] }[])
-            .filter(t => t.nummers && t.nummers.length > 0),
-        };
-      })
-      .filter(d => d.tickets.length > 0);
+    // Haal betalers op voor deze week
+    const betalers = await getBetalersVoorWeek(trekkingWeek);
 
+    // Haal alle actieve gebruikers + tickets op
+    const usersSnap = await db.collection('users').where('actief', '==', true).get();
+    const alleActieveLeden = usersSnap.docs.map(d => ({
+      id: d.id,
+      data: d.data(),
+    }));
+
+    // Splits: betalers vs niet-betalers
+    const deelnemers: LidTickets[] = [];
+    const nietBetalers: { userId: string; userNaam: string }[] = [];
+
+    for (const lid of alleActieveLeden) {
+      const userData = lid.data;
+      const tickets = ((userData.tickets ?? []) as { id: string; naam: string; nummers: number[] }[])
+        .filter(t => t.nummers && t.nummers.length > 0);
+
+      if (tickets.length === 0) continue; // geen ticket = sowieso geen deelname
+
+      if (betalers.has(lid.id)) {
+        // Betaald → doet mee
+        deelnemers.push({
+          userId: lid.id,
+          userNaam: userData.naam as string ?? 'Onbekend',
+          tickets,
+        });
+      } else {
+        // Niet betaald → uitgesloten
+        nietBetalers.push({
+          userId: lid.id,
+          userNaam: userData.naam as string ?? 'Onbekend',
+        });
+      }
+    }
+
+    functions.logger.info(`Deelnemers: ${deelnemers.length}, Niet betaald: ${nietBetalers.length}`);
+
+    // Voer controle-engine uit (pure functie) — alleen met betalers
     const output = verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig });
 
+    // Schrijf resultaten + ranglijstPunten atomisch
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
       const ref = db.collection('resultaten').doc();
@@ -171,22 +236,26 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
     }
     await batch.commit();
 
+    // Audit log
     const winnaarNamen = output.winnaars.map(w => w.userNaam).join(', ');
     await logAudit(
       'trekking_ingevoerd',
-      `Trekking verwerkt: [${trekking.nummers.join(', ')}]${trekking.bonusBal ? ` + B:${trekking.bonusBal}` : ''}. Winnaar(s): ${winnaarNamen || 'geen'}`,
+      `Trekking verwerkt (${trekkingWeek}): [${trekking.nummers.join(', ')}]${trekking.bonusBal ? ` + B:${trekking.bonusBal}` : ''}. Deelnemers: ${deelnemers.length}. Winnaar(s): ${winnaarNamen || 'geen'}. Niet betaald: ${nietBetalers.length}`,
       trekking.ingevoerdDoor,
       trekking.ingevoerdDoorNaam
     );
 
-    const alleTokens = await getAllFcmTokens('trekkingResultaten');
+    // Push naar deelnemers met hun resultaat
     const winnaarTekst = output.winnaars.length > 0
       ? `🏆 Winnaar: ${winnaarNamen}`
-      : 'Geen winnaar deze ronde';
+      : 'Geen winnaar deze week — pot blijft staan!';
 
-    for (const { userId, tokens } of alleTokens) {
+    for (const deelnemer of deelnemers) {
+      const tokens = await getFcmTokens(deelnemer.userId, 'trekkingResultaten');
+      if (tokens.length === 0) continue;
+
       const mijnResultaat = output.resultaten
-        .filter(r => r.userId === userId)
+        .filter(r => r.userId === deelnemer.userId)
         .sort((a, b) => b.aantalGoed - a.aantalGoed)[0];
 
       const body = mijnResultaat
@@ -199,16 +268,23 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       }, { trekkingId });
     }
 
-    functions.logger.info(`Trekking ${trekkingId} succesvol verwerkt. ${output.winnaars.length} winnaar(s).`);
+    // Push naar niet-betalers: vriendelijke melding dat ze niet meededen
+    for (const nietBetaler of nietBetalers) {
+      const tokens = await getFcmTokens(nietBetaler.userId, 'herinneringen');
+      if (tokens.length === 0) continue;
+
+      await sendToTokens(tokens, {
+        title: '🎱 Trekking van deze week',
+        body: 'Je hebt niet betaald voor deze ronde en bent helaas uitgesloten. Hopelijk zien we je de volgende ronde weer!',
+      }, { path: '/betalen' });
+    }
+
+    functions.logger.info(`Trekking ${trekkingId} succesvol verwerkt. ${output.winnaars.length} winnaar(s). ${nietBetalers.length} leden uitgesloten wegens niet-betaling.`);
   }
 );
 
 // ─────────────────────── onBetalingBevestigd ───────────────────────
 
-/**
- * Getriggerd wanneer een betaling status wijzigt naar 'betaald'.
- * Stuurt push notificatie naar het betreffende lid.
- */
 export const onBetalingBevestigd = functions.firestore.onDocumentUpdated(
   'betalingen/{betalingId}',
   async (event) => {
@@ -228,17 +304,13 @@ export const onBetalingBevestigd = functions.firestore.onDocumentUpdated(
     const tokens = await getFcmTokens(userId, 'betalingBevestigd');
     await sendToTokens(tokens, {
       title: '✅ Betaling bevestigd',
-      body: `€${bedrag.toFixed(2)} (${omschrijving}) is bevestigd door de kashouder.`,
+      body: `€${bedrag.toFixed(2)} (${omschrijving}) is bevestigd. Je doet mee aan de trekking van deze week!`,
     });
   }
 );
 
 // ─────────────────────── onBetalingsHerinnering ───────────────────────
 
-/**
- * Scheduled function — draait elke vrijdag om 09:00.
- * Stuurt herinnering naar leden met status 'open'.
- */
 export const onBetalingsHerinnering = functions.scheduler.onSchedule(
   {
     schedule: '0 9 * * 5', // elke vrijdag 09:00
@@ -257,7 +329,7 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
       const tokens = await getFcmTokens(userId, 'herinneringen');
       await sendToTokens(tokens, {
         title: '⏰ Betaalherinnering',
-        body: 'Je inleg staat nog open. Meld je betaling in de app vóór de trekking.',
+        body: 'Je inleg staat nog open. Betaal en meld het in de app vóór de trekking van zaterdag.',
       }, { path: '/betalen' });
     }
 
@@ -267,18 +339,6 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
 
 // ─────────────────────── onTrekkingHerinnering ───────────────────────
 
-/**
- * Scheduled function — draait elke zaterdag om 19:30.
- * Stuurt een herinnering naar beheerders om de lotto-uitslag in te voeren.
- *
- * De Nederlandse Lotto-trekking vindt elke zaterdag plaats.
- * Na 19:00 is de uitslag beschikbaar via nederlandseloterij.nl/lotto/uitslagen.
- * Deze functie herinnert de beheerder om de nummers in te voeren in de app.
- *
- * Architectuurkeuze: vaste herinnering op zaterdagavond i.p.v. web scraping.
- * Scraping is breekbaar en juridisch grijs; een herinnering is gratis,
- * betrouwbaar en voldoende voor een kleine vereniging.
- */
 export const onTrekkingHerinnering = functions.scheduler.onSchedule(
   {
     schedule: '30 19 * * 6', // elke zaterdag 19:30
@@ -287,7 +347,6 @@ export const onTrekkingHerinnering = functions.scheduler.onSchedule(
   async () => {
     functions.logger.info('Trekking-herinnering versturen naar beheerders…');
 
-    // Stuur alleen naar beheerders (rol === 'beheerder')
     const usersSnap = await db.collection('users')
       .where('actief', '==', true)
       .where('rol', '==', 'beheerder')
