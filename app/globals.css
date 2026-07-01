@@ -37,7 +37,7 @@ body {
 
 /* Background grid - used on all pages */
 .bg-grid {
-  position: fixed;
+  position: fixed !important;
   inset: 0;
   background-image:
     linear-gradient(rgba(74,158,255,0.03) 1px, transparent 1px),
@@ -62,18 +62,19 @@ body {
 
 /* Bottom nav */
 .bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(13,27,42,0.92);
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  background: rgba(13,27,42,0.92) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--border);
   padding: 12px 0;
   padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
-  display: flex;
-  z-index: 50;
+  display: flex !important;
+  z-index: 9999 !important;
+  width: 100% !important;
 }
 
 .nav-item {
