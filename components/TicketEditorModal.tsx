@@ -95,12 +95,12 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
           background: 'var(--navy-mid)',
           borderRadius: '24px 24px 0 0',
           borderTop: '1px solid var(--border)',
-          maxHeight: '92dvh',        // nooit hoger dan 92% van het scherm
-          overflowY: 'auto',         // scrollbaar als toetsenbord open is
+          height: '85dvh',
+          overflowY: 'scroll',
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <div style={{ padding: '0 24px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
+        <div style={{ padding: '0 24px', paddingBottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 88px))' }}>
           <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '14px auto 20px' }} />
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 20 }}>
             {ticket ? '🎱 Ticket bewerken' : '🎱 Nieuw ticket'}
