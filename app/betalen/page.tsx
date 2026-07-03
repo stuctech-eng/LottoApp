@@ -19,7 +19,9 @@ function BetalenPageContent() {
   const [omschrijving, setOmschrijving] = useState(STANDAARD_OMSCHRIJVING);
   const [error, setError] = useState<string | null>(null);
 
-  // Tikkie-link uit paymentConfig — undefined als niet ingesteld
+  // Tikkie-eerst blokkade: wordt true zodra lid op Tikkie knop heeft getikt
+  const [tikkieGeopend, setTikkieGeopend] = useState(false);
+
   const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
 
   useEffect(() => {
@@ -122,41 +124,58 @@ function BetalenPageContent() {
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.3 }}>Betalen</div>
         </div>
 
+        {/* Bedrag hero */}
         <div style={{ margin: '0 20px 20px' }}>
           <div style={{ background: 'linear-gradient(135deg,#1a3a5c,#0f2438)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 24, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
             <div style={{ fontSize: 40, marginBottom: 10 }}>💰</div>
             <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>Te betalen</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>€{STANDAARD_INLEG}</div>
-            <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub</div>
+            <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub inleg</div>
           </div>
         </div>
 
-        {/* Tikkie betaalknop — alleen zichtbaar als beheerder een link heeft ingesteld */}
+        {/* Stap 1 — Tikkie */}
         {tikkieLink && (
-          <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div style={{ padding: '0 20px', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Stap 1 — Betaal</div>
             <a
               href={tikkieLink}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => setTikkieGeopend(true)}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                width: '100%', background: 'linear-gradient(135deg,#34c97a,#1a8a50)',
-                color: 'white', border: 'none', borderRadius: 16, padding: 16,
+                width: '100%', borderRadius: 16, padding: 16,
                 fontSize: 15, fontWeight: 700, fontFamily: "'DM Sans',sans-serif",
-                textDecoration: 'none', boxShadow: '0 6px 20px rgba(52,201,122,0.3)',
+                textDecoration: 'none',
+                background: tikkieGeopend
+                  ? 'linear-gradient(135deg,#1a8a50,#0d5a30)'
+                  : 'linear-gradient(135deg,#34c97a,#1a8a50)',
+                color: 'white',
+                boxShadow: tikkieGeopend ? 'none' : '0 6px 20px rgba(52,201,122,0.3)',
+                border: tikkieGeopend ? '1px solid rgba(52,201,122,0.3)' : 'none',
               }}
             >
-              💳 Betaal nu via Tikkie
+              {tikkieGeopend ? '✓ Tikkie geopend' : '💳 Betaal nu via Tikkie'}
             </a>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, textAlign: 'center', lineHeight: 1.5 }}>
-              Betaal eerst via Tikkie, meld het daarna hieronder als "Ik heb betaald"
-            </div>
           </div>
         )}
 
-        <div style={{ padding: '0 20px', marginBottom: 20 }}>
-          <div className="section-title">Omschrijving</div>
+        {/* Stap 2 — Melden */}
+        <div style={{ padding: '0 20px', marginBottom: 20, marginTop: tikkieLink ? 16 : 0 }}>
+          {tikkieLink && (
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Stap 2 — Meld je betaling</div>
+          )}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
+              {tikkieLink
+                ? 'Na het betalen via Tikkie, meld je betaling hier zodat de kashouder het kan bevestigen.'
+                : 'Betaal via overboeking en meld je betaling hier. De kashouder bevestigt zo snel mogelijk.'}
+            </div>
+          </div>
+
+          <label className="form-label">Omschrijving</label>
           <input
             type="text"
             className="form-input"
@@ -166,31 +185,30 @@ function BetalenPageContent() {
           />
         </div>
 
-        <div style={{ padding: '0 20px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
-            <span style={{ fontSize: 22, flexShrink: 0 }}>{config.activeProvider === 'offline' ? '💬' : '💳'}</span>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-                {config.activeProvider === 'offline' ? 'Offline melden' : 'Online betalen'}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-                {config.activeProvider === 'offline'
-                  ? tikkieLink
-                    ? 'Betaal via de Tikkie-knop hierboven of via overschrijving, en meld dit hieronder. De kashouder bevestigt je betaling.'
-                    : 'Betaal contant of via overschrijving, en meld dit hieronder. De kashouder bevestigt je betaling.'
-                  : 'Online betalen is nog niet beschikbaar — meld je betaling handmatig.'}
-              </div>
-            </div>
-          </div>
-        </div>
-
         {error && (
           <div style={{ padding: '0 20px', marginBottom: 12, color: 'var(--error)', fontSize: 13, fontWeight: 500 }}>⚠️ {error}</div>
         )}
 
         <div style={{ flex: 1 }} />
+
+        {/* Meld-knop — geblokkeerd als Tikkie beschikbaar maar nog niet geopend */}
         <div style={{ padding: '0 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
-          <button onClick={handleMelden} className="btn-primary">✓ Ik heb betaald — €{STANDAARD_INLEG}</button>
+          <button
+            onClick={handleMelden}
+            disabled={tikkieLink ? !tikkieGeopend : false}
+            className="btn-primary"
+            style={{
+              opacity: tikkieLink && !tikkieGeopend ? 0.4 : 1,
+              cursor: tikkieLink && !tikkieGeopend ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {tikkieLink && !tikkieGeopend ? '🔒 Betaal eerst via Tikkie hierboven' : `✓ Ik heb betaald — €${STANDAARD_INLEG}`}
+          </button>
+          {tikkieLink && !tikkieGeopend && (
+            <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>
+              Tik op "Betaal nu via Tikkie" om de betaling te starten
+            </div>
+          )}
         </div>
       </div>
     </>
