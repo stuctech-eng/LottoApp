@@ -5,7 +5,7 @@ import { TICKET_CONFIG, valideerTicketNummers } from '@/lib/constants';
 
 interface TicketEditorModalProps {
   open: boolean;
-  ticket: Ticket | null; // null = nieuw ticket
+  ticket: Ticket | null;
   onClose: () => void;
   onSave: (ticket: Ticket) => Promise<void>;
   onDelete?: (ticketId: string) => Promise<void>;
@@ -77,61 +77,103 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.7)',
+        backdropFilter: 'blur(8px)',
+        zIndex: 200,
+        display: 'flex',
+        alignItems: 'flex-end',
+      }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ width: '100%', background: 'var(--navy-mid)', borderRadius: '24px 24px 0 0', borderTop: '1px solid var(--border)', padding: '0 24px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
-        <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '14px auto 20px' }} />
-        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 20 }}>
-          {ticket ? '🎱 Ticket bewerken' : '🎱 Nieuw ticket'}
-        </div>
-
-        <label className="form-label">Naam van dit ticket</label>
-        <input
-          type="text"
-          className="form-input"
-          placeholder="Bijv. Formulier A"
-          value={naam}
-          onChange={e => setNaam(e.target.value)}
-        />
-
-        <label className="form-label">{TICKET_CONFIG.aantalNummers} nummers ({TICKET_CONFIG.min}-{TICKET_CONFIG.max})</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          {nummers.map((val, i) => (
-            <input
-              key={i}
-              type="number"
-              inputMode="numeric"
-              min={TICKET_CONFIG.min}
-              max={TICKET_CONFIG.max}
-              value={val}
-              onChange={e => {
-                const next = [...nummers];
-                next[i] = e.target.value;
-                setNummers(next);
-              }}
-              style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--surface)', border: '1.5px solid var(--border)', textAlign: 'center', fontSize: 15, fontWeight: 600, color: 'var(--white)', fontFamily: "'DM Sans',sans-serif", outline: 'none' }}
-            />
-          ))}
-        </div>
-
-        {error && (
-          <div style={{ color: 'var(--error)', fontSize: 13, fontWeight: 500, marginBottom: 12, marginTop: 4 }}>
-            ⚠️ {error}
+      {/* Scrollbare container — voorkomt dat opslaan-knop achter toetsenbord verdwijnt */}
+      <div
+        style={{
+          width: '100%',
+          background: 'var(--navy-mid)',
+          borderRadius: '24px 24px 0 0',
+          borderTop: '1px solid var(--border)',
+          maxHeight: '92dvh',        // nooit hoger dan 92% van het scherm
+          overflowY: 'auto',         // scrollbaar als toetsenbord open is
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <div style={{ padding: '0 24px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
+          <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '14px auto 20px' }} />
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, marginBottom: 20 }}>
+            {ticket ? '🎱 Ticket bewerken' : '🎱 Nieuw ticket'}
           </div>
-        )}
 
-        <div style={{ height: 8 }} />
+          <label className="form-label">Naam van dit ticket</label>
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Bijv. Mijn nummers"
+            value={naam}
+            onChange={e => setNaam(e.target.value)}
+          />
 
-        <button onClick={handleSave} disabled={bezig} className="btn-primary" style={{ marginBottom: ticket && onDelete ? 10 : 0, opacity: bezig ? 0.6 : 1 }}>
-          {bezig ? 'Even geduld…' : '✓ Opslaan'}
-        </button>
+          <label className="form-label">{TICKET_CONFIG.aantalNummers} nummers ({TICKET_CONFIG.min}-{TICKET_CONFIG.max})</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            {nummers.map((val, i) => (
+              <input
+                key={i}
+                type="number"
+                inputMode="numeric"
+                min={TICKET_CONFIG.min}
+                max={TICKET_CONFIG.max}
+                value={val}
+                onChange={e => {
+                  const next = [...nummers];
+                  next[i] = e.target.value;
+                  setNummers(next);
+                }}
+                style={{
+                  width: 52, height: 52, borderRadius: '50%',
+                  background: 'var(--surface)',
+                  border: '1.5px solid var(--border)',
+                  textAlign: 'center', fontSize: 15, fontWeight: 600,
+                  color: 'var(--white)', fontFamily: "'DM Sans',sans-serif", outline: 'none',
+                }}
+              />
+            ))}
+          </div>
 
-        {ticket && onDelete && (
-          <button onClick={handleDelete} disabled={bezig} style={{ width: '100%', background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', color: 'var(--error)', borderRadius: 14, padding: 16, fontSize: 15, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: bezig ? 0.6 : 1 }}>
-            🗑️ Ticket verwijderen
+          {error && (
+            <div style={{ color: 'var(--error)', fontSize: 13, fontWeight: 500, marginBottom: 12, marginTop: 4 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <div style={{ height: 16 }} />
+
+          <button
+            onClick={handleSave}
+            disabled={bezig}
+            className="btn-primary"
+            style={{ marginBottom: ticket && onDelete ? 10 : 0, opacity: bezig ? 0.6 : 1 }}
+          >
+            {bezig ? 'Even geduld…' : '✓ Opslaan'}
           </button>
-        )}
+
+          {ticket && onDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={bezig}
+              style={{
+                width: '100%', background: 'var(--error-soft)',
+                border: '1px solid rgba(255,90,90,0.2)', color: 'var(--error)',
+                borderRadius: 14, padding: 16, fontSize: 15, fontWeight: 600,
+                fontFamily: "'DM Sans',sans-serif", cursor: 'pointer',
+                opacity: bezig ? 0.6 : 1,
+              }}
+            >
+              🗑️ Ticket verwijderen
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
