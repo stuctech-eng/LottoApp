@@ -8,7 +8,6 @@ import { subscribeAlleTrekkingen, slaaTrekkingOpEnVerwerk } from '@/lib/firestor
 import { subscribeSpelConfig, subscribePrijsConfig, DEFAULT_SPELCONFIG, DEFAULT_PRIJSCONFIG } from '@/lib/firestore-spelconfig';
 import { Trekking, Seizoen, SpelConfig, PrijsConfig } from '@/lib/types';
 
-// Officiële Nederlandse Lotto uitslag pagina — handig bij het invoeren van een trekking
 const LOTTO_UITSLAG_URL = 'https://lotto.nederlandseloterij.nl/trekkingsuitslag';
 
 const NAV = [
@@ -74,7 +73,6 @@ function TrekkingInvoerModal({
     n[i] = schoon;
     setNummers(n);
     setFoutieveIndexen(prev => { const s = new Set(prev); s.delete(i); return s; });
-
     if (i < nummers.length - 1 && schoon.length > 0) {
       const waarde = parseInt(schoon, 10);
       const kanNogGroeien = schoon.length === 1 && waarde * 10 <= spelConfig.maxGetal;
@@ -93,7 +91,6 @@ function TrekkingInvoerModal({
   const handleSave = async () => {
     if (!user || !profile) return;
     if (!seizoen) { setError('Geen actief seizoen gevonden. Maak eerst een seizoen aan.'); return; }
-
     const parsed = nummers.map(n => parseInt(n, 10));
     const fouten = new Set<number>();
     parsed.forEach((n, i) => {
@@ -108,12 +105,10 @@ function TrekkingInvoerModal({
       setError('Nummers moeten uniek zijn');
       return;
     }
-
     const bonus = spelConfig.bonusBal && bonusBal.trim() !== '' ? parseInt(bonusBal, 10) : null;
     if (spelConfig.bonusBal && bonusBal.trim() !== '' && isNaN(bonus!)) {
       setError('Ongeldige bonusbal'); return;
     }
-
     setBezig(true);
     setError(null);
     setFoutieveIndexen(new Set());
@@ -136,97 +131,109 @@ function TrekkingInvoerModal({
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ width: '100%', background: 'var(--navy-mid)', borderRadius: '24px 24px 0 0', borderTop: '1px solid var(--border)', padding: '0 24px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
-        <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '14px auto 20px' }} />
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-          <div>
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22 }}>🎱 Trekking invoeren</div>
-            {seizoen && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{seizoen.naam} · {spelConfig.naam}</div>}
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Sluiten"
-            style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'var(--muted)', cursor: 'pointer', flexShrink: 0, marginLeft: 12 }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Lotto uitslag link */}
-        <a
-          href={LOTTO_UITSLAG_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, textDecoration: 'none' }}
-        >
-          <span style={{ fontSize: 18 }}>🔗</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Officiële uitslag opzoeken</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>nederlandseloterij.nl → Lotto uitslagen</div>
-          </div>
-          <span style={{ fontSize: 14, color: 'var(--muted)' }}>↗</span>
-        </a>
-
-        {succes ? (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20 }}>Trekking verwerkt!</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>Alle tickets zijn gecontroleerd.</div>
-          </div>
-        ) : (
-          <>
-            <label className="form-label">{spelConfig.aantalGetallen} nummers ({spelConfig.minGetal}-{spelConfig.maxGetal})</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              {nummers.map((val, i) => (
-                <input
-                  key={i}
-                  ref={el => { inputRefs.current[i] = el; }}
-                  type="number" inputMode="numeric"
-                  min={spelConfig.minGetal} max={spelConfig.maxGetal}
-                  value={val}
-                  onChange={e => handleNummerChange(i, e.target.value)}
-                  onKeyDown={e => handleKeyDown(i, e)}
-                  style={{
-                    width: 52, height: 52, borderRadius: '50%',
-                    background: 'var(--surface)',
-                    border: foutieveIndexen.has(i) ? '1.5px solid var(--error)' : '1.5px solid var(--border)',
-                    boxShadow: foutieveIndexen.has(i) ? '0 0 0 3px rgba(255,90,90,0.15)' : 'none',
-                    textAlign: 'center', fontSize: 15, fontWeight: 600, color: 'var(--white)',
-                    fontFamily: "'DM Sans',sans-serif", outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s',
-                  }}
-                />
-              ))}
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      {/* Scrollbare modal — opslaan-knop altijd bereikbaar ook met toetsenbord open */}
+      <div style={{
+        width: '100%',
+        background: 'var(--navy-mid)',
+        borderRadius: '24px 24px 0 0',
+        borderTop: '1px solid var(--border)',
+        height: '85dvh',
+        overflowY: 'scroll',
+        WebkitOverflowScrolling: 'touch' as 'touch',
+      }}>
+        <div style={{ padding: '0 24px', paddingBottom: 'max(100px, calc(env(safe-area-inset-bottom, 24px) + 88px))' }}>
+          <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '14px auto 20px' }} />
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22 }}>🎱 Trekking invoeren</div>
+              {seizoen && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{seizoen.naam} · {spelConfig.naam}</div>}
             </div>
-            {spelConfig.bonusBal && (
-              <>
-                <label className="form-label">Bonusbal</label>
-                <div style={{ position: 'relative', marginBottom: 16 }}>
+            <button
+              onClick={onClose}
+              aria-label="Sluiten"
+              style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--surface2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'var(--muted)', cursor: 'pointer', flexShrink: 0, marginLeft: 12 }}
+            >✕</button>
+          </div>
+
+          {/* Lotto uitslag link */}
+          <a
+            href={LOTTO_UITSLAG_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, textDecoration: 'none' }}
+          >
+            <span style={{ fontSize: 18 }}>🔗</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Officiële uitslag opzoeken</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>nederlandseloterij.nl → Lotto uitslagen</div>
+            </div>
+            <span style={{ fontSize: 14, color: 'var(--muted)' }}>↗</span>
+          </a>
+
+          {succes ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 20 }}>Trekking verwerkt!</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>Alle tickets zijn gecontroleerd.</div>
+            </div>
+          ) : (
+            <>
+              <label className="form-label">{spelConfig.aantalGetallen} nummers ({spelConfig.minGetal}-{spelConfig.maxGetal})</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                {nummers.map((val, i) => (
                   <input
-                    type="number" inputMode="numeric" placeholder="Bonusnummer"
-                    value={bonusBal} onChange={e => setBonusBal(e.target.value.replace(/[^0-9]/g, ''))}
+                    key={i}
+                    ref={el => { inputRefs.current[i] = el; }}
+                    type="number" inputMode="numeric"
+                    min={spelConfig.minGetal} max={spelConfig.maxGetal}
+                    value={val}
+                    onChange={e => handleNummerChange(i, e.target.value)}
+                    onKeyDown={e => handleKeyDown(i, e)}
                     style={{
-                      width: '100%', height: 48, borderRadius: 13,
-                      background: 'var(--gold-soft)', border: '1.5px solid rgba(240,192,96,0.3)',
-                      padding: '0 16px', fontSize: 15, fontWeight: 600, color: 'var(--gold)',
-                      fontFamily: "'DM Sans',sans-serif", outline: 'none',
+                      width: 52, height: 52, borderRadius: '50%',
+                      background: 'var(--surface)',
+                      border: foutieveIndexen.has(i) ? '1.5px solid var(--error)' : '1.5px solid var(--border)',
+                      boxShadow: foutieveIndexen.has(i) ? '0 0 0 3px rgba(255,90,90,0.15)' : 'none',
+                      textAlign: 'center', fontSize: 15, fontWeight: 600, color: 'var(--white)',
+                      fontFamily: "'DM Sans',sans-serif", outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s',
                     }}
                   />
-                  <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>⭐</span>
-                </div>
-              </>
-            )}
-            {error && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
-                <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
-                <span style={{ color: 'var(--error)', fontSize: 13, lineHeight: 1.4 }}>{error}</span>
+                ))}
               </div>
-            )}
-            <button onClick={handleSave} disabled={bezig} className="btn-primary" style={{ opacity: bezig ? 0.6 : 1 }}>
-              {bezig ? '⏳ Verwerken…' : '✓ Trekking opslaan & verwerken'}
-            </button>
-          </>
-        )}
+              {spelConfig.bonusBal && (
+                <>
+                  <label className="form-label">Bonusbal</label>
+                  <div style={{ position: 'relative', marginBottom: 16 }}>
+                    <input
+                      type="number" inputMode="numeric" placeholder="Bonusnummer"
+                      value={bonusBal} onChange={e => setBonusBal(e.target.value.replace(/[^0-9]/g, ''))}
+                      style={{
+                        width: '100%', height: 48, borderRadius: 13,
+                        background: 'var(--gold-soft)', border: '1.5px solid rgba(240,192,96,0.3)',
+                        padding: '0 16px', fontSize: 15, fontWeight: 600, color: 'var(--gold)',
+                        fontFamily: "'DM Sans',sans-serif", outline: 'none',
+                      }}
+                    />
+                    <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 16 }}>⭐</span>
+                  </div>
+                </>
+              )}
+              {error && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
+                  <span style={{ color: 'var(--error)', fontSize: 13, lineHeight: 1.4 }}>{error}</span>
+                </div>
+              )}
+              <button onClick={handleSave} disabled={bezig} className="btn-primary" style={{ opacity: bezig ? 0.6 : 1 }}>
+                {bezig ? '⏳ Verwerken…' : '✓ Trekking opslaan & verwerken'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
