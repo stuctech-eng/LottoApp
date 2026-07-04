@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeUserBetalingen, meldBetaling, markeerTikkieGeopend } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, meldBetaling, markeerTikkieGeopend, huidigTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, PaymentConfig } from '@/lib/types';
@@ -21,11 +21,14 @@ function BetalenPageContent() {
 
   const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
 
-  // Huidige open betaling van dit lid
-  const openBetaling = betalingen.find(b => b.status === 'open' || b.status === 'verificatie');
+  // Alleen de betaling van de HUIDIGE week telt
+  const huidigeWeek = huidigTrekkingWeek();
+  const huidigeBetaling = betalingen.find(
+    b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
+  );
 
-  // tikkieGeopend wordt uit Firestore gelezen via openBetaling
-  const tikkieGeopend = (openBetaling as Betaling & { tikkieGeopend?: boolean })?.tikkieGeopend ?? false;
+  // tikkieGeopend uit Firestore van de huidige betaling
+  const tikkieGeopend = (huidigeBetaling as Betaling & { tikkieGeopend?: boolean })?.tikkieGeopend ?? false;
 
   useEffect(() => {
     const unsub = subscribePaymentConfig(setConfig);
@@ -36,18 +39,23 @@ function BetalenPageContent() {
     if (!user) return;
     const unsub = subscribeUserBetalingen(user.uid, (data) => {
       setBetalingen(data);
-      const laatste = data[0];
-      if (laatste?.status === 'verificatie') setStap('wachten');
-      else if (laatste?.status === 'betaald') setStap('betaald');
+
+      // Bepaal stap op basis van HUIDIGE WEEK betaling
+      const week = huidigTrekkingWeek();
+      const betaling = data.find(
+        b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === week
+      );
+
+      if (betaling?.status === 'betaald') setStap('betaald');
+      else if (betaling?.status === 'verificatie') setStap('wachten');
       else setStap('overzicht');
     });
     return unsub;
   }, [user]);
 
-  // Tikkie geopend → sla op in Firestore zodat blokkade blijft na herladen
   const handleTikkieKlik = async () => {
-    if (openBetaling && !tikkieGeopend) {
-      await markeerTikkieGeopend(openBetaling.id);
+    if (huidigeBetaling && !tikkieGeopend) {
+      await markeerTikkieGeopend(huidigeBetaling.id);
     }
   };
 
@@ -103,16 +111,19 @@ function BetalenPageContent() {
   }
 
   if (stap === 'betaald') {
-    const laatste = betalingen[0];
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
         <div style={{ fontSize: 72, marginBottom: 20, animation: 'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }}>✅</div>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -0.8, marginBottom: 8 }}>Betaling bevestigd!</div>
-        <div style={{ fontSize: 15, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.6 }}>Je bent klaar voor de<br />volgende ronde.</div>
+        <div style={{ fontSize: 15, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.6 }}>Je doet mee aan de<br />trekking van deze week.</div>
         <div style={{ width: '100%', maxWidth: 380, background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 18, padding: 20, marginBottom: 32, textAlign: 'left' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Bedrag</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{laatste.bedrag.toFixed(2)}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{huidigeBetaling?.bedrag.toFixed(2) ?? STANDAARD_INLEG.toFixed(2)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Week</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>{huidigeWeek}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Status</span>
@@ -143,7 +154,7 @@ function BetalenPageContent() {
             <div style={{ fontSize: 40, marginBottom: 10 }}>💰</div>
             <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>Te betalen</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>€{STANDAARD_INLEG}</div>
-            <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub inleg</div>
+            <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub · {huidigeWeek}</div>
           </div>
         </div>
 
@@ -186,7 +197,6 @@ function BetalenPageContent() {
                 : 'Betaal via overboeking en meld je betaling hier. De kashouder bevestigt zo snel mogelijk.'}
             </div>
           </div>
-
           <label className="form-label">Omschrijving</label>
           <input
             type="text"
@@ -203,16 +213,12 @@ function BetalenPageContent() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Meld-knop — geblokkeerd totdat tikkieGeopend === true in Firestore */}
         <div style={{ padding: '0 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
           <button
             onClick={handleMelden}
             disabled={geblokkeerd}
             className="btn-primary"
-            style={{
-              opacity: geblokkeerd ? 0.4 : 1,
-              cursor: geblokkeerd ? 'not-allowed' : 'pointer',
-            }}
+            style={{ opacity: geblokkeerd ? 0.4 : 1, cursor: geblokkeerd ? 'not-allowed' : 'pointer' }}
           >
             {geblokkeerd ? '🔒 Betaal eerst via Tikkie hierboven' : `✓ Ik heb betaald — €${STANDAARD_INLEG}`}
           </button>
