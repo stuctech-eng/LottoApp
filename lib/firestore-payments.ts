@@ -18,13 +18,6 @@ interface ActieUser {
   naam: string;
 }
 
-/**
- * Geeft het ISO-weeknummer terug als string, bijv. "2026-W27".
- * Wordt gebruikt om een betaling te koppelen aan de trekking van die week.
- * De Cloud Function gebruikt dit om te bepalen wie er mee heeft betaald
- * voor de trekking van die week — alleen die leden worden meegenomen
- * in de controle-engine.
- */
 export function huidigTrekkingWeek(): string {
   const nu = new Date();
   const startJaar = new Date(Date.UTC(nu.getUTCFullYear(), 0, 1));
@@ -36,7 +29,6 @@ export function huidigTrekkingWeek(): string {
 
 // ───────────────────────── Kasmutaties ─────────────────────────
 
-/** Live-luisteren naar alle kasmutaties, nieuwste eerst. */
 export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void) {
   const q = query(collection(db, 'kasmutaties'), orderBy('datum', 'desc'));
   return onSnapshot(
@@ -65,10 +57,6 @@ export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void)
   );
 }
 
-/**
- * kasSaldo wordt NOOIT opgeslagen — altijd berekend als som van alle
- * kasmutaties. Voorkomt synchronisatieproblemen.
- */
 export function berekenKasSaldo(mutaties: Kasmutatie[]): number {
   return mutaties.reduce((sum, m) => sum + m.bedrag, 0);
 }
@@ -94,7 +82,6 @@ async function maakKasmutatie(input: {
 
 // ───────────────────────── Betalingen ─────────────────────────
 
-/** Live-luisteren naar alle betalingen (voor kashouder/beheerder). */
 export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) {
   const q = query(collection(db, 'betalingen'), orderBy('aangemaakt', 'desc'));
   return onSnapshot(
@@ -114,6 +101,7 @@ export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) 
           bevestigd: data.bevestigd ?? null,
           bevestigdDoor: data.bevestigdDoor ?? null,
           rondeId: data.rondeId,
+          tikkieGeopend: data.tikkieGeopend ?? false,
         };
       });
       callback(betalingen);
@@ -125,7 +113,6 @@ export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) 
   );
 }
 
-/** Live-luisteren naar de betalingen van één gebruiker. */
 export function subscribeUserBetalingen(uid: string, callback: (betalingen: Betaling[]) => void) {
   const q = query(collection(db, 'betalingen'), where('userId', '==', uid));
   return onSnapshot(
@@ -145,6 +132,7 @@ export function subscribeUserBetalingen(uid: string, callback: (betalingen: Beta
           bevestigd: data.bevestigd ?? null,
           bevestigdDoor: data.bevestigdDoor ?? null,
           rondeId: data.rondeId,
+          tikkieGeopend: data.tikkieGeopend ?? false,
         };
       });
       betalingen.sort((a, b) => {
@@ -162,14 +150,9 @@ export function subscribeUserBetalingen(uid: string, callback: (betalingen: Beta
 }
 
 /**
- * Lid meldt een betaling (offline provider) → status 'verificatie'.
- *
- * trekkingWeek wordt automatisch ingevuld op basis van de huidige week
- * (bijv. "2026-W27"). De Cloud Function gebruikt dit veld om bij de
- * zaterdagse trekking te bepalen welke leden er voor die week betaald
- * hebben. Alleen leden met een bevestigde betaling (status: 'betaald')
- * voor de huidige trekkingWeek worden meegenomen in de controle-engine.
- * Wie niet betaald heeft → ticket wordt die week genegeerd.
+ * Lid meldt een betaling → status 'verificatie'.
+ * tikkieGeopend wordt meegestuurd als false — wordt true zodra
+ * het lid op de Tikkie-knop tikt (zie markeerTikkieGeopend).
  */
 export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving: string) {
   const week = huidigTrekkingWeek();
@@ -180,7 +163,8 @@ export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving
     omschrijving,
     provider: 'offline',
     status: 'verificatie',
-    trekkingWeek: week,   // ← koppeling aan trekking van deze week
+    trekkingWeek: week,
+    tikkieGeopend: false,
     aangemaakt: serverTimestamp(),
     bevestigd: null,
     bevestigdDoor: null,
@@ -192,6 +176,19 @@ export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving
     { doelUserId: user.uid }
   );
   return ref.id;
+}
+
+/**
+ * Slaat op in Firestore dat het lid op de Tikkie-knop heeft getikt.
+ * Wordt aangeroepen vanuit de betaalpagina zodra de Tikkie-link wordt geopend.
+ * Na herladen van de pagina blijft de blokkade opgeheven.
+ *
+ * betalingId = de 'open' betaling van dit lid voor deze week.
+ */
+export async function markeerTikkieGeopend(betalingId: string): Promise<void> {
+  await updateDoc(doc(db, 'betalingen', betalingId), {
+    tikkieGeopend: true,
+  });
 }
 
 /** Kashouder bevestigt een betaling → status 'betaald' + kasmutatie + audit. */
@@ -234,7 +231,6 @@ export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
 
 // ───────────────────────── Uitbetalingen & correcties ─────────────────────────
 
-/** Kashouder registreert een uitbetaling → kasmutatie (negatief) + audit. */
 export async function registreerUitbetaling(input: {
   bedrag: number;
   omschrijving: string;
@@ -255,7 +251,6 @@ export async function registreerUitbetaling(input: {
   );
 }
 
-/** Kashouder voert een kascorrectie door (positief of negatief) + audit. */
 export async function registreerCorrectie(input: {
   bedrag: number;
   omschrijving: string;

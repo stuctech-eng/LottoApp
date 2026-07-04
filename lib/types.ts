@@ -21,8 +21,6 @@ export interface Ticket {
   nummers: number[];
 }
 
-// ─────────────────────── SpelConfig ───────────────────────
-
 export interface SpelConfig {
   naam: string;
   aantalGetallen: number;
@@ -30,8 +28,6 @@ export interface SpelConfig {
   maxGetal: number;
   bonusBal: boolean;
 }
-
-// ─────────────────────── PrijsConfig ───────────────────────
 
 export type PrijsConfigModus =
   | 'alle_goed_wint'
@@ -44,8 +40,6 @@ export interface PrijsConfig {
   vastePrijzen?: Record<number, number>;
   minimumScore?: number;
 }
-
-// ─────────────────────── Seizoen / Ronde ───────────────────────
 
 export interface Seizoen {
   id: string;
@@ -65,8 +59,6 @@ export interface Ronde {
   inleg: number;
 }
 
-// ─────────────────────── Trekking ───────────────────────
-
 export interface Trekking {
   id: string;
   rondeId: string;
@@ -78,8 +70,6 @@ export interface Trekking {
   ingevoerdDoorNaam: string;
   verwerkt: boolean;
 }
-
-// ─────────────────────── Resultaat ───────────────────────
 
 export interface Resultaat {
   id: string;
@@ -98,8 +88,6 @@ export interface Resultaat {
   verwerktOp: Timestamp | null;
 }
 
-// ─────────────────────── Kasmutatie ───────────────────────
-
 export interface Kasmutatie {
   id: string;
   datum: Timestamp | null;
@@ -111,8 +99,6 @@ export interface Kasmutatie {
   betalingId?: string;
   aangemaaktDoor?: string;
 }
-
-// ─────────────────────── Betalingen ───────────────────────
 
 export type PaymentProviderId = 'offline' | 'mollie' | 'tikkie' | 'stripe' | 'incasso';
 
@@ -135,9 +121,8 @@ export interface Betaling {
   bevestigd?: Timestamp | null;
   bevestigdDoor?: string | null;
   rondeId?: string;
+  tikkieGeopend?: boolean; // true zodra lid op Tikkie-knop heeft getikt — persistente blokkade
 }
-
-// ─────────────────────── Audit ───────────────────────
 
 export type AuditAction =
   | 'gebruiker_aangemaakt'

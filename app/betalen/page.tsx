@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeUserBetalingen, meldBetaling } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, meldBetaling, markeerTikkieGeopend } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, PaymentConfig } from '@/lib/types';
@@ -19,10 +19,13 @@ function BetalenPageContent() {
   const [omschrijving, setOmschrijving] = useState(STANDAARD_OMSCHRIJVING);
   const [error, setError] = useState<string | null>(null);
 
-  // Tikkie-eerst blokkade: wordt true zodra lid op Tikkie knop heeft getikt
-  const [tikkieGeopend, setTikkieGeopend] = useState(false);
-
   const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
+
+  // Huidige open betaling van dit lid
+  const openBetaling = betalingen.find(b => b.status === 'open' || b.status === 'verificatie');
+
+  // tikkieGeopend wordt uit Firestore gelezen via openBetaling
+  const tikkieGeopend = (openBetaling as Betaling & { tikkieGeopend?: boolean })?.tikkieGeopend ?? false;
 
   useEffect(() => {
     const unsub = subscribePaymentConfig(setConfig);
@@ -40,6 +43,13 @@ function BetalenPageContent() {
     });
     return unsub;
   }, [user]);
+
+  // Tikkie geopend → sla op in Firestore zodat blokkade blijft na herladen
+  const handleTikkieKlik = async () => {
+    if (openBetaling && !tikkieGeopend) {
+      await markeerTikkieGeopend(openBetaling.id);
+    }
+  };
 
   const handleMelden = async () => {
     if (!user || !profile) return;
@@ -115,6 +125,8 @@ function BetalenPageContent() {
   }
 
   // stap === 'overzicht'
+  const geblokkeerd = tikkieLink ? !tikkieGeopend : false;
+
   return (
     <>
       <div className="bg-grid" />
@@ -143,7 +155,7 @@ function BetalenPageContent() {
               href={tikkieLink}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => setTikkieGeopend(true)}
+              onClick={handleTikkieKlik}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 width: '100%', borderRadius: 16, padding: 16,
@@ -191,20 +203,20 @@ function BetalenPageContent() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Meld-knop — geblokkeerd als Tikkie beschikbaar maar nog niet geopend */}
+        {/* Meld-knop — geblokkeerd totdat tikkieGeopend === true in Firestore */}
         <div style={{ padding: '0 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
           <button
             onClick={handleMelden}
-            disabled={tikkieLink ? !tikkieGeopend : false}
+            disabled={geblokkeerd}
             className="btn-primary"
             style={{
-              opacity: tikkieLink && !tikkieGeopend ? 0.4 : 1,
-              cursor: tikkieLink && !tikkieGeopend ? 'not-allowed' : 'pointer',
+              opacity: geblokkeerd ? 0.4 : 1,
+              cursor: geblokkeerd ? 'not-allowed' : 'pointer',
             }}
           >
-            {tikkieLink && !tikkieGeopend ? '🔒 Betaal eerst via Tikkie hierboven' : `✓ Ik heb betaald — €${STANDAARD_INLEG}`}
+            {geblokkeerd ? '🔒 Betaal eerst via Tikkie hierboven' : `✓ Ik heb betaald — €${STANDAARD_INLEG}`}
           </button>
-          {tikkieLink && !tikkieGeopend && (
+          {geblokkeerd && (
             <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>
               Tik op "Betaal nu via Tikkie" om de betaling te starten
             </div>
