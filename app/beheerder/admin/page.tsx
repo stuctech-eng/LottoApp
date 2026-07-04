@@ -34,8 +34,9 @@ function AdminPageContent() {
   const [nieuwSeizoenNaam, setNieuwSeizoenNaam] = useState('');
   const [spelBezig, setSpelBezig] = useState(false);
   const [spelOk, setSpelOk] = useState(false);
+  const [prijsBezig, setPrijsBezig] = useState(false);
+  const [prijsOk, setPrijsOk] = useState(false);
 
-  // Tikkie-link state
   const [tikkieLink, setTikkieLink] = useState('');
   const [tikkieBezig, setTikkieBezig] = useState(false);
   const [tikkieOk, setTikkieOk] = useState(false);
@@ -45,7 +46,6 @@ function AdminPageContent() {
     const u1 = subscribeAuditLog(setAuditLog, 50);
     const u2 = subscribePaymentConfig((config) => {
       setPaymentConfig(config);
-      // Laad Tikkie-link uit paymentConfig indien aanwezig
       const cfg = config as PaymentConfig & { tikkieLink?: string };
       setTikkieLink(cfg.tikkieLink ?? '');
     });
@@ -67,30 +67,25 @@ function AdminPageContent() {
     }
   };
 
-  /**
-   * Valideert of de ingevoerde tekst een kale, geldige URL is.
-   *
-   * BELANGRIJK — waarom dit nodig is:
-   * Bij het kopiëren vanuit Tikkie wordt vaak de hele berichttekst
-   * meegekopieerd ("Wil je mij alsjeblieft €4.00 betalen voor... via
-   * https://tikkie.me/pay/xxx. Deze link is geldig t/m..."), niet
-   * alleen de URL zelf. Als die hele tekst wordt opgeslagen, geeft de
-   * Tikkie-knop op /betalen een 404 omdat de browser probeert te
-   * navigeren naar een ongeldige "URL" die met platte tekst begint.
-   * Deze validatie vangt dat af voordat het wordt opgeslagen.
-   */
+  const handlePrijsConfigSave = async () => {
+    setPrijsBezig(true);
+    try {
+      await setDoc(doc(db, 'prijsConfig', 'default'), { modus: prijsConfig.modus }, { merge: true });
+      setPrijsOk(true);
+      setTimeout(() => setPrijsOk(false), 2000);
+    } finally {
+      setPrijsBezig(false);
+    }
+  };
+
   function valideerTikkieUrl(input: string): string | null {
     const waarde = input.trim();
-    if (!waarde) return null; // leeg is toegestaan (link uitschakelen)
+    if (!waarde) return null;
     try {
       const url = new URL(waarde);
-      if (url.protocol !== 'https:') {
-        return 'Link moet beginnen met https://';
-      }
-      if (waarde.includes(' ')) {
-        return 'Link mag geen spaties bevatten — plak alleen de URL, niet de hele Tikkie-tekst';
-      }
-      return null; // geldig
+      if (url.protocol !== 'https:') return 'Link moet beginnen met https://';
+      if (waarde.includes(' ')) return 'Link mag geen spaties bevatten — plak alleen de URL, niet de hele Tikkie-tekst';
+      return null;
     } catch {
       return 'Dit is geen geldige link. Plak alleen de URL (bijv. https://tikkie.me/pay/...), niet de hele Tikkie-berichttekst';
     }
@@ -98,10 +93,7 @@ function AdminPageContent() {
 
   const handleTikkie = async () => {
     const fout = valideerTikkieUrl(tikkieLink);
-    if (fout) {
-      setTikkieError(fout);
-      return;
-    }
+    if (fout) { setTikkieError(fout); return; }
     setTikkieError(null);
     setTikkieBezig(true);
     try {
@@ -122,7 +114,7 @@ function AdminPageContent() {
   const auditIcon: Record<string, string> = {
     gebruiker_aangemaakt: '👤', gebruiker_verwijderd: '🗑️',
     ticket_toegevoegd: '🎱', ticket_gewijzigd: '🎱', ticket_verwijderd: '🎱',
-    rol_gewijzigd: '🔑',
+    rol_gewijzigd: '🔑', profiel_gewijzigd: '✏️',
     betaling_gemeld: '💬', betaling_bevestigd: '✅', betaling_afgewezen: '❌',
     uitbetaling_geregistreerd: '💸', kascorrectie: '⚖️',
     trekking_ingevoerd: '🎱', trekking_gewijzigd: '🎱',
@@ -156,7 +148,6 @@ function AdminPageContent() {
           <span className="badge badge-gold">⚙️ Systeembeheer</span>
         </div>
 
-        {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px', overflowX: 'auto', marginBottom: 20 }}>
           {tabs.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ flexShrink: 0, padding: '9px 16px', fontSize: 13, fontWeight: 500, color: tab===t.id?'var(--gold)':'var(--muted)', border: 'none', borderBottom: `2px solid ${tab===t.id?'var(--gold)':'transparent'}`, background: 'none', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", whiteSpace: 'nowrap' }}>{t.label}</button>
@@ -209,7 +200,6 @@ function AdminPageContent() {
               </div>
             </div>
 
-            {/* Tikkie-link instelling */}
             <div style={{ marginBottom: 20 }}>
               <div className="section-title">Tikkie-link</div>
               <div className="card" style={{ padding: 18 }}>
@@ -218,9 +208,7 @@ function AdminPageContent() {
                 </div>
                 <label className="form-label">Tikkie-link</label>
                 <input
-                  type="url"
-                  inputMode="url"
-                  className="form-input"
+                  type="url" inputMode="url" className="form-input"
                   placeholder="https://tikkie.me/pay/..."
                   value={tikkieLink}
                   onChange={e => { setTikkieLink(e.target.value); setTikkieError(null); }}
@@ -232,16 +220,12 @@ function AdminPageContent() {
                     <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.5 }}>{tikkieError}</span>
                   </div>
                 )}
-                {tikkieLink && (
+                {tikkieLink && !tikkieError && (
                   <div style={{ fontSize: 11, color: 'var(--success)', marginBottom: 12, wordBreak: 'break-all' }}>
                     ✓ Link ingesteld: {tikkieLink}
                   </div>
                 )}
-                <button
-                  onClick={handleTikkie}
-                  disabled={tikkieBezig}
-                  style={{ width: '100%', background: tikkieOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: tikkieBezig ? 0.6 : 1 }}
-                >
+                <button onClick={handleTikkie} disabled={tikkieBezig} style={{ width: '100%', background: tikkieOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: tikkieBezig ? 0.6 : 1 }}>
                   {tikkieOk ? '✓ Opgeslagen' : tikkieBezig ? 'Opslaan…' : '💳 Tikkie-link opslaan'}
                 </button>
               </div>
@@ -305,12 +289,16 @@ function AdminPageContent() {
                   </div>
                 ))}
               </div>
-              <div style={{ background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 11, color: 'var(--accent)', lineHeight: 1.5 }}>
+              <div style={{ background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 10, padding: '10px 12px', marginBottom: 16, fontSize: 11, color: 'var(--accent)', lineHeight: 1.5 }}>
                 💡 Bij &quot;Alleen alle nummers goed wint&quot;: is er geen winnaar met een volledig juist ticket, dan is er die ronde geen winnaar — de pot blijft staan voor de volgende ronde (rollover).
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                Prijsconfiguratie wordt opgeslagen via de spelConfig. Neem contact op met de beheerder voor geavanceerde prijsinstellingen.
-              </div>
+              <button
+                onClick={handlePrijsConfigSave}
+                disabled={prijsBezig}
+                style={{ width: '100%', background: prijsOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--gold),#c08820)', color: prijsOk ? 'white' : 'var(--navy)', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: prijsBezig ? 0.6 : 1 }}
+              >
+                {prijsOk ? '✓ Opgeslagen' : prijsBezig ? 'Opslaan…' : '💾 Prijsmodus opslaan'}
+              </button>
             </div>
           </div>
         )}
