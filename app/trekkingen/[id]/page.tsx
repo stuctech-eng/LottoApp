@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { subscribeTrekking, subscribeResultaten } from '@/lib/firestore-trekkingen';
-import { Trekking, Resultaat } from '@/lib/types';
+import { subscribeAllUsers } from '@/lib/firestore-users';
+import { Trekking, Resultaat, User } from '@/lib/types';
 
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -26,14 +27,24 @@ function TrekkingDetailContent() {
   const { user } = useAuth();
   const [trekking, setTrekking] = useState<Trekking | null>(null);
   const [resultaten, setResultaten] = useState<Resultaat[]>([]);
+  const [leden, setLeden] = useState<User[]>([]);
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     const u1 = subscribeTrekking(id, t => { setTrekking(t); setLaden(false); });
     const u2 = subscribeResultaten(id, setResultaten);
-    return () => { u1(); u2(); };
+    const u3 = subscribeAllUsers(setLeden);
+    return () => { u1(); u2(); u3(); };
   }, [id]);
+
+  // Haal eigen ticket-nummers op voor een resultaat
+  const getTicketNummers = (userId: string, ticketId: string): number[] => {
+    const lid = leden.find(l => l.id === userId);
+    if (!lid) return [];
+    const ticket = lid.tickets?.find(t => t.id === ticketId);
+    return ticket?.nummers ?? [];
+  };
 
   const mijnResultaten = user ? resultaten.filter(r => r.userId === user.uid) : [];
   const winnaars = resultaten.filter(r => r.isWinnaar);
@@ -64,6 +75,8 @@ function TrekkingDetailContent() {
           <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>Trekking resultaat</div>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 4 }}>{formatDatum(trekking.datum)}</div>
           <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>Ingevoerd door {trekking.ingevoerdDoorNaam}</div>
+
+          {/* Getrokken nummers */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
             {trekking.nummers.map((n, i) => (
               <div key={n} className="bal bal-normal" style={{ width: 52, height: 52, fontSize: 17, animation: `ballDrop 0.4s ease ${0.1 + i * 0.08}s both` }}>{n}</div>
@@ -85,6 +98,11 @@ function TrekkingDetailContent() {
               ))}
             </div>
           )}
+          {winnaars.length === 0 && trekking.verwerkt && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 14px', marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>
+              🔄 Geen winnaar deze ronde — pot blijft staan
+            </div>
+          )}
           {!trekking.verwerkt && (
             <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '12px 14px', marginTop: 10, fontSize: 13, color: 'var(--warning)' }}>
               ⏳ Trekking wordt nog verwerkt…
@@ -98,27 +116,32 @@ function TrekkingDetailContent() {
         {mijnResultaten.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: 20 }}>
             <div className="section-title">Mijn resultaten</div>
-            {mijnResultaten.map(r => (
-              <div key={r.id} className="card" style={{ padding: '16px 18px', marginBottom: 10, border: r.isWinnaar ? '1px solid rgba(240,192,96,0.3)' : undefined }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>🎱 {r.ticketNaam}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: r.aantalGoed >= 4 ? 'var(--gold-soft)' : r.aantalGoed >= 3 ? 'var(--accent-soft)' : 'var(--surface2)', color: r.aantalGoed >= 4 ? 'var(--gold)' : r.aantalGoed >= 3 ? 'var(--accent)' : 'var(--muted)' }}>
-                    {r.aantalGoed} goed {r.isWinnaar ? '🏆' : r.aantalGoed >= 4 ? '🥇' : r.aantalGoed >= 3 ? '🥈' : ''}
-                  </span>
+            {mijnResultaten.map(r => {
+              const mijnNummers = getTicketNummers(r.userId, r.ticketId);
+              return (
+                <div key={r.id} className="card" style={{ padding: '16px 18px', marginBottom: 10, border: r.isWinnaar ? '1px solid rgba(240,192,96,0.3)' : undefined }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>🎱 {r.ticketNaam}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: r.aantalGoed >= 6 ? 'var(--gold-soft)' : r.aantalGoed >= 3 ? 'var(--accent-soft)' : 'var(--surface2)', color: r.aantalGoed >= 6 ? 'var(--gold)' : r.aantalGoed >= 3 ? 'var(--accent)' : 'var(--muted)' }}>
+                      {r.aantalGoed} goed {r.isWinnaar ? '🏆' : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(mijnNummers.length > 0 ? mijnNummers : trekking.nummers).map(n => {
+                      const hit = r.nummersGoed.includes(n);
+                      return (
+                        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div className={`bal ${hit ? 'bal-hit' : 'bal-normal'}`} style={{ width: 40, height: 40, fontSize: 14, flexShrink: 0 }}>{n}</div>
+                          <span style={{ fontSize: 14, color: hit ? 'var(--success)' : 'var(--muted)' }}>
+                            {n} — {hit ? '✅ getrokken' : 'niet getrokken'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {trekking.nummers.map(n => {
-                    const hit = r.nummersGoed.includes(n);
-                    return (
-                      <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div className={`bal ${hit ? 'bal-hit' : 'bal-miss'}`} style={{ width: 40, height: 40, fontSize: 14, flexShrink: 0 }}>{n}</div>
-                        <span style={{ fontSize: 14, color: hit ? 'var(--white)' : 'var(--muted)' }}>{n} — {hit ? 'getrokken ✅' : 'niet getrokken'}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -139,14 +162,15 @@ function TrekkingDetailContent() {
             }).map((lid, i) => {
               const besteTicket = lid.tickets.reduce((a, b) => a.punten > b.punten ? a : b);
               const isIk = user && lid.userId === user.uid;
+              const ticketNummers = getTicketNummers(lid.userId, besteTicket.ticketId);
               return (
                 <div key={lid.userId} style={{ background: isIk ? 'var(--accent-soft)' : 'var(--surface)', border: `1px solid ${isIk ? 'rgba(74,158,255,0.3)' : 'var(--border)'}`, borderRadius: 14, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: i === 0 ? 'var(--gold)' : 'var(--muted)', width: 22, textAlign: 'center', flexShrink: 0 }}>{i + 1}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.userNaam}{isIk && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}> (jij)</span>}</div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                      {trekking.nummers.map(n => (
-                        <div key={n} className={`bal ${besteTicket.nummersGoed.includes(n) ? 'bal-hit' : 'bal-miss'}`} style={{ width: 24, height: 24, fontSize: 9 }}>{n}</div>
+                      {(ticketNummers.length > 0 ? ticketNummers : trekking.nummers).map(n => (
+                        <div key={n} className={`bal ${besteTicket.nummersGoed.includes(n) ? 'bal-hit' : 'bal-normal'}`} style={{ width: 24, height: 24, fontSize: 9 }}>{n}</div>
                       ))}
                     </div>
                   </div>
