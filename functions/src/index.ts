@@ -197,28 +197,50 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       trekking.ingevoerdDoorNaam
     );
 
-    const winnaarTekst = output.winnaars.length > 0
-      ? `🏆 Winnaar: ${winnaarNamen}`
-      : 'Geen winnaar deze week — pot blijft staan!';
+    // Bereken actueel kassaldo voor in de notificatie
+    const kasmutaties = await db.collection('kasmutaties').get();
+    const kassaldo = kasmutaties.docs.reduce((sum, d) => sum + (d.data().bedrag ?? 0), 0);
+    const potTekst = `€${kassaldo.toFixed(0)}`;
+    const getrokkenTekst = trekking.nummers.join(', ');
 
+    // Push naar deelnemers met persoonlijk verhaal
     for (const deelnemer of deelnemers) {
       const tokens = await getFcmTokens(deelnemer.userId, 'trekkingResultaten');
       if (tokens.length === 0) continue;
+
       const mijnResultaat = output.resultaten
         .filter(r => r.userId === deelnemer.userId)
         .sort((a, b) => b.aantalGoed - a.aantalGoed)[0];
-      const body = mijnResultaat
-        ? `Jij had ${mijnResultaat.aantalGoed} goed${mijnResultaat.isWinnaar ? ' 🏆 Gefeliciteerd!' : ''}. ${winnaarTekst}`
-        : winnaarTekst;
-      await sendToTokens(tokens, { title: '🎱 Trekking resultaten', body }, { trekkingId });
+
+      let title: string;
+      let body: string;
+
+      if (mijnResultaat?.isWinnaar) {
+        // Winnaar!
+        title = '🎰 Jackpot!';
+        body = `De ballen zijn gevallen... ${getrokkenTekst}. En jij had ze allemaal goed! 🏆 Gefeliciteerd ${deelnemer.userNaam}, jij wint de pot van ${potTekst}! Wat een avond!`;
+      } else if (output.winnaars.length > 0) {
+        // Er is een winnaar maar niet jij
+        const aantalGoed = mijnResultaat?.aantalGoed ?? 0;
+        title = '🎱 Trekking resultaat';
+        body = `De ballen zijn gevallen... ${getrokkenTekst}. Jij had ${aantalGoed} goed — helaas niet genoeg deze keer. ${winnaarNamen} won de pot! Volgende week weer een kans. 💪`;
+      } else {
+        // Geen winnaar
+        const aantalGoed = mijnResultaat?.aantalGoed ?? 0;
+        title = '🎱 Geen winnaar deze week!';
+        body = `De ballen vielen op ${getrokkenTekst}. Jij had ${aantalGoed} goed. Niemand had alle 6 — de pot groeit naar ${potTekst}! Wie pakt hem volgende zaterdag? 🤞`;
+      }
+
+      await sendToTokens(tokens, { title, body }, { trekkingId });
     }
 
+    // Push naar niet-betalers
     for (const nietBetaler of nietBetalers) {
       const tokens = await getFcmTokens(nietBetaler.userId, 'herinneringen');
       if (tokens.length === 0) continue;
       await sendToTokens(tokens, {
-        title: '🎱 Trekking van deze week',
-        body: 'Je hebt niet betaald voor deze ronde en bent helaas uitgesloten. Hopelijk zien we je de volgende ronde weer!',
+        title: '🎱 Trekking gemist',
+        body: `Je had deze week niet betaald en deed helaas niet mee. De pot staat nu op ${potTekst}. Doe volgende week mee — hopelijk zien we je dan! 💪`,
       }, { path: '/betalen' });
     }
 
