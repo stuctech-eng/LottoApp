@@ -8,7 +8,41 @@ import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, PaymentConfig } from '@/lib/types';
 
-type Stap = 'laden' | 'overzicht' | 'bezig' | 'gemeld' | 'wachten' | 'betaald';
+type Stap = 'laden' | 'overzicht' | 'geblokkeerd' | 'bezig' | 'gemeld' | 'wachten' | 'betaald';
+
+/**
+ * Bepaalt of betalen geblokkeerd is op basis van dag en tijd.
+ *
+ * Geblokkeerd:
+ * - Zaterdag vanaf 18:00 — ballen zijn gevallen
+ * - Zondag — nieuwe week begint pas maandag
+ *
+ * Reden: de Nederlandse Lotto trekt om 19:00 op zaterdag.
+ * We blokkeren vanaf 18:00 als buffer. Op zondag is de oude
+ * week voorbij maar de nieuwe week (ISO-W) begint pas maandag.
+ * Betalen op zondag zou de betaling koppelen aan de verkeerde week.
+ */
+function getBetaalStatus(): { geblokkeerd: boolean; bericht: string } {
+  const nu = new Date();
+  const dag = nu.getDay(); // 0=zo, 6=za
+  const uur = nu.getHours();
+
+  if (dag === 0) {
+    return {
+      geblokkeerd: true,
+      bericht: 'Zondag — betalen kan weer vanaf maandag. De nieuwe week begint dan.',
+    };
+  }
+
+  if (dag === 6 && uur >= 18) {
+    return {
+      geblokkeerd: true,
+      bericht: 'De ballen zijn gevallen 🎱 — betalen voor deze week is niet meer mogelijk. Betaal vanaf maandag mee voor de volgende trekking.',
+    };
+  }
+
+  return { geblokkeerd: false, bericht: '' };
+}
 
 function BetalenPageContent() {
   const router = useRouter();
@@ -18,11 +52,10 @@ function BetalenPageContent() {
   const [stap, setStap] = useState<Stap>('laden');
   const [omschrijving, setOmschrijving] = useState(STANDAARD_OMSCHRIJVING);
   const [error, setError] = useState<string | null>(null);
-
-  // Tikkie geopend — alleen in sessie, geen Firestore nodig
   const [tikkieGeopend, setTikkieGeopend] = useState(false);
 
   const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
+  const betaalStatus = getBetaalStatus();
 
   useEffect(() => {
     const unsub = subscribePaymentConfig(setConfig);
@@ -34,7 +67,6 @@ function BetalenPageContent() {
     const unsub = subscribeUserBetalingen(user.uid, (data) => {
       setBetalingen(data);
 
-      // Controleer betaling van huidige week
       const week = huidigTrekkingWeek();
       const huidigeBetaling = data.find(
         b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === week
@@ -42,6 +74,7 @@ function BetalenPageContent() {
 
       if (huidigeBetaling?.status === 'betaald') setStap('betaald');
       else if (huidigeBetaling?.status === 'verificatie') setStap('wachten');
+      else if (betaalStatus.geblokkeerd) setStap('geblokkeerd');
       else setStap('overzicht');
     });
     return unsub;
@@ -68,6 +101,17 @@ function BetalenPageContent() {
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 40, height: 40, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </div>
+    );
+  }
+
+  if (stap === 'geblokkeerd') {
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
+        <div style={{ fontSize: 72, marginBottom: 20 }}>🎱</div>
+        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 12 }}>Betalen niet mogelijk</div>
+        <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.7, maxWidth: 320 }}>{betaalStatus.bericht}</div>
+        <button onClick={() => router.push('/dashboard')} style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 16, padding: 18, fontSize: 16, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>← Terug naar dashboard</button>
       </div>
     );
   }
@@ -128,7 +172,6 @@ function BetalenPageContent() {
   }
 
   // stap === 'overzicht'
-  // Knop is geblokkeerd totdat lid op Tikkie heeft getikt — sessie-state, geen Firestore
   const geblokkeerd = tikkieLink ? !tikkieGeopend : false;
 
   return (
@@ -165,9 +208,7 @@ function BetalenPageContent() {
                 width: '100%', borderRadius: 16, padding: 16,
                 fontSize: 15, fontWeight: 700, fontFamily: "'DM Sans',sans-serif",
                 textDecoration: 'none',
-                background: tikkieGeopend
-                  ? 'linear-gradient(135deg,#1a8a50,#0d5a30)'
-                  : 'linear-gradient(135deg,#34c97a,#1a8a50)',
+                background: tikkieGeopend ? 'linear-gradient(135deg,#1a8a50,#0d5a30)' : 'linear-gradient(135deg,#34c97a,#1a8a50)',
                 color: 'white',
                 boxShadow: tikkieGeopend ? 'none' : '0 6px 20px rgba(52,201,122,0.3)',
                 border: tikkieGeopend ? '1px solid rgba(52,201,122,0.3)' : 'none',
