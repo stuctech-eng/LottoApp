@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeUserBetalingen, meldBetaling, markeerTikkieGeopend, huidigTrekkingWeek } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, meldBetaling, huidigTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, PaymentConfig } from '@/lib/types';
@@ -19,16 +19,10 @@ function BetalenPageContent() {
   const [omschrijving, setOmschrijving] = useState(STANDAARD_OMSCHRIJVING);
   const [error, setError] = useState<string | null>(null);
 
+  // Tikkie geopend — alleen in sessie, geen Firestore nodig
+  const [tikkieGeopend, setTikkieGeopend] = useState(false);
+
   const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
-
-  // Alleen de betaling van de HUIDIGE week telt
-  const huidigeWeek = huidigTrekkingWeek();
-  const huidigeBetaling = betalingen.find(
-    b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
-  );
-
-  // tikkieGeopend uit Firestore van de huidige betaling
-  const tikkieGeopend = (huidigeBetaling as Betaling & { tikkieGeopend?: boolean })?.tikkieGeopend ?? false;
 
   useEffect(() => {
     const unsub = subscribePaymentConfig(setConfig);
@@ -40,31 +34,29 @@ function BetalenPageContent() {
     const unsub = subscribeUserBetalingen(user.uid, (data) => {
       setBetalingen(data);
 
-      // Bepaal stap op basis van HUIDIGE WEEK betaling
+      // Controleer betaling van huidige week
       const week = huidigTrekkingWeek();
-      const betaling = data.find(
+      const huidigeBetaling = data.find(
         b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === week
       );
 
-      if (betaling?.status === 'betaald') setStap('betaald');
-      else if (betaling?.status === 'verificatie') setStap('wachten');
+      if (huidigeBetaling?.status === 'betaald') setStap('betaald');
+      else if (huidigeBetaling?.status === 'verificatie') setStap('wachten');
       else setStap('overzicht');
     });
     return unsub;
   }, [user]);
-
-  const handleTikkieKlik = async () => {
-    if (huidigeBetaling && !tikkieGeopend) {
-      await markeerTikkieGeopend(huidigeBetaling.id);
-    }
-  };
 
   const handleMelden = async () => {
     if (!user || !profile) return;
     setStap('bezig');
     setError(null);
     try {
-      await meldBetaling({ uid: user.uid, naam: profile.naam }, STANDAARD_INLEG, omschrijving.trim() || STANDAARD_OMSCHRIJVING);
+      await meldBetaling(
+        { uid: user.uid, naam: profile.naam },
+        STANDAARD_INLEG,
+        omschrijving.trim() || STANDAARD_OMSCHRIJVING
+      );
       setStap('gemeld');
     } catch (e) {
       setError('Melden mislukt, probeer opnieuw');
@@ -111,6 +103,10 @@ function BetalenPageContent() {
   }
 
   if (stap === 'betaald') {
+    const week = huidigTrekkingWeek();
+    const huidigeBetaling = betalingen.find(
+      b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === week
+    );
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
         <div style={{ fontSize: 72, marginBottom: 20, animation: 'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }}>✅</div>
@@ -119,11 +115,7 @@ function BetalenPageContent() {
         <div style={{ width: '100%', maxWidth: 380, background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 18, padding: 20, marginBottom: 32, textAlign: 'left' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Bedrag</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{huidigeBetaling?.bedrag.toFixed(2) ?? STANDAARD_INLEG.toFixed(2)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Week</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>{huidigeWeek}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{huidigeBetaling?.bedrag.toFixed(2) ?? '4.00'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Status</span>
@@ -136,6 +128,7 @@ function BetalenPageContent() {
   }
 
   // stap === 'overzicht'
+  // Knop is geblokkeerd totdat lid op Tikkie heeft getikt — sessie-state, geen Firestore
   const geblokkeerd = tikkieLink ? !tikkieGeopend : false;
 
   return (
@@ -154,19 +147,19 @@ function BetalenPageContent() {
             <div style={{ fontSize: 40, marginBottom: 10 }}>💰</div>
             <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>Te betalen</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>€{STANDAARD_INLEG}</div>
-            <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub · {huidigeWeek}</div>
+            <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub · {huidigTrekkingWeek()}</div>
           </div>
         </div>
 
         {/* Stap 1 — Tikkie */}
         {tikkieLink && (
           <div style={{ padding: '0 20px', marginBottom: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Stap 1 — Betaal</div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Stap 1 — Betaal via Tikkie</div>
             <a
               href={tikkieLink}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={handleTikkieKlik}
+              onClick={() => setTikkieGeopend(true)}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 width: '100%', borderRadius: 16, padding: 16,

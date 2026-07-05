@@ -9,11 +9,12 @@ import {
   berekenKasSaldo,
   bevestigBetaling,
   wijsBetalingAf,
+  huidigTrekkingWeek,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
-import { whatsappLink, buildWhatsappHerinnering } from '@/lib/providers/notifications';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
+import { whatsappLink, buildWhatsappHerinnering } from '@/lib/providers/notifications';
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, Kasmutatie, User, Seizoen, PaymentConfig } from '@/lib/types';
 
@@ -50,12 +51,19 @@ function KashouderPageContent() {
 
   const saldo = berekenKasSaldo(mutaties);
   const actieveLeden = leden.filter(l => l.actief);
-  const teVerifieren = betalingen.filter(b => b.status === 'verificatie');
-  const openBetalingen = betalingen.filter(b => b.status === 'open');
   const tikkieLink = (paymentConfig as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
 
-  // Betaalvoortgang: hoeveel actieve leden hebben een bevestigde betaling
-  const betaaldeLeden = new Set(betalingen.filter(b => b.status === 'betaald').map(b => b.userId));
+  // Filter op huidige week — alleen betalingen van deze week tellen mee
+  const huidigeWeek = huidigTrekkingWeek();
+  const betalingenDezeWeek = betalingen.filter(
+    b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
+  );
+
+  const teVerifieren = betalingenDezeWeek.filter(b => b.status === 'verificatie');
+  const openBetalingen = betalingenDezeWeek.filter(b => b.status === 'open');
+
+  // Betaalvoortgang alleen op basis van huidige week
+  const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
   const totaalLeden = actieveLeden.length;
   const percentage = totaalLeden > 0 ? Math.round((aantalBetaald / totaalLeden) * 100) : 0;
@@ -92,7 +100,7 @@ function KashouderPageContent() {
               {laden ? '…' : `€${saldo.toFixed(2)}`}
             </div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
-              {seizoen ? seizoen.naam : 'Geen actief seizoen'} · {totaalLeden} leden
+              {seizoen ? seizoen.naam : 'Geen actief seizoen'} · {totaalLeden} leden · {huidigeWeek}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Link href="/kashouder/financieel" style={{ background: 'rgba(52,201,122,0.1)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 13, padding: 12, textAlign: 'center', textDecoration: 'none' }}>
@@ -105,10 +113,10 @@ function KashouderPageContent() {
           </div>
         </div>
 
-        {/* Betaalvoortgang */}
+        {/* Betaalvoortgang deze week */}
         {!laden && totaalLeden > 0 && (
           <div style={{ padding: '0 20px', marginBottom: 16 }}>
-            <div className="section-title">Betaalvoortgang</div>
+            <div className="section-title">Betaalvoortgang {huidigeWeek}</div>
             <div className="card" style={{ padding: '16px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>{aantalBetaald} van {totaalLeden} leden betaald</span>
@@ -182,7 +190,7 @@ function KashouderPageContent() {
         {!laden && teVerifieren.length === 0 && openBetalingen.length === 0 && (
           <div style={{ padding: '0 20px', marginBottom: 16 }}>
             <div className="card" style={{ padding: '16px 18px', textAlign: 'center', color: 'var(--success)', fontSize: 13 }}>
-              ✅ Alles in orde — geen openstaande acties
+              ✅ Alles in orde — geen openstaande acties deze week
             </div>
           </div>
         )}
