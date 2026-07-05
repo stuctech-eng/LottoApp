@@ -153,7 +153,7 @@ function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder }: { resultaat
 
         {/* Instructie */}
         <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24, lineHeight: 1.6, maxWidth: 300, animation: 'fadeUp 0.5s ease 0.6s both' }}>
-          Stuur een WhatsApp naar {KASHOUDER_NAAM} om je winst te claimen. Hij maakt het bedrag daarna over.
+          Stuur een WhatsApp naar {kashouderNaam} om je winst te claimen. Hij maakt het bedrag daarna over.
         </div>
 
         {/* WhatsApp knop */}
