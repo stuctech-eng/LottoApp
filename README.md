@@ -41,7 +41,7 @@ Digitale lottovereniging app — Next.js 15, TypeScript, Firebase
 
 ---
 
-## Spelregels (definitief vastgesteld)
+## Spelregels (definitief)
 
 1. **Betaling = deelname** — alleen wie betaald heeft én kashouder heeft bevestigd doet mee
 2. **1 ticket per persoon** — gelijke kansen voor iedereen
@@ -50,56 +50,108 @@ Digitale lottovereniging app — Next.js 15, TypeScript, Firebase
 5. **Pot = som bevestigde betalingen** — wie niet betaalt legt niet in
 6. **Meerdere winnaars mogelijk** — pot wordt gelijkelijk verdeeld
 7. **Niet betaald → automatisch uitgesloten** — geen handmatige actie kashouder nodig
+8. **Betalen alleen maandag t/m zaterdag voor 18:00** — daarna geblokkeerd
 
 ---
 
-## Betaalcyclus (automatisch)
+## Betaalcyclus (volledig automatisch)
 
 ```
-Zaterdag: trekking verwerkt
-→ Cloud Function maakt automatisch betalingen aan (status: 'open') voor volgende week
-→ Leden ontvangen geen aparte melding — ze zien het in de app
-
-Zondag t/m donderdag: leden betalen via Tikkie en melden in de app
-
+Maandag: nieuwe week (ISO-W) begint → leden kunnen betalen
+  ↓
+Ma t/m vr: leden betalen via Tikkie → melden in app
+  ↓
 Vrijdag 09:00: automatische push-herinnering naar leden met status 'open'
-
+  ↓
+Zaterdag 18:00: betalen geblokkeerd (ballen vallen om 19:00)
+  ↓
 Zaterdag 19:30: beheerder krijgt push "Lotto-uitslag invoeren"
-Beheerder voert nummers in → trekking verwerkt → cyclus herhaalt
+  ↓
+Beheerder voert nummers in → Cloud Function verwerkt
+  ↓
+Iedereen krijgt push met resultaat + eventueel winnaar-notificatie
+  ↓
+Automatisch nieuwe betalingen aangemaakt voor volgende week (status: 'open')
+  ↓
+Cyclus herhaalt
 ```
 
----
-
-## Tikkie-blokkade (persistentie via Firestore)
-
-Leden kunnen "Ik heb betaald" pas tikken nadat ze op "Betaal via Tikkie" hebben getikt.
-- Bij tikken op Tikkie → `tikkieGeopend: true` opgeslagen in Firestore op het betaling-document
-- Na herladen pagina blijft de blokkade correct (leest uit Firestore, niet uit browser-sessie)
-- Alleen actief als er een Tikkie-link is ingesteld via Beheer → Admin → Instellingen
+**BELANGRIJK:** Betalen op **zondag** is geblokkeerd — zondag valt nog in de oude ISO-week. Nieuwe week begint pas maandag.
 
 ---
 
-## Weekberekening (ISO-8601)
-
-**BELANGRIJK:** De weekberekening gebruikt ISO-8601 (maandag t/m zondag).
+## Tijdsblokkade betalen
 
 ```javascript
-// Correct — ISO-8601
-function huidigTrekkingWeek(datum?: Date): string {
-  const d = new Date(Date.UTC(...));
-  const dayNum = d.getUTCDay() || 7; // maandag=1 ... zondag=7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // naar donderdag
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNr = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
-}
+// Zaterdag 18:00+ → geblokkeerd (ballen gevallen)
+// Zondag → geblokkeerd (oude week, nieuwe begint maandag)
+// Maandag t/m zaterdag voor 18:00 → betalen mag
+if (dag === 0) return geblokkeerd; // zondag
+if (dag === 6 && uur >= 18) return geblokkeerd; // zaterdag 18:00+
 ```
-
-Resultaat: 1 juli (wo) én 4 juli (za) vallen allebei in W27. Identiek in `lib/firestore-payments.ts` én `functions/src/index.ts`.
 
 ---
 
-## Firestore structuur
+## ISO-8601 Weekberekening
+
+**KRITIEK:** Beide bestanden gebruiken identieke ISO-8601 weekberekening:
+- `lib/firestore-payments.ts` → `huidigTrekkingWeek()`
+- `functions/src/index.ts` → `getTrekkingWeek(datum)`
+
+```
+1 juli (wo)  → W27 ✅
+4 juli (za)  → W27 ✅
+5 juli (zo)  → W27 ✅  ← nog oude week
+6 juli (ma)  → W28 ✅  ← nieuwe week begint
+```
+
+---
+
+## Winnaar-flow
+
+```
+Winnaar heeft alle 6 goed
+↓
+Cloud Function stuurt push:
+"🎰 Jackpot! De ballen zijn gevallen... [nummers].
+Jij wint de pot van €X! Wat een avond!"
+↓
+Winnaar opent app → CONFETTI SCHERM met:
+- 🏆 JACKPOT! in gouden letters
+- Pot-bedrag groot in beeld
+- Getrokken nummers
+- 💬 WhatsApp [kashouder] knop
+↓
+Winnaar stuurt WhatsApp aan kashouder
+Kashouder maakt bedrag over via bank/Tikkie
+Kashouder registreert uitbetaling in app → kassaldo → €0
+```
+
+**Kashouder in confetti-scherm:** dynamisch opgehaald uit Firestore.
+Eerst `rol === 'kashouder'`, dan fallback op `rol === 'beheerder'`.
+Gebruikt telefoonnummer uit gebruikersprofiel voor WhatsApp-link.
+
+---
+
+## Push Notificaties (uitgebreide teksten)
+
+**Winnaar:**
+> 🎰 Jackpot! De ballen zijn gevallen... [nummers]. En jij had ze allemaal goed! 🏆 Gefeliciteerd [naam], jij wint de pot van €X! Wat een avond!
+
+**Verliezer (winnaar wel):**
+> 🎱 De ballen zijn gevallen... Jij had X goed — helaas niet genoeg. [winnaar] won de pot! Volgende week weer een kans. 💪
+
+**Geen winnaar:**
+> 🎱 Geen winnaar deze week! De ballen vielen op [nummers]. Jij had X goed. De pot groeit naar €X! Wie pakt hem volgende zaterdag? 🤞
+
+**Niet betaald:**
+> 🎱 Trekking gemist. Je had deze week niet betaald. De pot staat nu op €X. Doe volgende week mee! 💪
+
+**DATA-ONLY PAYLOAD regel:** nooit top-level `notification` veld — geeft dubbele notificaties.
+
+---
+
+## Firestore Structuur
 
 ```
 /users/{uid}
@@ -110,7 +162,7 @@ Resultaat: 1 juli (wo) én 4 juli (za) vallen allebei in W27. Identiek in `lib/f
   naam, aantalGetallen, minGetal, maxGetal, bonusBal
 
 /prijsConfig/default
-  modus: 'alle_goed_wint' | 'hoogste_score_wint' | 'meerdere_winnaars' | 'vaste_prijzen'
+  modus: 'alle_goed_wint'  ← actief
 
 /paymentConfig/main
   activeProvider, providers, tikkieLink
@@ -144,39 +196,13 @@ Resultaat: 1 juli (wo) én 4 juli (za) vallen allebei in W27. Identiek in `lib/f
 
 | Functie | Trigger | Wat |
 |---|---|---|
-| `onTrekkingVerwerkt` | Nieuwe trekking aangemaakt | Controle-engine, resultaten, ranglijst, push naar alle leden |
-| `onBetalingBevestigd` | Betaling status → 'betaald' | Push naar lid |
+| `onTrekkingVerwerkt` | Nieuwe trekking | Controle-engine, resultaten, push alle leden |
+| `onBetalingBevestigd` | Betaling → 'betaald' | Push naar lid |
 | `onBetalingsHerinnering` | Vrijdag 09:00 | Push naar leden met status 'open' |
 | `onTrekkingHerinnering` | Zaterdag 19:30 | Push naar beheerders |
-| `onBetalingenAanmaken` | Trekking verwerkt (update) | Betalingen 'open' aanmaken voor volgende week |
+| `onBetalingenAanmaken` | Trekking verwerkt | 'open' betalingen voor volgende week |
 
 **Runtime:** Node.js 22
-
-### Push notificatie stijl (uitgebreid verhaal)
-
-**Winnaar:** *"🎰 Jackpot! De ballen zijn gevallen... [nummers]. En jij had ze allemaal goed! 🏆 Gefeliciteerd [naam], jij wint de pot van €X! Wat een avond!"*
-
-**Verliezer (winnaar wel):** *"🎱 De ballen zijn gevallen... Jij had X goed — helaas niet genoeg. [winnaar] won de pot! Volgende week weer een kans. 💪"*
-
-**Geen winnaar:** *"🎱 Geen winnaar deze week! De ballen vielen op [nummers]. Jij had X goed. De pot groeit naar €X! Wie pakt hem volgende zaterdag? 🤞"*
-
-**Niet betaald:** *"🎱 Trekking gemist. Je had deze week niet betaald. De pot staat nu op €X. Doe volgende week mee! 💪"*
-
-### DATA-ONLY PAYLOAD (architectuurregel)
-Geen top-level `notification` veld — dat veroorzaakte dubbele notificaties. Alleen via `data` sturen.
-
----
-
-## Controle-engine (architectuurregel)
-
-`lib/controle-engine.ts` en `functions/src/lib/controle-engine.ts` zijn altijd **identiek**.
-Pure functie — geen Firestore, geen React. Input → output.
-
-Prijsmodi:
-- `alle_goed_wint` — alleen bij alle nummers goed; geen match = rollover (**actief/default**)
-- `hoogste_score_wint` — hoogste score wint
-- `meerdere_winnaars` — iedereen boven minimumscore
-- `vaste_prijzen` — vaste uitbetaling per score
 
 ---
 
@@ -185,84 +211,61 @@ Prijsmodi:
 | Route | Beschrijving | Rol |
 |---|---|---|
 | `/` | Login | Iedereen |
-| `/dashboard` | Lid dashboard (live data) | Lid |
+| `/dashboard` | Lid dashboard + confetti winnaar-scherm | Lid |
 | `/trekkingen` | Trekking overzicht + invoer | Lid+ |
-| `/trekkingen/[id]` | Trekking detail (eigen nummers, naam uit profiel) | Lid+ |
+| `/trekkingen/[id]` | Trekking detail (eigen nummers) | Lid+ |
 | `/ranglijst` | Seizoen ranglijst | Lid+ |
 | `/hall-of-fame` | All-time records | Lid+ |
 | `/kas` | Kasboek | Lid+ |
-| `/betalen` | Betaalflow met Tikkie-blokkade | Lid+ |
-| `/deelnemers` | Simpele ledenlijst (alleen namen) | Lid+ |
-| `/spelregels` | Spelregels + betaalcyclus uitleg | Lid+ |
-| `/help` | Handleiding met 10 tabbladen | Lid+ |
-| `/profiel` | Profiel, naam wijzigen, ticket, notificaties | Lid+ |
+| `/betalen` | Betaalflow + tijdsblokkade | Lid+ |
+| `/deelnemers` | Simpele ledenlijst | Lid+ |
+| `/spelregels` | Spelregels + betaalcyclus | Lid+ |
+| `/help` | Handleiding 10 tabbladen | Lid+ |
+| `/profiel` | Profiel, naam, ticket, notificaties | Lid+ |
 | `/leden` | Ledenbeheer + rollen | Kashouder+ |
-| `/kashouder` | Kashouder dashboard (live) | Kashouder+ |
+| `/kashouder` | Kashouder dashboard (weekfilter) | Kashouder+ |
 | `/kashouder/financieel` | Financieel beheer | Kashouder+ |
-| `/beheerder` | Beheerder dashboard (live) | Beheerder |
+| `/beheerder` | Beheerder dashboard | Beheerder |
 | `/beheerder/admin` | Admin paneel (5 tabs) | Beheerder |
 
 ---
 
 ## STATUS PER 5 JULI 2026
 
-### Volledig werkend en getest
-- ✅ Alle inlogmethoden (email, wachtwoord, magic link, Google, registratie)
-- ✅ Push notificaties end-to-end (data-only payload fix)
-- ✅ Betaalcyclus automatisch na trekking
-- ✅ Betaalherinnering vrijdag 09:00 (bevestigd in Cloud Run logs)
-- ✅ Trekking-herinnering zaterdag 19:30
-- ✅ Tikkie-blokkade persistent via Firestore
-- ✅ ISO-8601 weekberekening (client + Cloud Functions)
+### Volledig werkend
+- ✅ Alle inlogmethoden
+- ✅ Push notificaties (data-only payload)
+- ✅ Betaalcyclus automatisch
+- ✅ Tijdsblokkade betalen (za 18:00+ en zo)
+- ✅ ISO-8601 weekberekening (client + functions)
+- ✅ Weekfilter kashouder dashboard
 - ✅ Prijsmodus `alle_goed_wint` actief in Firestore
 - ✅ 1 ticket per persoon
-- ✅ Naam uit gebruikersprofiel in trekking-detail
-- ✅ Uitgebreide push-notificaties met pot-bedrag en verhaal
-- ✅ Scrollbare modals (ticket + trekking invoer)
-- ✅ Navigatie fix (bottom-nav altijd onderaan)
-- ✅ Live dashboards (lid, kashouder, beheerder)
-- ✅ Spelregels pagina
-- ✅ Help pagina (10 tabbladen)
-- ✅ Deelnemers pagina (alleen namen)
+- ✅ Confetti winnaar-scherm met WhatsApp kashouder
+- ✅ Uitgebreide push-notificaties met pot-bedrag
+- ✅ Trekking detail met eigen nummers
+- ✅ Scrollbare modals
+- ✅ Live dashboards
 
 ### Huidige situatie
-- Eerste trekking (4 juli) was een testdraai met technische fouten
-- Beslissing: deze ronde doorspelen tot iemand 6 goed heeft
+- Eerste trekking (4 juli W27) was testdraai
+- Ronde loopt door tot iemand 6 goed heeft
 - Na eerste echte winnaar → testdata opruimen → schone start
 - Tikkie-link verloopt 14 juli → nieuwe link aanmaken
 
-### Openstaande punten
-- ⏳ Verifiëren werkt niet goed — nog uit te zoeken
+### Openstaand
+- ⏳ Verifiëren bug — nog uit te zoeken
 - ⏳ Testdata opruimen na eerste echte winnaar
-- ⏳ Nieuwe Tikkie-link aanmaken voor 14 juli
-- ⏳ `debug` collectie in Firestore bewust laten staan als diagnostiek
+- ⏳ Nieuwe Tikkie-link vóór 14 juli
 
-### Te deployen zips (nog niet alle gedaan)
-1. `lottoapp-weekfix2.zip`
-2. `lottoapp-weekfix-functions.zip`
-3. `lottoapp-tikkie-persistentie.zip`
-4. `lottoapp-prijzen-opslaan.zip`
-5. `lottoapp-trekking-scroll.zip`
-6. `lottoapp-ticket-scroll.zip`
-7. `lottoapp-notificaties-verhaal.zip`
-8. `lottoapp-deelnemers.zip`
+### Nog te deployen
+1. `lottoapp-betaal-blokkade.zip` — tijdsblokkade za/zo
+2. `lottoapp-winnaar-scherm.zip` — confetti scherm
 
 ---
 
-## Firebase setup
-- Project: `lottoclub`
-- Auth: Email/Password, Email link, Google
-- Firestore: europe-west1
-- Cloud Functions: Node.js 22
-- Web app config: `lib/firebase.ts`
-
-## GitHub
-- Repo: `github.com/stuctech-eng/LottoApp`
-- Branch `main` = productie
-- Auto-deploy via Vercel bij push naar main
-
 ## Handige links
 - Live app: https://lotto-app-eight-chi.vercel.app
+- Repo: github.com/stuctech-eng/LottoApp
 - Firebase Console: console.firebase.google.com
-- Google Cloud Console: console.cloud.google.com
 - Lotto uitslag: https://lotto.nederlandseloterij.nl/trekkingsuitslag
