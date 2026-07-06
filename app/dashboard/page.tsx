@@ -244,8 +244,11 @@ function DashboardPageContent() {
   const mijnResultaatLaatste = mijnResultaten.find(r => r.userId === user?.uid);
   const winnaarResultaat = mijnResultaten.find(r => r.isWinnaar);
 
-  // Check of ik gewonnen heb bij de laatste trekking
-  const ikHebGewonnen = mijnResultaatLaatste?.isWinnaar === true;
+  // Confetti scherm alleen bij écht winnen — alle 6 nummers goed
+  // Extra check op aantalGoed voorkomt dat oude resultaten met verkeerde
+  // prijsmodus (hoogste_score_wint) het winnaar-scherm triggeren
+  const ikHebGewonnen = mijnResultaatLaatste?.isWinnaar === true
+    && mijnResultaatLaatste?.aantalGoed >= 6;
 
   const mijnPunten = profile?.ranglijstPunten ?? 0;
   const mijnPositie = leden
