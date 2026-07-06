@@ -102,7 +102,7 @@ function Confetti() {
 }
 
 // Winnaar scherm
-function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder }: { resultaat: Resultaat; kassaldo: number; trekking: Trekking; kashouder: User | null }) {
+function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder, onGeclaimed }: { resultaat: Resultaat; kassaldo: number; trekking: Trekking; kashouder: User | null; onGeclaimed: () => void }) {
   const kashouderNaam = kashouder?.naam ?? 'de kashouder';
   const kashouderTelefoon = kashouder?.telefoon?.replace(/\s/g, '') ?? '';
 
@@ -112,6 +112,12 @@ function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder }: { resultaat
   const whatsappUrl = kashouderTelefoon
     ? `https://wa.me/${kashouderTelefoon}?text=${tikkieBericht}`
     : undefined;
+
+  const handleWhatsApp = () => {
+    // Sla op dat winnaar heeft geclaimd — confetti scherm verdwijnt
+    localStorage.setItem(`winnaar_geclaimed_${trekking.id}`, 'true');
+    onGeclaimed();
+  };
 
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(135deg,#1a0a00,#0d1b2a)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px', position: 'relative', overflow: 'hidden' }}>
@@ -162,6 +168,7 @@ function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder }: { resultaat
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={handleWhatsApp}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', maxWidth: 340, background: 'linear-gradient(135deg,#25d366,#128c4a)', color: 'white', borderRadius: 16, padding: 18, fontSize: 16, fontWeight: 700, textDecoration: 'none', boxShadow: '0 8px 24px rgba(37,211,102,0.3)', marginBottom: 14, animation: 'fadeUp 0.5s ease 0.7s both' }}
           >
             💬 WhatsApp {kashouderNaam}
@@ -250,6 +257,13 @@ function DashboardPageContent() {
   const ikHebGewonnen = mijnResultaatLaatste?.isWinnaar === true
     && mijnResultaatLaatste?.aantalGoed >= 6;
 
+  // Geclaimed state — verdwijnt zodra winnaar op WhatsApp heeft getikt
+  const [winnaarGeclaimed, setWinnaarGeclaimed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    // Check localStorage bij laden
+    return false; // wordt later ingevuld als trekking bekend is
+  });
+
   const mijnPunten = profile?.ranglijstPunten ?? 0;
   const mijnPositie = leden
     .filter(l => l.actief)
@@ -259,9 +273,21 @@ function DashboardPageContent() {
   // Kashouder — eerst kashouder rol, dan beheerder als fallback
   const kashouder = leden.find(l => l.rol === 'kashouder') ?? leden.find(l => l.rol === 'beheerder') ?? null;
 
-  // Winnaar scherm tonen!
-  if (!laden && ikHebGewonnen && laatsteTrekking) {
-    return <WinnaarScherm resultaat={mijnResultaatLaatste!} kassaldo={saldo} trekking={laatsteTrekking} kashouder={kashouder} />;
+  // Check localStorage voor geclaimed status
+  const geclaimed = winnaarGeclaimed ||
+    (typeof window !== 'undefined' && laatsteTrekking
+      ? localStorage.getItem(`winnaar_geclaimed_${laatsteTrekking.id}`) === 'true'
+      : false);
+
+  // Winnaar scherm tonen — alleen als niet al geclaimed
+  if (!laden && ikHebGewonnen && laatsteTrekking && !geclaimed) {
+    return <WinnaarScherm
+      resultaat={mijnResultaatLaatste!}
+      kassaldo={saldo}
+      trekking={laatsteTrekking}
+      kashouder={kashouder}
+      onGeclaimed={() => setWinnaarGeclaimed(true)}
+    />;
   }
 
   return (
