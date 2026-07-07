@@ -1,4 +1,4 @@
-'use client';
+'use client'; 
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
