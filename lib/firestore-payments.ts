@@ -18,29 +18,13 @@ interface ActieUser {
   naam: string;
 }
 
-/**
- * Geeft het ISO-8601 weeknummer terug als string, bijv. "2026-W27".
- *
- * ISO-8601 week: maandag t/m zondag. Week 1 is de week met de eerste
- * donderdag van het jaar. Dit zorgt ervoor dat bijv. woensdag 1 juli én
- * zaterdag 4 juli allebei in week 27 vallen, en maandag 6 juli al in week 28.
- *
- * De oude berekening gebruikte een andere methode waardoor zaterdag soms
- * in een andere week viel dan de rest van de week — dat veroorzaakte het
- * probleem waarbij een betaling van dinsdag niet meetelde voor de trekking
- * van zaterdag van diezelfde week.
- */
-export function huidigTrekkingWeek(datum?: Date): string {
-  const d = new Date(Date.UTC(
-    (datum ?? new Date()).getFullYear(),
-    (datum ?? new Date()).getMonth(),
-    (datum ?? new Date()).getDate()
-  ));
-  const dayNum = d.getUTCDay() || 7; // maandag=1 ... zondag=7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // naar donderdag van deze week
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNr = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
+export function huidigTrekkingWeek(): string {
+  const nu = new Date();
+  const startJaar = new Date(Date.UTC(nu.getUTCFullYear(), 0, 1));
+  const weekNr = Math.ceil(
+    ((nu.getTime() - startJaar.getTime()) / 86400000 + startJaar.getUTCDay() + 1) / 7
+  );
+  return `${nu.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
 }
 
 // ───────────────────────── Kasmutaties ─────────────────────────
@@ -99,7 +83,7 @@ async function maakKasmutatie(input: {
 // ───────────────────────── Betalingen ─────────────────────────
 
 export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) {
-  const q = query(collection(db, 'betalingen'), orderBy('aangemaakt', 'desc'));
+  const q = query(collection(db, 'betalingen'));
   return onSnapshot(
     q,
     (snap) => {
@@ -120,6 +104,8 @@ export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) 
           tikkieGeopend: data.tikkieGeopend ?? false,
         };
       });
+      // Sorteer client-side — geen Firestore index nodig
+      betalingen.sort((a, b) => (b.aangemaakt?.toMillis() ?? 0) - (a.aangemaakt?.toMillis() ?? 0));
       callback(betalingen);
     },
     (err) => {
