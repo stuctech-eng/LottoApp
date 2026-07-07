@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   subscribeKasmutaties,
   subscribeBetalingen,
+  huidigTrekkingWeek,
   berekenKasSaldo,
   bevestigBetaling,
   wijsBetalingAf,
