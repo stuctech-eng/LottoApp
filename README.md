@@ -24,8 +24,6 @@ Digitale lottovereniging app — Next.js 15, TypeScript, Firebase
 | Ing | — | Lid | ✅ Ja |
 | Ellen Veerman | — | Lid | ✅ Ja |
 
-**Twee beheerder-accounts bewust:** als één account problemen heeft kan de ander ingrijpen. Dick Veerman (t.e.veerman) speelt niet mee en heeft geen ticket. Dick Veerman Speler (stuctech) speelt wel mee.
-
 ---
 
 ## Rollen
@@ -36,118 +34,127 @@ Digitale lottovereniging app — Next.js 15, TypeScript, Firebase
 | **Kashouder** | Kas beheren + meespelen |
 | **Lid** | Alleen meespelen |
 
-**Systeemregel:** altijd minimaal 1 beheerder. App blokkeert demoten van laatste beheerder.
-**Bootstrap:** eerste beheerder handmatig via Firebase Console → `users/{uid}` → `rol: "beheerder"`.
-
 ---
 
 ## Spelregels (definitief)
 
-1. **Betaling = deelname** — alleen wie betaald heeft én kashouder heeft bevestigd doet mee
-2. **1 ticket per persoon** — gelijke kansen voor iedereen
+1. **Betaling = deelname** — alleen bevestigde betaling telt mee
+2. **1 ticket per persoon** — gelijke kansen
 3. **Alleen alle 6 nummers goed is winnen** — prijsmodus: `alle_goed_wint`
-4. **Geen winnaar → rollover** — pot blijft staan, groeit volgende week
-5. **Pot = som bevestigde betalingen** — wie niet betaalt legt niet in
-6. **Meerdere winnaars mogelijk** — pot wordt gelijkelijk verdeeld
-7. **Niet betaald → automatisch uitgesloten** — geen handmatige actie kashouder nodig
-8. **Betalen alleen maandag t/m zaterdag voor 18:00** — daarna geblokkeerd
+4. **Geen winnaar → rollover** — pot blijft staan
+5. **Pot = som bevestigde betalingen** — alleen betalers bouwen pot op
+6. **Meerdere winnaars mogelijk** — pot gelijkelijk verdeeld
+7. **Niet betaald → automatisch uitgesloten**
+8. **Betalen alleen maandag t/m zaterdag voor 18:00**
 
 ---
 
 ## Betaalcyclus (volledig automatisch)
 
 ```
-Maandag: nieuwe week (ISO-W) begint → leden kunnen betalen
-  ↓
-Ma t/m vr: leden betalen via Tikkie → melden in app
-  ↓
-Vrijdag 09:00: automatische push-herinnering naar leden met status 'open'
-  ↓
-Zaterdag 18:00: betalen geblokkeerd (ballen vallen om 19:00)
-  ↓
-Zaterdag 19:30: beheerder krijgt push "Lotto-uitslag invoeren"
-  ↓
-Beheerder voert nummers in → Cloud Function verwerkt
-  ↓
-Iedereen krijgt push met resultaat + eventueel winnaar-notificatie
-  ↓
-Automatisch nieuwe betalingen aangemaakt voor volgende week (status: 'open')
-  ↓
-Cyclus herhaalt
+Maandag: nieuwe ISO-week begint → leden kunnen betalen
+Ma t/m za 18:00: betaal via Tikkie → meld in app
+Vrijdag 09:00: automatische push-herinnering (status 'open')
+Zaterdag 18:00: betalen geblokkeerd
+Zaterdag 19:30: beheerder krijgt push "uitslag invoeren"
+Zaterdag avond: trekking verwerkt → push naar alle leden
+→ Automatisch nieuwe betalingen aangemaakt voor volgende week
+Zondag: geblokkeerd — betalen kan pas weer maandag
 ```
-
-**BELANGRIJK:** Betalen op **zondag** is geblokkeerd — zondag valt nog in de oude ISO-week. Nieuwe week begint pas maandag.
 
 ---
 
-## Tijdsblokkade betalen
+## KRITIEKE ARCHITECTUURREGELS
 
+### 1. Geen orderBy in Firestore queries
+**NOOIT `orderBy()` gebruiken in Firestore queries.** Dit vereist een composite index. Zonder die index geeft Firestore stil een lege array terug — geen foutmelding, gewoon 0 resultaten. Dit brak de betaalvoortgang wekenlang.
+
+**Altijd client-side sorteren:**
 ```javascript
-// Zaterdag 18:00+ → geblokkeerd (ballen gevallen)
-// Zondag → geblokkeerd (oude week, nieuwe begint maandag)
-// Maandag t/m zaterdag voor 18:00 → betalen mag
-if (dag === 0) return geblokkeerd; // zondag
-if (dag === 6 && uur >= 18) return geblokkeerd; // zaterdag 18:00+
+// ❌ FOUT — kan silent falen zonder index
+const q = query(collection(db, 'betalingen'), orderBy('aangemaakt', 'desc'));
+
+// ✅ CORRECT — altijd werkt
+const q = query(collection(db, 'betalingen'));
+// Dan na de map:
+betalingen.sort((a, b) => (b.aangemaakt?.toMillis() ?? 0) - (a.aangemaakt?.toMillis() ?? 0));
 ```
+
+Dit geldt voor: `betalingen`, `kasmutaties`, `users`, en alle andere collecties.
+
+### 2. ISO-8601 weekberekening
+Week loopt van **maandag t/m zondag**. Identiek in `lib/firestore-payments.ts` én `functions/src/index.ts`.
+
+```
+1 juli (wo) → W27, 4 juli (za) → W27, 6 juli (ma) → W28
+```
+
+### 3. Data-only FCM payload
+Nooit top-level `notification` veld — geeft dubbele notificaties.
+
+### 4. kasSaldo nooit opslaan
+Altijd `berekenKasSaldo(kasmutaties)` — nooit een opgeslagen waarde.
+
+### 5. Controle-engine identiek
+`lib/controle-engine.ts` en `functions/src/lib/controle-engine.ts` zijn altijd identiek.
 
 ---
 
-## ISO-8601 Weekberekening
+## Hoe alles samenwerkt
 
-**KRITIEK:** Beide bestanden gebruiken identieke ISO-8601 weekberekening:
-- `lib/firestore-payments.ts` → `huidigTrekkingWeek()`
-- `functions/src/index.ts` → `getTrekkingWeek(datum)`
-
+### Betaalflow
 ```
-1 juli (wo)  → W27 ✅
-4 juli (za)  → W27 ✅
-5 juli (zo)  → W27 ✅  ← nog oude week
-6 juli (ma)  → W28 ✅  ← nieuwe week begint
-```
+1. Trekking verwerkt (za avond)
+   → Cloud Function maakt 'open' betalingen voor volgende week
 
----
+2. Vrijdag 09:00
+   → Cloud Function stuurt push naar leden met status 'open'
 
-## Winnaar-flow
+3. Lid opent app → Betalen
+   → Tikt "Betaal via Tikkie" → Tikkie opent
+   → Tikt "Ik heb betaald" → document aangemaakt (status: verificatie)
+   → trekkingWeek wordt automatisch ingevuld (bijv. "2026-W28")
 
-```
-Winnaar heeft alle 6 goed
-↓
-Cloud Function stuurt push:
-"🎰 Jackpot! De ballen zijn gevallen... [nummers].
-Jij wint de pot van €X! Wat een avond!"
-↓
-Winnaar opent app → CONFETTI SCHERM met:
-- 🏆 JACKPOT! in gouden letters
-- Pot-bedrag groot in beeld
-- Getrokken nummers
-- 💬 WhatsApp [kashouder] knop
-↓
-Winnaar stuurt WhatsApp aan kashouder
-Kashouder maakt bedrag over via bank/Tikkie
-Kashouder registreert uitbetaling in app → kassaldo → €0
+4. Kashouder ziet verificatie op dashboard
+   → Tikt ✓ → status wordt 'betaald' → kasmutatie aangemaakt
+
+5. Betaalvoortgang dashboard
+   → filtert op betalingen waar trekkingWeek === huidigeWeek
+   → telt betaaldeLeden vs actieveLeden
 ```
 
-**Kashouder in confetti-scherm:** dynamisch opgehaald uit Firestore.
-Eerst `rol === 'kashouder'`, dan fallback op `rol === 'beheerder'`.
-Gebruikt telefoonnummer uit gebruikersprofiel voor WhatsApp-link.
+### Trekkingsflow
+```
+1. Zaterdag 19:30 → push naar beheerder
 
----
+2. Beheerder voert nummers in
+   → Cloud Function onTrekkingVerwerkt triggert
 
-## Push Notificaties (uitgebreide teksten)
+3. Cloud Function:
+   → haalt betalers op voor huidigeWeek (status: betaald)
+   → controle-engine vergelijkt tickets van betalers
+   → resultaten opgeslagen, ranglijst bijgewerkt
+   → push naar alle deelnemers met persoonlijk verhaal
+   → push naar niet-betalers
+   → nieuwe 'open' betalingen voor volgende week
 
-**Winnaar:**
-> 🎰 Jackpot! De ballen zijn gevallen... [nummers]. En jij had ze allemaal goed! 🏆 Gefeliciteerd [naam], jij wint de pot van €X! Wat een avond!
+4. Winnaar opent app → confetti scherm
+   → WhatsApp knop naar kashouder
+   → kashouder maakt bedrag over
+   → registreert uitbetaling in app
+```
 
-**Verliezer (winnaar wel):**
-> 🎱 De ballen zijn gevallen... Jij had X goed — helaas niet genoeg. [winnaar] won de pot! Volgende week weer een kans. 💪
-
-**Geen winnaar:**
-> 🎱 Geen winnaar deze week! De ballen vielen op [nummers]. Jij had X goed. De pot groeit naar €X! Wie pakt hem volgende zaterdag? 🤞
-
-**Niet betaald:**
-> 🎱 Trekking gemist. Je had deze week niet betaald. De pot staat nu op €X. Doe volgende week mee! 💪
-
-**DATA-ONLY PAYLOAD regel:** nooit top-level `notification` veld — geeft dubbele notificaties.
+### Weekfilter (kashouder dashboard)
+```javascript
+const huidigeWeek = huidigTrekkingWeek(); // bijv. "2026-W28"
+const betalingenDezeWeek = betalingen.filter(
+  b => b.trekkingWeek === huidigeWeek
+);
+const betaaldeLeden = new Set(
+  betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId)
+);
+const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
+```
 
 ---
 
@@ -162,7 +169,7 @@ Gebruikt telefoonnummer uit gebruikersprofiel voor WhatsApp-link.
   naam, aantalGetallen, minGetal, maxGetal, bonusBal
 
 /prijsConfig/default
-  modus: 'alle_goed_wint'  ← actief
+  modus: 'alle_goed_wint'
 
 /paymentConfig/main
   activeProvider, providers, tikkieLink
@@ -171,24 +178,19 @@ Gebruikt telefoonnummer uit gebruikersprofiel voor WhatsApp-link.
   naam, startDatum, eindDatum, status
 
 /trekkingen/{id}
-  nummers[], bonusBal, seizoenId, verwerkt, ingevoerdDoor, ingevoerdDoorNaam, datum
+  nummers[], bonusBal, seizoenId, verwerkt, ingevoerdDoor, datum
 
 /resultaten/{id}
-  userId, userNaam, ticketId, ticketNaam, nummersGoed[], aantalGoed,
-  bonusGoed, punten, isWinnaar, trekkingId, seizoenId
+  userId, userNaam, ticketId, nummersGoed[], aantalGoed,
+  punten, isWinnaar, trekkingId, seizoenId
 
 /betalingen/{id}
   userId, userNaam, bedrag, omschrijving, provider, status,
   trekkingWeek, tikkieGeopend, aangemaakt, bevestigd, bevestigdDoor
 
 /kasmutaties/{id}
-  bedrag, type, omschrijving, datum, userId, betalingId, aangemaaktDoor
-
-/auditLog/{id}
-  actie, omschrijving, userId, userNaam, datum
+  bedrag, type, omschrijving, datum, userId, betalingId
 ```
-
-**Regel:** `kasSaldo` wordt NOOIT opgeslagen — altijd `berekenKasSaldo(kasmutaties)`.
 
 ---
 
@@ -196,76 +198,65 @@ Gebruikt telefoonnummer uit gebruikersprofiel voor WhatsApp-link.
 
 | Functie | Trigger | Wat |
 |---|---|---|
-| `onTrekkingVerwerkt` | Nieuwe trekking | Controle-engine, resultaten, push alle leden |
-| `onBetalingBevestigd` | Betaling → 'betaald' | Push naar lid |
-| `onBetalingsHerinnering` | Vrijdag 09:00 | Push naar leden met status 'open' |
+| `onTrekkingVerwerkt` | Nieuwe trekking | Controle-engine, resultaten, push |
+| `onBetalingBevestigd` | Betaling → betaald | Push naar lid |
+| `onBetalingsHerinnering` | Vrijdag 09:00 | Push naar open betalingen |
 | `onTrekkingHerinnering` | Zaterdag 19:30 | Push naar beheerders |
-| `onBetalingenAanmaken` | Trekking verwerkt | 'open' betalingen voor volgende week |
-
-**Runtime:** Node.js 22
+| `onBetalingenAanmaken` | Trekking verwerkt | Open betalingen volgende week |
 
 ---
 
 ## Pagina's
 
-| Route | Beschrijving | Rol |
-|---|---|---|
-| `/` | Login | Iedereen |
-| `/dashboard` | Lid dashboard + confetti winnaar-scherm | Lid |
-| `/trekkingen` | Trekking overzicht + invoer | Lid+ |
-| `/trekkingen/[id]` | Trekking detail (eigen nummers) | Lid+ |
-| `/ranglijst` | Seizoen ranglijst | Lid+ |
-| `/hall-of-fame` | All-time records | Lid+ |
-| `/kas` | Kasboek | Lid+ |
-| `/betalen` | Betaalflow + tijdsblokkade | Lid+ |
-| `/deelnemers` | Simpele ledenlijst | Lid+ |
-| `/spelregels` | Spelregels + betaalcyclus | Lid+ |
-| `/help` | Handleiding 10 tabbladen | Lid+ |
-| `/profiel` | Profiel, naam, ticket, notificaties | Lid+ |
-| `/leden` | Ledenbeheer + rollen | Kashouder+ |
-| `/kashouder` | Kashouder dashboard (weekfilter) | Kashouder+ |
-| `/kashouder/financieel` | Financieel beheer | Kashouder+ |
-| `/beheerder` | Beheerder dashboard | Beheerder |
-| `/beheerder/admin` | Admin paneel (5 tabs) | Beheerder |
+| Route | Rol |
+|---|---|
+| `/dashboard` | Lid — met confetti winnaar-scherm |
+| `/betalen` | Lid — Tikkie blokkade + tijdsblokkade za/zo |
+| `/trekkingen` | Lid+ — scrollbare invoer modal |
+| `/trekkingen/[id]` | Lid+ — eigen nummers uit profiel |
+| `/deelnemers` | Lid — alleen namen |
+| `/spelregels` | Lid — spelregels + betaalcyclus |
+| `/help` | Lid — 10 tabbladen |
+| `/profiel` | Lid — naam, ticket, notificaties |
+| `/kashouder` | Kashouder — weekfilter W28 |
+| `/kashouder/financieel` | Kashouder — betalingen + WhatsApp |
+| `/leden` | Kashouder+ — rollen beheren |
+| `/beheerder` | Beheerder — live dashboard |
+| `/beheerder/admin` | Beheerder — 5 tabs |
 
 ---
 
-## STATUS PER 5 JULI 2026
+## STATUS PER 7 JULI 2026
 
-### Volledig werkend
-- ✅ Alle inlogmethoden
-- ✅ Push notificaties (data-only payload)
-- ✅ Betaalcyclus automatisch
-- ✅ Tijdsblokkade betalen (za 18:00+ en zo)
-- ✅ ISO-8601 weekberekening (client + functions)
-- ✅ Weekfilter kashouder dashboard
-- ✅ Prijsmodus `alle_goed_wint` actief in Firestore
-- ✅ 1 ticket per persoon
-- ✅ Confetti winnaar-scherm met WhatsApp kashouder
-- ✅ Uitgebreide push-notificaties met pot-bedrag
-- ✅ Trekking detail met eigen nummers
-- ✅ Scrollbare modals
-- ✅ Live dashboards
+### Volledig werkend ✅
+- Betaalcyclus automatisch (W28)
+- Betaalvoortgang weekfilter correct
+- Tijdsblokkade za 18:00 en zo
+- ISO-8601 weekberekening
+- Prijsmodus `alle_goed_wint` actief
+- Confetti winnaar-scherm
+- Push-notificaties met verhaal
+- Trekking detail met eigen nummers
+- Kashouder dashboard weekfilter
 
-### Huidige situatie
-- Eerste trekking (4 juli W27) was testdraai
-- Ronde loopt door tot iemand 6 goed heeft
-- Na eerste echte winnaar → testdata opruimen → schone start
-- Tikkie-link verloopt 14 juli → nieuwe link aanmaken
+### Openstaand ⏳
+- Verifiëren bug — nog uit te zoeken
+- Testdata opruimen na eerste echte winnaar
+- Nieuwe Tikkie-link vóór 14 juli
 
-### Openstaand
-- ⏳ Verifiëren bug — nog uit te zoeken
-- ⏳ Testdata opruimen na eerste echte winnaar
-- ⏳ Nieuwe Tikkie-link vóór 14 juli
-
-### Nog te deployen
-1. `lottoapp-betaal-blokkade.zip` — tijdsblokkade za/zo
-2. `lottoapp-winnaar-scherm.zip` — confetti scherm
+### Aankomende zaterdag 11 juli
+```
+Ma 6 juli → W28, leden betalen
+Vr 10 juli 09:00 → automatische herinnering
+Za 11 juli 18:00 → betalen geblokkeerd
+Za 11 juli 19:30 → trekking invoeren
+Za 11 juli → eerste echte test van volledige cyclus
+```
 
 ---
 
 ## Handige links
-- Live app: https://lotto-app-eight-chi.vercel.app
+- Live: https://lotto-app-eight-chi.vercel.app
 - Repo: github.com/stuctech-eng/LottoApp
-- Firebase Console: console.firebase.google.com
+- Firebase: console.firebase.google.com
 - Lotto uitslag: https://lotto.nederlandseloterij.nl/trekkingsuitslag

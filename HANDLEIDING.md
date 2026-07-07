@@ -1,6 +1,6 @@
 # LottoClub — Gebruikershandleiding
 
-**Versie:** 3.0 · **Datum:** 5 juli 2026
+**Versie:** 4.0 · **Datum:** 7 juli 2026
 
 ---
 
@@ -19,6 +19,18 @@ LottoClub is een app voor een lottovereniging. Leden betalen elke week €4 inle
 5. Open de app voortaan via het **LottoClub-icoontje** op je beginscherm
 
 > ⚠️ Push-notificaties werken ALLEEN via het beginscherm-icoontje, niet via Safari.
+
+---
+
+## Installatie op Android
+
+1. Open **Chrome** → ga naar `lotto-app-eight-chi.vercel.app`
+2. Tik op de **drie puntjes** rechtsboven
+3. Kies **"Toevoegen aan startscherm"**
+4. Open de app via het icoontje op je startscherm
+5. Ga naar Profiel → Push notificaties → schakel in → geef toestemming
+
+> ⚠️ Als notificaties niet werken: Android Instellingen → Apps → Chrome → Meldingen → Toestaan. Dan opnieuw proberen via de app.
 
 ---
 
@@ -58,43 +70,103 @@ Pot wordt gelijkelijk verdeeld.
 
 ```
 Maandag — nieuwe week begint, betalen kan weer
-Ma t/m vr — betaal via Tikkie, meld in app
+Ma t/m za 18:00 — betaal via Tikkie, meld in app
 Vrijdag 09:00 — automatische herinnering als je niet betaald hebt
 Zaterdag 18:00 — betalen geblokkeerd (ballen vallen zo)
 Zaterdag 19:30 — beheerder krijgt melding om uitslag in te voeren
 Zaterdag avond — trekking verwerkt, iedereen krijgt push
+Zondag — geblokkeerd, betalen kan pas weer maandag
 ```
 
-> ⚠️ **Niet betalen op zondag** — dat is nog de oude week en telt niet mee voor de aankomende trekking. Wacht tot maandag.
+> ⚠️ **Niet betalen op zondag of na zaterdag 18:00** — dat telt niet mee voor de aankomende trekking.
+
+---
+
+## Hoe alles samenwerkt
+
+### Betaalflow stap voor stap
+
+```
+1. Na de trekking op zaterdag
+   → App maakt automatisch een openstaande betaling aan
+      voor elk actief lid voor de volgende week
+
+2. Vrijdag 09:00
+   → Automatische push-herinnering naar wie nog niet betaald heeft
+
+3. Lid betaalt (maandag t/m zaterdag voor 18:00)
+   → Tikt "Betaal via Tikkie" in de app
+   → Tikkie opent — lid betaalt €4
+   → Lid gaat terug naar app
+   → Tikt "Ik heb betaald"
+   → Betaling geregistreerd voor die week
+
+4. Kashouder bevestigt
+   → Checkt Tikkie — geld ontvangen?
+   → Tikt ✓ in de app
+   → Kasmutatie aangemaakt, kassaldo bijgewerkt
+   → Lid krijgt push: "✅ Betaling bevestigd"
+
+5. Zaterdag: trekking verwerkt
+   → Alleen leden met bevestigde betaling doen mee
+   → Kassaldo = pot van alle bevestigde betalingen
+```
+
+### Trekkingsflow stap voor stap
+
+```
+1. Zaterdag 19:30
+   → Beheerder krijgt push: "🎱 Lotto-uitslag invoeren"
+
+2. Beheerder opent Trekkingen → "+ Invoeren"
+   → Tikt link naar officiële uitslag
+   → Voert 6 nummers in
+   → Tikt "✓ Trekking opslaan & verwerken"
+
+3. Automatisch (server-side):
+   → Controleert alle tickets van betalende leden
+   → Ranglijst bijgewerkt
+   → Resultaten opgeslagen
+
+4. Push naar alle deelnemers:
+   → Winnaar: "🎰 Jackpot! De ballen zijn gevallen... Jij wint €X!"
+   → Verliezers: "🎱 Jij had X goed. Pot groeit naar €X!"
+   → Niet-betalers: "🎱 Trekking gemist. Doe volgende week mee!"
+
+5. Winnaar opent app
+   → Confetti scherm met pot-bedrag
+   → WhatsApp knop naar kashouder
+   → Kashouder maakt bedrag over
+   → Registreert uitbetaling in app
+
+6. Automatisch:
+   → Nieuwe openstaande betalingen aangemaakt voor volgende week
+   → Cyclus herhaalt
+```
 
 ---
 
 ## Als LID
 
 ### Ticket aanmaken
-1. Ga naar **Profiel** → tik **"+ Ticket toevoegen"**
+1. **Profiel** → tik **"+ Ticket toevoegen"**
 2. Vul 6 unieke nummers in (1-45)
 3. Geef je ticket een naam
 4. Scroll naar beneden → tik **"✓ Opslaan"**
 
-### Betalen (elke week, maandag t/m zaterdag voor 18:00)
-1. Tik op **"💳 Betaal €4"** op het dashboard
+### Betalen (elke week, ma t/m za voor 18:00)
+1. **Dashboard** → tik **"💳 Betaal €4"**
 2. Tik **"💳 Betaal nu via Tikkie"** — Tikkie opent
 3. Betaal €4 via Tikkie
-4. Ga terug naar de app — knop is nu actief
+4. Ga terug naar app — knop is nu actief
 5. Tik **"✓ Ik heb betaald — €4"**
-6. Kashouder bevestigt → push: **"✅ Betaling bevestigd"**
-
-> ⚠️ Betaal EERST via Tikkie — daarna pas melden. De knop is geblokkeerd totdat je Tikkie hebt geopend.
+6. Wacht op bevestiging van kashouder
 
 ### Als je gewonnen hebt 🏆
-Open de app na de trekking — je ziet een **confetti-scherm** met:
+Open de app → confetti-scherm verschijnt automatisch met:
 - JACKPOT! en het pot-bedrag
-- Een WhatsApp-knop naar de kashouder
-- Stuur de kashouder een bericht — die maakt het geld over
-
-### Trekkingen bekijken
-Ga naar **Trekkingen** → tik op een trekking → zie jouw eigen nummers en hoeveel je goed had.
+- WhatsApp-knop naar de kashouder
+- Stuur bericht → kashouder maakt geld over
 
 ---
 
@@ -102,19 +174,22 @@ Ga naar **Trekkingen** → tik op een trekking → zie jouw eigen nummers en hoe
 
 ### Betaling bevestigen
 1. **Dashboard** → te verifiëren betaling → tik **✓**
-2. Controleer eerst in Tikkie of het geld echt is binnengekomen
-3. Na bevestiging: lid krijgt push, kasmutatie aangemaakt
+2. Check eerst in Tikkie of het geld is binnengekomen
+3. Na bevestiging → lid krijgt push, kasmutatie aangemaakt
+
+### Betaalvoortgang
+Het dashboard toont alleen betalingen van de **huidige week**. Vorige weken tellen niet mee. Kassaldo blijft altijd optellen over alle weken.
 
 ### Winnaar uitbetalen
 1. Winnaar stuurt WhatsApp via de app
-2. Maak het pot-bedrag over via bank-overboeking
-3. **Financieel beheer** → "Uitbetaling registreren" → kassaldo bijgewerkt
+2. Maak bedrag over via bank
+3. **Financieel** → "Uitbetaling registreren" → kassaldo bijgewerkt
 
-### Tikkie-link instellen/vernieuwen
-1. Open Tikkie-app → maak betaalverzoek aan
+### Tikkie-link vernieuwen (vóór vervaldatum)
+1. Tikkie-app → nieuw betaalverzoek
 2. Omschrijving: "LottoClub - wekelijkse inleg"
 3. Open bedrag, geen vervaldatum
-4. Kopieer **alleen de URL** (`https://tikkie.me/pay/...`)
+4. Kopieer **alleen de URL**
 5. **Beheer → Admin → Instellingen → Tikkie-link** → plak → opslaan
 
 ---
@@ -122,17 +197,16 @@ Ga naar **Trekkingen** → tik op een trekking → zie jouw eigen nummers en hoe
 ## Als BEHEERDER
 
 ### Trekking invoeren
-1. Zaterdag 19:30 → push: *"🎱 Lotto-uitslag invoeren"*
+1. Zaterdag 19:30 → push ontvangen
 2. **Trekkingen** → **"+ Invoeren"**
 3. Tik **"🔗 Officiële uitslag opzoeken"**
-4. Vul 6 nummers in → tik **"✓ Trekking opslaan & verwerken"**
+4. Vul 6 nummers in → **"✓ Trekking opslaan & verwerken"**
 5. Iedereen krijgt automatisch een push
 
-### Na de trekking (automatisch)
-- Resultaten opgeslagen
-- Ranglijstpunten bijgewerkt
-- Betalingen voor volgende week aangemaakt
-- Leden met 'open' betaling krijgen vrijdag herinnering
+### Prijsmodus instellen
+**Beheer → Admin → Prijzen → "🎯 Alleen alle nummers goed wint" → "💾 Prijsmodus opslaan"**
+
+Dit staat al correct ingesteld op `alle_goed_wint`.
 
 ---
 
@@ -147,10 +221,6 @@ Ga naar **Trekkingen** → tik op een trekking → zie jouw eigen nummers en hoe
 | ⏰ Betaalherinnering | Vrijdag 09:00 | Leden met open betaling |
 | 🎱 Uitslag invoeren | Zaterdag 19:30 | Beheerders |
 
-### Inschakelen
-1. App via beginscherm-icoontje openen
-2. **Profiel** → Push notificaties → schakel in
-
 ---
 
 ## Veelgestelde vragen
@@ -158,22 +228,23 @@ Ga naar **Trekkingen** → tik op een trekking → zie jouw eigen nummers en hoe
 **De "Ik heb betaald" knop is grijs**
 → Tik eerst op "💳 Betaal nu via Tikkie"
 
-**Ik zie "Betalen niet mogelijk"**
+**Betalen niet mogelijk**
 → Het is zaterdag na 18:00 of zondag. Betaal vanaf maandag.
 
-**Ik zie "Betaling bevestigd" maar heb niet betaald**
-→ Dit is een betaling van een vorige week. De app toont alleen betalingen van de huidige week.
+**Ik ontvang geen notificaties (iPhone)**
+→ Open app via beginscherm-icoontje → Profiel → Push notificaties → schakel in
 
-**Ik ontvang geen notificaties**
-→ Open de app via het beginscherm-icoontje (niet Safari) → Profiel → Push notificaties → schakel in
+**Ik ontvang geen notificaties (Android)**
+→ Android Instellingen → Apps → Chrome → Meldingen → Toestaan
+→ App opnieuw openen via icoontje → Profiel → Push notificaties → aan
+
+**Betaalvoortgang toont 0%**
+→ Betalingen van vorige weken tellen niet mee. Alleen de huidige week telt.
 
 **Ik zie "Geen actief seizoen"**
-→ Beheerder moet nieuw seizoen starten via Beheer → Admin → Seizoen
+→ Beheer → Admin → Seizoen → "Nieuw seizoen starten"
 
-**Mijn ticket wordt niet geaccepteerd**
-→ Vul precies 6 unieke nummers in tussen 1 en 45
-
-**Ik wil mijn naam wijzigen**
+**Mijn naam klopt niet**
 → Profiel → Naam → wijzig → "Naam opslaan"
 
 ---
