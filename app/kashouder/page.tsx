@@ -6,7 +6,6 @@ import { useAuth } from '@/lib/auth-context';
 import {
   subscribeKasmutaties,
   subscribeBetalingen,
-  huidigTrekkingWeek,
   berekenKasSaldo,
   bevestigBetaling,
   wijsBetalingAf,
@@ -64,14 +63,7 @@ function KashouderPageContent() {
   const openBetalingen = betalingenDezeWeek.filter(b => b.status === 'open');
 
   // Betaalvoortgang alleen op basis van huidige week
-  const huidigeWeek = huidigTrekkingWeek();
-const betalingenDezeWeek = betalingen.filter(
-  b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
-);
-const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
-const teVerifieren = betalingenDezeWeek.filter(b => b.status === 'verificatie');
-const openBetalingen = betalingenDezeWeek.filter(b => b.status === 'open');
-
+  const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
   const totaalLeden = actieveLeden.length;
   const percentage = totaalLeden > 0 ? Math.round((aantalBetaald / totaalLeden) * 100) : 0;
