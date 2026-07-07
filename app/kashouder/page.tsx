@@ -1,4 +1,4 @@
-'use client'; // weekfix W28 - 7 jul 2026
+'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';

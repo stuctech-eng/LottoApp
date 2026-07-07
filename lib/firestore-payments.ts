@@ -4,7 +4,6 @@ import {
   updateDoc,
   doc,
   onSnapshot,
-  orderBy,
   query,
   where,
   serverTimestamp,
@@ -18,19 +17,28 @@ interface ActieUser {
   naam: string;
 }
 
-export function huidigTrekkingWeek(): string {
-  const nu = new Date();
-  const startJaar = new Date(Date.UTC(nu.getUTCFullYear(), 0, 1));
-  const weekNr = Math.ceil(
-    ((nu.getTime() - startJaar.getTime()) / 86400000 + startJaar.getUTCDay() + 1) / 7
-  );
-  return `${nu.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
+/**
+ * ISO-8601 weeknummer als string, bijv. "2026-W28".
+ * Week loopt van maandag t/m zondag.
+ */
+export function huidigTrekkingWeek(datum?: Date): string {
+  const d = new Date(Date.UTC(
+    (datum ?? new Date()).getFullYear(),
+    (datum ?? new Date()).getMonth(),
+    (datum ?? new Date()).getDate()
+  ));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNr = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
 }
 
 // ───────────────────────── Kasmutaties ─────────────────────────
 
 export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void) {
-  const q = query(collection(db, 'kasmutaties'), orderBy('datum', 'desc'));
+  // Geen orderBy — voorkomt index-problemen
+  const q = query(collection(db, 'kasmutaties'));
   return onSnapshot(
     q,
     (snap) => {
@@ -48,6 +56,8 @@ export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void)
           aangemaaktDoor: data.aangemaaktDoor,
         };
       });
+      // Sorteer client-side
+      mutaties.sort((a, b) => (b.datum?.toMillis() ?? 0) - (a.datum?.toMillis() ?? 0));
       callback(mutaties);
     },
     (err) => {
@@ -83,6 +93,7 @@ async function maakKasmutatie(input: {
 // ───────────────────────── Betalingen ─────────────────────────
 
 export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) {
+  // Geen orderBy — voorkomt index-problemen die silent lege array teruggeven
   const q = query(collection(db, 'betalingen'));
   return onSnapshot(
     q,
@@ -101,10 +112,11 @@ export function subscribeBetalingen(callback: (betalingen: Betaling[]) => void) 
           bevestigd: data.bevestigd ?? null,
           bevestigdDoor: data.bevestigdDoor ?? null,
           rondeId: data.rondeId,
+          trekkingWeek: data.trekkingWeek,
           tikkieGeopend: data.tikkieGeopend ?? false,
         };
       });
-      // Sorteer client-side — geen Firestore index nodig
+      // Sorteer client-side — nieuwste eerst
       betalingen.sort((a, b) => (b.aangemaakt?.toMillis() ?? 0) - (a.aangemaakt?.toMillis() ?? 0));
       callback(betalingen);
     },
@@ -134,14 +146,11 @@ export function subscribeUserBetalingen(uid: string, callback: (betalingen: Beta
           bevestigd: data.bevestigd ?? null,
           bevestigdDoor: data.bevestigdDoor ?? null,
           rondeId: data.rondeId,
+          trekkingWeek: data.trekkingWeek,
           tikkieGeopend: data.tikkieGeopend ?? false,
         };
       });
-      betalingen.sort((a, b) => {
-        const ta = a.aangemaakt?.toMillis() ?? 0;
-        const tb = b.aangemaakt?.toMillis() ?? 0;
-        return tb - ta;
-      });
+      betalingen.sort((a, b) => (b.aangemaakt?.toMillis() ?? 0) - (a.aangemaakt?.toMillis() ?? 0));
       callback(betalingen);
     },
     (err) => {
@@ -151,11 +160,6 @@ export function subscribeUserBetalingen(uid: string, callback: (betalingen: Beta
   );
 }
 
-/**
- * Lid meldt een betaling → status 'verificatie'.
- * tikkieGeopend wordt meegestuurd als false — wordt true zodra
- * het lid op de Tikkie-knop tikt (zie markeerTikkieGeopend).
- */
 export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving: string) {
   const week = huidigTrekkingWeek();
   const ref = await addDoc(collection(db, 'betalingen'), {
@@ -180,20 +184,12 @@ export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving
   return ref.id;
 }
 
-/**
- * Slaat op in Firestore dat het lid op de Tikkie-knop heeft getikt.
- * Wordt aangeroepen vanuit de betaalpagina zodra de Tikkie-link wordt geopend.
- * Na herladen van de pagina blijft de blokkade opgeheven.
- *
- * betalingId = de 'open' betaling van dit lid voor deze week.
- */
 export async function markeerTikkieGeopend(betalingId: string): Promise<void> {
   await updateDoc(doc(db, 'betalingen', betalingId), {
     tikkieGeopend: true,
   });
 }
 
-/** Kashouder bevestigt een betaling → status 'betaald' + kasmutatie + audit. */
 export async function bevestigBetaling(betaling: Betaling, kashouder: ActieUser) {
   await updateDoc(doc(db, 'betalingen', betaling.id), {
     status: 'betaald',
@@ -216,7 +212,6 @@ export async function bevestigBetaling(betaling: Betaling, kashouder: ActieUser)
   );
 }
 
-/** Kashouder wijst een betaling af → status 'afgewezen' + audit. */
 export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
   await updateDoc(doc(db, 'betalingen', betaling.id), {
     status: 'afgewezen',
@@ -230,8 +225,6 @@ export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
     { doelUserId: betaling.userId }
   );
 }
-
-// ───────────────────────── Uitbetalingen & correcties ─────────────────────────
 
 export async function registreerUitbetaling(input: {
   bedrag: number;

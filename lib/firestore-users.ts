@@ -19,7 +19,7 @@ export function subscribeAllUsers(
   callback: (users: User[]) => void,
   onError?: (err: Error) => void
 ) {
-  // Geen orderBy — voorkomt index-problemen die lege array teruggeven
+  // Geen orderBy — voorkomt index-problemen die silent lege array teruggeven
   const q = query(collection(db, 'users'));
   return onSnapshot(
     q,
