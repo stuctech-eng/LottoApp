@@ -1,10 +1,25 @@
 import type { NextConfig } from "next";
+import withSerwistInit from "@serwist/next";
+
+const withSerwist = withSerwistInit({
+  swSrc: "app/sw.ts",
+  swDest: "public/sw.js",
+  // Serwist ondersteunt (nog) geen Turbopack, de standaard dev-bundler
+  // in Next.js 16. Daarom staat de service worker in development uit —
+  // dit heeft geen invloed op productie (Vercel build gebruikt webpack
+  // voor de Serwist-compilatie).
+  disable: process.env.NODE_ENV === "development",
+  // Voorkomt geforceerde page reload wanneer een gebruiker weer online
+  // komt — belangrijk zodat niemand een half ingevuld formulier
+  // (bijv. tijdens het betalen) kwijtraakt.
+  reloadOnOnline: false,
+});
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  output: "standalone",
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: ["lucide-react"],
   },
 };
 
-export default nextConfig;
+export default withSerwist(nextConfig);
