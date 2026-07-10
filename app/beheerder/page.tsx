@@ -105,7 +105,7 @@ function BeheerderPageContent() {
             {[
               { icon: '🎱', label: 'Trekking invoeren', href: '/trekkingen', bg: 'var(--accent-soft)' },
               { icon: '👥', label: 'Leden beheren', href: '/leden', bg: 'var(--gold-soft)' },
-              { icon: '💰', label: 'Kas', href: '/kas', bg: 'var(--success-soft)' },
+              { icon: '💰', label: 'Kasboek', href: '/kas', bg: 'var(--success-soft)' },
               { icon: '💸', label: 'Financieel beheer', href: '/kashouder/financieel', bg: 'rgba(52,201,122,0.06)' },
               { icon: '💳', label: 'Mijn inleg betalen', href: '/betalen', bg: 'rgba(74,158,255,0.06)' },
               { icon: '⚙️', label: 'Instellingen', href: '/beheerder/admin', bg: 'var(--purple-soft)' },

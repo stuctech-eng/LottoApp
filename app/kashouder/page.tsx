@@ -20,8 +20,8 @@ import { Betaling, Kasmutatie, User, Seizoen, PaymentConfig } from '@/lib/types'
 
 const NAV = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard', active: true },
-  { href: '/kas', icon: '💰', label: 'Kas' },
-  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
+  { href: '/kas', icon: '📒', label: 'Kasboek' },
+  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
   { href: '/profiel', icon: '👤', label: 'Profiel' },
@@ -107,7 +107,7 @@ function KashouderPageContent() {
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>💸 Uitbetalen</div>
               </Link>
               <Link href="/kas" style={{ background: 'rgba(52,201,122,0.1)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 13, padding: 12, textAlign: 'center', textDecoration: 'none' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>💰 Kas</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>📒 Kasboek</div>
               </Link>
             </div>
           </div>
