@@ -2,14 +2,33 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth-context';
 import { subscribeKasmutaties, berekenKasSaldo } from '@/lib/firestore-payments';
 import { Kasmutatie } from '@/lib/types';
 
-const NAV = [
+const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/ranglijst', icon: '📈', label: 'Ranglijst' },
   { href: '/kas', icon: '💰', label: 'Kas', active: true },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
+];
+
+const NAV_KASHOUDER = [
+  { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
+  { href: '/kas', icon: '📒', label: 'Kasboek', active: true },
+  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
+];
+
+const NAV_BEHEERDER = [
+  { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/kas', icon: '💰', label: 'Kas', active: true },
+  { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
@@ -27,6 +46,7 @@ function maandKey(ts: Kasmutatie['datum']): string {
 }
 
 function KasPageContent() {
+  const { profile } = useAuth();
   const [mutaties, setMutaties] = useState<Kasmutatie[]>([]);
   const [laden, setLaden] = useState(true);
 
@@ -37,6 +57,14 @@ function KasPageContent() {
     });
     return unsub;
   }, []);
+
+  // Navigatie volgt de rol van de bezoeker — anders verlies je je
+  // rol-context zodra je vanuit Kas terug navigeert (bijv. beheerder
+  // die op "Dashboard" tikt en per ongeluk bij het Lid-dashboard
+  // uitkomt in plaats van /beheerder).
+  const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
+    : profile?.rol === 'kashouder' ? NAV_KASHOUDER
+    : NAV_LID;
 
   const saldo = berekenKasSaldo(mutaties);
 

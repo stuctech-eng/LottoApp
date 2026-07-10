@@ -12,13 +12,40 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
 
-const NAV = [
+const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/ranglijst', icon: '📈', label: 'Ranglijst' },
   { href: '/kas', icon: '💰', label: 'Kas' },
   { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
 ];
+
+const NAV_KASHOUDER = [
+  { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
+  { href: '/kas', icon: '📒', label: 'Kasboek' },
+  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
+];
+
+const NAV_BEHEERDER = [
+  { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
+  { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
+];
+
+// Route van het eigen dashboard per rol — gebruikt voor de terugknop
+// bovenaan, zodat een beheerder/kashouder niet per ongeluk bij het
+// Lid-dashboard uitkomt.
+const DASHBOARD_HREF: Record<string, string> = {
+  lid: '/dashboard',
+  kashouder: '/kashouder',
+  beheerder: '/beheerder',
+};
 
 const rolBadge: Record<string, { label: string; variant: string }> = {
   lid: { label: '🎱 Lid', variant: 'badge-blue' },
@@ -156,13 +183,21 @@ function ProfielPageContent() {
   const badge = profile ? rolBadge[profile.rol] : rolBadge.lid;
   const tickets = profile?.tickets ?? [];
 
+  // Navigatie en terugknop volgen de rol van de bezoeker — anders
+  // verlies je je rol-context zodra je vanuit Profiel terug navigeert
+  // (bijv. beheerder die uitkomt bij het Lid-dashboard).
+  const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
+    : profile?.rol === 'kashouder' ? NAV_KASHOUDER
+    : NAV_LID;
+  const dashboardHref = DASHBOARD_HREF[profile?.rol ?? 'lid'];
+
   return (
     <>
       <div className="bg-grid" />
       <div className="page">
         {/* Hero */}
         <div style={{ background: 'linear-gradient(180deg,#1a3a5c 0%,var(--navy) 100%)', padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 28px' }}>
-          <Link href="/dashboard" style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 20, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
+          <Link href={dashboardHref} style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, marginBottom: 20, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg,#4a9eff,#2070cc)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, border: '3px solid rgba(74,158,255,0.3)' }}>
@@ -309,22 +344,45 @@ function ProfielPageContent() {
           </div>
         </div>
 
-        {/* Help */}
+        {/* Info-links: Help, Spelregels, Deelnemers */}
         <div style={{ padding: '0 20px', marginBottom: 12 }}>
-          <Link href="/help" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>❓</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Handleiding & Help</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Hoe werkt de app? Uitleg per onderdeel</div>
-            </div>
-            <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
-          </Link>
+          <div className="section-title">Informatie</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Link href="/help" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>❓</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Handleiding & Help</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Hoe werkt de app? Uitleg per onderdeel</div>
+              </div>
+              <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+            </Link>
+
+            <Link href="/spelregels" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--gold-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📜</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Spelregels</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Hoe werkt het spel en de betaalcyclus</div>
+              </div>
+              <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+            </Link>
+
+            <Link href="/deelnemers" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>👥</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Deelnemers</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Wie doet er mee dit seizoen</div>
+              </div>
+              <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+            </Link>
+          </div>
         </div>
 
-        {/* Debug link */}
-        <div style={{ padding: '0 20px', marginBottom: 20 }}>
-          <a href="/debug-fcm" style={{ display: 'block', textAlign: 'center', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>🔍 FCM Diagnostiek</a>
-        </div>
+        {/* Debug link — alleen zichtbaar voor beheerder */}
+        {profile?.rol === 'beheerder' && (
+          <div style={{ padding: '0 20px', marginBottom: 20 }}>
+            <a href="/debug-fcm" style={{ display: 'block', textAlign: 'center', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>🔍 FCM Diagnostiek</a>
+          </div>
+        )}
 
         {/* Uitloggen */}
         <div style={{ padding: '0 20px', marginBottom: 8 }}>
