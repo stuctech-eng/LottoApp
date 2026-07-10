@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext", "webworker"],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -20,8 +20,7 @@
     ],
     "paths": {
       "@/*": ["./*"]
-    },
-    "types": ["@serwist/next/typings"]
+    }
   },
   "include": [
     "next-env.d.ts",
@@ -31,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "functions", "public/sw.js"]
+  "exclude": ["node_modules", "functions"]
 }
