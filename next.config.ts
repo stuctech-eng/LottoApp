@@ -13,6 +13,10 @@ const withSerwist = withSerwistInit({
   // komt — belangrijk zodat niemand een half ingevuld formulier
   // (bijv. tijdens het betalen) kwijtraakt.
   reloadOnOnline: false,
+  // Zorgt dat de /offline fallback-pagina altijd in de precache zit,
+  // ongeacht of een lid 'm ooit heeft bezocht. Verhoog de revision
+  // handmatig als de inhoud van app/offline/page.tsx wijzigt.
+  additionalPrecacheEntries: [{ url: "/offline", revision: "1" }],
 });
 
 const nextConfig: NextConfig = {
