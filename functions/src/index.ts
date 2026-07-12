@@ -128,15 +128,9 @@ async function getFcmTokens(userId: string, setting: keyof NotificationSettings)
   return tokensSnap.docs.map(d => d.data().token as string).filter(Boolean);
 }
 
-async function getAllFcmTokens(setting: keyof NotificationSettings): Promise<{ userId: string; tokens: string[] }[]> {
-  const usersSnap = await db.collection('users').where('actief', '==', true).get();
-  const results: { userId: string; tokens: string[] }[] = [];
-  for (const userDoc of usersSnap.docs) {
-    const tokens = await getFcmTokens(userDoc.id, setting);
-    if (tokens.length > 0) results.push({ userId: userDoc.id, tokens });
-  }
-  return results;
-}
+// getAllFcmTokens was hier ongebruikte dode code (nergens aangeroepen) —
+// veroorzaakte een TypeScript-buildfout door noUnusedLocals in tsconfig.
+// Verwijderd; geen functionaliteit verloren.
 
 async function sendToTokens(tokens: string[], notification: { title: string; body: string }, data?: Record<string, string>) {
   if (tokens.length === 0) return;
