@@ -128,12 +128,13 @@ function TrekkingDetailContent() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {(mijnNummers.length > 0 ? mijnNummers : trekking.nummers).map(n => {
-                      const hit = r.nummersGoed.includes(n);
+                      const hit = r.matchedNumbers.includes(n);
+                      const nieuwDezeWeek = r.nummersGoed.includes(n);
                       return (
                         <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div className={`bal ${hit ? 'bal-hit' : 'bal-normal'}`} style={{ width: 40, height: 40, fontSize: 14, flexShrink: 0 }}>{n}</div>
+                          <div className={`bal ${hit ? 'bal-hit' : 'bal-normal'} ${nieuwDezeWeek ? 'bal-laatste' : ''}`} style={{ width: 40, height: 40, fontSize: 14, flexShrink: 0 }}>{n}</div>
                           <span style={{ fontSize: 14, color: hit ? 'var(--success)' : 'var(--muted)' }}>
-                            {n} — {hit ? '✅ getrokken' : 'niet getrokken'}
+                            {n} — {hit ? '✅ getrokken' : 'niet getrokken'}{nieuwDezeWeek ? ' · nieuw deze week' : ''}
                           </span>
                         </div>
                       );
@@ -148,7 +149,11 @@ function TrekkingDetailContent() {
         {/* Alle deelnemers */}
         {resultaten.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: 8 }}>
-            <div className="section-title">Alle deelnemers</div>
+            <div className="section-title" style={{ marginBottom: 4 }}>Alle deelnemers</div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 10 }}>
+              <span className="bal bal-hit" style={{ width: 14, height: 14, fontSize: 0, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> geraakt deze speelreeks ·{' '}
+              <span className="bal bal-hit bal-laatste" style={{ width: 14, height: 14, fontSize: 0, display: 'inline-block', verticalAlign: 'middle', margin: '0 4px 0 6px' }} /> nieuw deze trekking
+            </div>
             {Object.values(
               resultaten.reduce<Record<string, Resultaat & { tickets: Resultaat[] }>>((acc, r) => {
                 if (!acc[r.userId]) acc[r.userId] = { ...r, tickets: [] };
@@ -169,9 +174,13 @@ function TrekkingDetailContent() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.userNaam}{isIk && <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 400 }}> (jij)</span>}</div>
                     <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                      {(ticketNummers.length > 0 ? ticketNummers : trekking.nummers).map(n => (
-                        <div key={n} className={`bal ${besteTicket.nummersGoed.includes(n) ? 'bal-hit' : 'bal-normal'}`} style={{ width: 24, height: 24, fontSize: 9 }}>{n}</div>
-                      ))}
+                      {(ticketNummers.length > 0 ? ticketNummers : trekking.nummers).map(n => {
+                        const hit = besteTicket.matchedNumbers.includes(n);
+                        const nieuwDezeWeek = besteTicket.nummersGoed.includes(n);
+                        return (
+                          <div key={n} className={`bal ${hit ? 'bal-hit' : 'bal-normal'} ${nieuwDezeWeek ? 'bal-laatste' : ''}`} style={{ width: 24, height: 24, fontSize: 9 }}>{n}</div>
+                        );
+                      })}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>

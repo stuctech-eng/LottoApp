@@ -5,6 +5,20 @@
  * Deze module is een pure functie. Geen Firestore, geen React,
  * geen Next.js, geen UI-afhankelijkheden. Alleen input → output.
  *
+ * SPELREGEL (enige, vaste spelmodus — "clubmodus"):
+ * Iedere trekking worden de getrokken nummers vergeleken met elk ticket.
+ * Elk nummer dat een speler goed heeft, wordt permanent bijgeschreven
+ * voor dat ticket binnen de huidige speelreeks — een nummer telt maar
+ * één keer mee, ook als het in een latere trekking nogmaals valt.
+ * Zodra een ticket 6 unieke goede nummers heeft verzameld, is dat
+ * ticket winnaar. Er kunnen meerdere winnaars zijn. Na een trekking met
+ * winnaar(s) sluit de speelreeks automatisch en begint een nieuwe
+ * (dat "sluiten" gebeurt impliciet: de aanroepende laag geeft vanaf de
+ * eerstvolgende trekking weer een lege vorigeMatches mee).
+ *
+ * Er is bewust geen ondersteuning voor andere spelmodi (hoogste score,
+ * vaste prijzen, etc.) — LottoClub gebruikt altijd deze ene spelregel.
+ *
  * Later kan exact dezelfde engine zonder herschrijving draaien in:
  * - Firebase Cloud Functions (server-side trigger op /trekkingen)
  * - Next.js API route
@@ -12,21 +26,26 @@
  * - Unit tests
  */
 
-import { SpelConfig, PrijsConfig, Ticket, Resultaat, Trekking } from './types';
+import { SpelConfig, Ticket, Resultaat, Trekking } from './types';
 
 // ─────────────────────── Input types ───────────────────────
+
+/** Eén ticket met de cumulatieve matches van vóór deze trekking (leeg = nieuwe speelreeks). */
+export interface TicketVoortgang {
+  ticket: Ticket;
+  vorigeMatches: number[];
+}
 
 export interface LidTickets {
   userId: string;
   userNaam: string;
-  tickets: Ticket[];
+  tickets: TicketVoortgang[];
 }
 
 export interface ControleInput {
   trekking: Trekking;
   deelnemers: LidTickets[];
   spelConfig: SpelConfig;
-  prijsConfig: PrijsConfig;
 }
 
 // ─────────────────────── Output types ───────────────────────
@@ -45,82 +64,38 @@ export interface ControleOutput {
 // ─────────────────────── Score berekening ───────────────────────
 
 /**
- * Berekent hoeveel nummers van een ticket overeenkomen
- * met de getrokken nummers.
+ * Berekent de nieuwe matches van déze trekking (nog niet eerder geraakt
+ * binnen de speelreeks) en de bijgewerkte cumulatieve verzameling.
+ * Een nummer dat al eerder is geraakt levert geen nieuw punt op, ook
+ * als het deze week weer valt.
  */
-function berekenScore(
+function berekenMatches(
   ticketNummers: number[],
   getrokken: number[],
-  bonusBal: number | null,
-  spelConfig: SpelConfig
-): { nummersGoed: number[]; aantalGoed: number; bonusGoed: boolean } {
+  vorigeMatches: number[]
+): { nieuweMatches: number[]; matchedNumbers: number[] } {
   const getrokkenSet = new Set(getrokken);
-  const nummersGoed = ticketNummers.filter(n => getrokkenSet.has(n));
-  const bonusGoed = spelConfig.bonusBal && bonusBal !== null
-    ? ticketNummers.includes(bonusBal)
-    : false;
-
+  const vorigeSet = new Set(vorigeMatches);
+  const nieuweMatches = ticketNummers.filter(n => getrokkenSet.has(n) && !vorigeSet.has(n));
   return {
-    nummersGoed,
-    aantalGoed: nummersGoed.length,
-    bonusGoed,
+    nieuweMatches,
+    matchedNumbers: [...vorigeMatches, ...nieuweMatches],
   };
 }
 
-/**
- * Berekent de punten voor een score.
- * Formule: aantalGoed * 10, bonus geeft +5 extra.
- * Later vervangbaar door een configureerbare puntentabel.
- */
-function berekenPunten(aantalGoed: number, bonusGoed: boolean): number {
-  return aantalGoed * 10 + (bonusGoed ? 5 : 0);
+function berekenBonusGoed(ticketNummers: number[], bonusBal: number | null, spelConfig: SpelConfig): boolean {
+  return spelConfig.bonusBal && bonusBal !== null ? ticketNummers.includes(bonusBal) : false;
 }
 
-// ─────────────────────── Winnaar bepaling ───────────────────────
-
-function bepaalWinnaars(
-  scores: { userId: string; userNaam: string; ticketId: string; ticketNaam: string; aantalGoed: number; bonusGoed: boolean; punten: number }[],
-  prijsConfig: PrijsConfig,
-  spelConfig: SpelConfig
-): { userId: string; userNaam: string; ticketNaam: string; aantalGoed: number; punten: number }[] {
-  if (scores.length === 0) return [];
-
-  switch (prijsConfig.modus) {
-    case 'alle_goed_wint': {
-      // Alleen winnen bij ALLE nummers goed (aantalGoed === aantalGetallen
-      // uit de spelconfig). Geen enkele score gehaald → geen winnaar deze
-      // ronde, pot blijft staan voor de volgende ronde (rollover).
-      return scores
-        .filter(s => s.aantalGoed === spelConfig.aantalGetallen)
-        .map(s => ({ userId: s.userId, userNaam: s.userNaam, ticketNaam: s.ticketNaam, aantalGoed: s.aantalGoed, punten: s.punten }));
-    }
-
-    case 'hoogste_score_wint': {
-      const maxPunten = Math.max(...scores.map(s => s.punten));
-      if (maxPunten === 0) return [];
-      return scores
-        .filter(s => s.punten === maxPunten)
-        .map(s => ({ userId: s.userId, userNaam: s.userNaam, ticketNaam: s.ticketNaam, aantalGoed: s.aantalGoed, punten: s.punten }));
-    }
-
-    case 'meerdere_winnaars': {
-      const min = prijsConfig.minimumScore ?? 3;
-      return scores
-        .filter(s => s.aantalGoed >= min)
-        .map(s => ({ userId: s.userId, userNaam: s.userNaam, ticketNaam: s.ticketNaam, aantalGoed: s.aantalGoed, punten: s.punten }));
-    }
-
-    case 'vaste_prijzen': {
-      // Iedereen met een vaste prijs voor hun score wint
-      const prijzen = prijsConfig.vastePrijzen ?? {};
-      return scores
-        .filter(s => s.aantalGoed in prijzen && (prijzen[s.aantalGoed] ?? 0) > 0)
-        .map(s => ({ userId: s.userId, userNaam: s.userNaam, ticketNaam: s.ticketNaam, aantalGoed: s.aantalGoed, punten: s.punten }));
-    }
-
-    default:
-      return [];
-  }
+/**
+ * Punten voor déze trekking — gebaseerd op alleen de NIEUWE matches,
+ * nooit op het cumulatieve totaal. Dit is bewust zo: ranglijstPunten
+ * wordt met FieldValue.increment() opgeteld per trekking, dus als hier
+ * het cumulatieve aantal zou worden gebruikt, tellen oude matches bij
+ * elke volgende trekking opnieuw mee.
+ */
+function berekenPunten(aantalNieuweMatches: number, bonusGoed: boolean): number {
+  return aantalNieuweMatches * 10 + (bonusGoed ? 5 : 0);
 }
 
 // ─────────────────────── Hoofd-engine ───────────────────────
@@ -128,48 +103,29 @@ function bepaalWinnaars(
 /**
  * De centrale controle-engine.
  *
- * Input:  trekking + alle deelnemers met tickets + spelConfig + prijsConfig
+ * Input:  trekking + alle deelnemers met tickets (elk met hun cumulatieve
+ *         matches van vóór deze trekking) + spelConfig
  * Output: resultaten (per ticket), winnaars, ranglijstUpdates
  *
  * Schrijft NIETS naar Firestore — dat doet de aanroepende laag
- * (client-side service of later Cloud Function).
+ * (client-side service of Cloud Function), die ook verantwoordelijk is
+ * voor het bepalen van de speelreeks-grens (alles na de laatste
+ * trekking met winnaar, of vanaf het begin als nog nooit gewonnen).
  */
 export function verwerkTrekking(input: ControleInput): ControleOutput {
-  const { trekking, deelnemers, spelConfig, prijsConfig } = input;
-
-  const alleScores: {
-    userId: string;
-    userNaam: string;
-    ticketId: string;
-    ticketNaam: string;
-    aantalGoed: number;
-    bonusGoed: boolean;
-    punten: number;
-    nummersGoed: number[];
-  }[] = [];
+  const { trekking, deelnemers, spelConfig } = input;
 
   const resultaten: ControleOutput['resultaten'] = [];
+  const winnaars: ControleOutput['winnaars'] = [];
+  const puntPerUser: Record<string, number> = {};
 
   for (const deelnemer of deelnemers) {
-    for (const ticket of deelnemer.tickets) {
-      const { nummersGoed, aantalGoed, bonusGoed } = berekenScore(
-        ticket.nummers,
-        trekking.nummers,
-        trekking.bonusBal,
-        spelConfig
-      );
-      const punten = berekenPunten(aantalGoed, bonusGoed);
-
-      alleScores.push({
-        userId: deelnemer.userId,
-        userNaam: deelnemer.userNaam,
-        ticketId: ticket.id,
-        ticketNaam: ticket.naam,
-        aantalGoed,
-        bonusGoed,
-        punten,
-        nummersGoed,
-      });
+    for (const { ticket, vorigeMatches } of deelnemer.tickets) {
+      const { nieuweMatches, matchedNumbers } = berekenMatches(ticket.nummers, trekking.nummers, vorigeMatches);
+      const bonusGoed = berekenBonusGoed(ticket.nummers, trekking.bonusBal, spelConfig);
+      const aantalGoed = matchedNumbers.length; // cumulatief binnen de speelreeks
+      const punten = berekenPunten(nieuweMatches.length, bonusGoed); // alleen nieuw deze trekking
+      const isWinnaar = aantalGoed >= spelConfig.aantalGetallen;
 
       resultaten.push({
         userId: deelnemer.userId,
@@ -179,32 +135,25 @@ export function verwerkTrekking(input: ControleInput): ControleOutput {
         rondeId: trekking.rondeId,
         seizoenId: trekking.seizoenId,
         trekkingId: trekking.id,
-        nummersGoed,
+        nummersGoed: nieuweMatches,
+        matchedNumbers,
         aantalGoed,
         bonusGoed,
         punten,
-        isWinnaar: false, // wordt hieronder ingevuld
+        isWinnaar,
       });
+
+      if (isWinnaar) {
+        winnaars.push({ userId: deelnemer.userId, userNaam: deelnemer.userNaam, ticketNaam: ticket.naam, aantalGoed, punten });
+      }
+
+      // Beste ticket per user telt voor de ranglijst-punten van deze trekking
+      if (!(deelnemer.userId in puntPerUser) || punten > puntPerUser[deelnemer.userId]) {
+        puntPerUser[deelnemer.userId] = punten;
+      }
     }
   }
 
-  const winnaars = bepaalWinnaars(alleScores, prijsConfig, spelConfig);
-  const winnaarKeys = new Set(winnaars.map(w => `${w.userId}-${w.ticketNaam}`));
-
-  // Markeer winnaars in resultaten
-  for (const r of resultaten) {
-    if (winnaarKeys.has(`${r.userId}-${r.ticketNaam}`)) {
-      r.isWinnaar = true;
-    }
-  }
-
-  // Ranglijst updates: extra punten per userId (beste ticket telt)
-  const puntPerUser: Record<string, number> = {};
-  for (const s of alleScores) {
-    if (!puntPerUser[s.userId] || s.punten > puntPerUser[s.userId]) {
-      puntPerUser[s.userId] = s.punten;
-    }
-  }
   const ranglijstUpdates: RanglijstUpdate[] = Object.entries(puntPerUser).map(([userId, extraPunten]) => ({
     userId,
     extraPunten,

@@ -6,10 +6,11 @@ import { doc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subscribeAuditLog } from '@/lib/firestore-audit';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
-import { subscribeSpelConfig, subscribePrijsConfig, DEFAULT_SPELCONFIG, DEFAULT_PRIJSCONFIG } from '@/lib/firestore-spelconfig';
+import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelconfig';
 import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
+import { herberekenHuidigeSpeelreeks } from '@/lib/firestore-herberekening';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
-import { AuditLogEntry, PaymentConfig, SpelConfig, PrijsConfig, Seizoen } from '@/lib/types';
+import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen } from '@/lib/types';
 
 const NAV = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
@@ -28,14 +29,14 @@ function AdminPageContent() {
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
   const [spelConfig, setSpelConfig] = useState<SpelConfig>(DEFAULT_SPELCONFIG);
-  const [prijsConfig, setPrijsConfig] = useState<PrijsConfig>(DEFAULT_PRIJSCONFIG);
   const [seizoenen, setSeizoenen] = useState<Seizoen[]>([]);
   const [actiefsSeizoen, setActiefSeizoen] = useState<Seizoen | null>(null);
   const [nieuwSeizoenNaam, setNieuwSeizoenNaam] = useState('');
   const [spelBezig, setSpelBezig] = useState(false);
   const [spelOk, setSpelOk] = useState(false);
-  const [prijsBezig, setPrijsBezig] = useState(false);
-  const [prijsOk, setPrijsOk] = useState(false);
+  const [herberekenBezig, setHerberekenBezig] = useState(false);
+  const [herberekenResultaat, setHerberekenResultaat] = useState<string | null>(null);
+  const [herberekenError, setHerberekenError] = useState<string | null>(null);
 
   const [tikkieLink, setTikkieLink] = useState('');
   const [tikkieBezig, setTikkieBezig] = useState(false);
@@ -50,10 +51,9 @@ function AdminPageContent() {
       setTikkieLink(cfg.tikkieLink ?? '');
     });
     const u3 = subscribeSpelConfig(setSpelConfig);
-    const u4 = subscribePrijsConfig(setPrijsConfig);
     const u5 = subscribeAlleSeizoenen(setSeizoenen);
     const u6 = subscribeSeizoen(setActiefSeizoen);
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
+    return () => { u1(); u2(); u3(); u5(); u6(); };
   }, []);
 
   const handleSpelConfigSave = async () => {
@@ -67,14 +67,30 @@ function AdminPageContent() {
     }
   };
 
-  const handlePrijsConfigSave = async () => {
-    setPrijsBezig(true);
+  const handleHerbereken = async () => {
+    if (!actiefsSeizoen) return;
+    const bevestigd = window.confirm(
+      'Dit verwijdert alle resultaten van de HUIDIGE speelreeks en berekent ze opnieuw vanaf de eerste trekking van die speelreeks. Oudere, al afgesloten speelreeksen blijven ongewijzigd. Doorgaan?'
+    );
+    if (!bevestigd) return;
+
+    setHerberekenBezig(true);
+    setHerberekenError(null);
+    setHerberekenResultaat(null);
     try {
-      await setDoc(doc(db, 'prijsConfig', 'default'), { modus: prijsConfig.modus }, { merge: true });
-      setPrijsOk(true);
-      setTimeout(() => setPrijsOk(false), 2000);
+      const result = await herberekenHuidigeSpeelreeks(actiefsSeizoen.id);
+      if (result.herberekend === 0) {
+        setHerberekenResultaat(result.bericht ?? 'Geen trekkingen om te herberekenen.');
+      } else {
+        const winnaarsTekst = result.winnaars && result.winnaars.length > 0
+          ? ` Winnaar(s): ${result.winnaars.join(', ')}.`
+          : ' Nog geen winnaar.';
+        setHerberekenResultaat(`✓ ${result.herberekend} trekking(en) opnieuw verwerkt.${winnaarsTekst}`);
+      }
+    } catch (err) {
+      setHerberekenError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
     } finally {
-      setPrijsBezig(false);
+      setHerberekenBezig(false);
     }
   };
 
@@ -278,27 +294,47 @@ function AdminPageContent() {
         {/* PRIJZEN */}
         {tab==='prijzen' && (
           <div style={{ padding: '0 20px' }}>
-            <div className="section-title">Prijsverdeling</div>
-            <div className="card" style={{ padding: 18 }}>
-              <label className="form-label">Modus</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-                {([['alle_goed_wint','🎯 Alleen alle nummers goed wint (standaard)'],['hoogste_score_wint','🏆 Hoogste score wint'],['meerdere_winnaars','👥 Meerdere winnaars'],['vaste_prijzen','💰 Vaste prijzen per score']] as const).map(([modus, label]) => (
-                  <div key={modus} onClick={() => setPrijsConfig(p => ({...p, modus}))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${prijsConfig.modus === modus ? 'var(--accent)' : 'var(--border)'}`, background: prijsConfig.modus === modus ? 'var(--accent-soft)' : 'var(--surface2)', cursor: 'pointer' }}>
-                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--white)' }}>{label}</span>
-                    {prijsConfig.modus === modus && <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>}
-                  </div>
-                ))}
+            <div className="section-title">Spelregel</div>
+            <div className="card" style={{ padding: 18, marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>🎯 6 goed is winnaar (vaste spelmodus)</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.7 }}>
+                Iedere trekking worden de getrokken nummers vergeleken met elk ticket.
+                Elk nummer dat een speler goed heeft, wordt permanent bijgeschreven voor
+                dat ticket binnen de huidige speelreeks — een nummer telt maar één keer
+                mee, ook als het later nogmaals valt. Zodra een ticket alle {spelConfig.aantalGetallen}{' '}
+                nummers heeft verzameld, is dat ticket winnaar. Er kunnen meerdere
+                winnaars tegelijk zijn. Na een trekking met winnaar(s) sluit de
+                speelreeks automatisch en begint een nieuwe.
               </div>
-              <div style={{ background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 10, padding: '10px 12px', marginBottom: 16, fontSize: 11, color: 'var(--accent)', lineHeight: 1.5 }}>
-                💡 Bij &quot;Alleen alle nummers goed wint&quot;: is er geen winnaar met een volledig juist ticket, dan is er die ronde geen winnaar — de pot blijft staan voor de volgende ronde (rollover).
+              <div style={{ background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.2)', borderRadius: 10, padding: '10px 12px', marginTop: 14, fontSize: 11, color: 'var(--accent)', lineHeight: 1.5 }}>
+                💡 Is er geen winnaar deze trekking, dan blijft de pot staan (rollover) en telt iedereen zijn cumulatieve matches gewoon door naar de volgende trekking.
+              </div>
+            </div>
+
+            <div className="section-title">Herberekenen</div>
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.6 }}>
+                Verwijdert alle resultaten van de <strong>huidige, nog lopende speelreeks</strong> en
+                berekent ze opnieuw vanaf de eerste trekking daarvan. Handig als er ooit
+                een fout wordt ontdekt of tijdens het testen. Al afgesloten speelreeksen
+                (met een eerdere winnaar) blijven ongewijzigd.
               </div>
               <button
-                onClick={handlePrijsConfigSave}
-                disabled={prijsBezig}
-                style={{ width: '100%', background: prijsOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--gold),#c08820)', color: prijsOk ? 'white' : 'var(--navy)', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: prijsBezig ? 0.6 : 1 }}
+                onClick={handleHerbereken}
+                disabled={herberekenBezig || !actiefsSeizoen}
+                style={{ width: '100%', background: 'linear-gradient(135deg,var(--warning),#c07000)', color: 'var(--navy)', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: herberekenBezig || !actiefsSeizoen ? 0.6 : 1 }}
               >
-                {prijsOk ? '✓ Opgeslagen' : prijsBezig ? 'Opslaan…' : '💾 Prijsmodus opslaan'}
+                {herberekenBezig ? '⏳ Bezig met herberekenen…' : '🔄 Herbereken huidige speelreeks'}
               </button>
+              {!actiefsSeizoen && (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>Geen actief seizoen — start eerst een seizoen bij het tabblad Seizoen.</div>
+              )}
+              {herberekenResultaat && (
+                <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 10, lineHeight: 1.5 }}>{herberekenResultaat}</div>
+              )}
+              {herberekenError && (
+                <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 10, lineHeight: 1.5 }}>⚠️ {herberekenError}</div>
+              )}
             </div>
           </div>
         )}

@@ -417,7 +417,7 @@ function DashboardPageContent() {
                 </div>
                 <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
                   {laatsteTrekking.nummers.map(n => {
-                    const isHit = mijnResultaatLaatste?.nummersGoed?.includes(n) ?? false;
+                    const isHit = mijnResultaatLaatste?.matchedNumbers?.includes(n) ?? false;
                     return (
                       <div key={n} className={`bal ${isHit ? 'bal-hit' : 'bal-normal'}`} style={{ width: 34, height: 34, fontSize: 12 }}>{n}</div>
                     );
@@ -510,3 +510,4 @@ export default function DashboardPage() {
     </ProtectedRoute>
   );
 }
+

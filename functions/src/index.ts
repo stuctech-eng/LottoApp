@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
 import { verwerkTrekking, LidTickets } from './lib/controle-engine';
-import { SpelConfig, PrijsConfig, Trekking, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS } from './lib/types';
+import { SpelConfig, Trekking, NotificationSettings, DEFAULT_NOTIFICATION_SETTINGS } from './lib/types';
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -18,11 +18,66 @@ async function getSpelConfig(): Promise<SpelConfig> {
   return { naam: d.naam, aantalGetallen: d.aantalGetallen, minGetal: d.minGetal, maxGetal: d.maxGetal, bonusBal: d.bonusBal };
 }
 
-async function getPrijsConfig(): Promise<PrijsConfig> {
-  const snap = await db.doc('prijsConfig/default').get();
-  if (!snap.exists) return { modus: 'alle_goed_wint' };
-  const d = snap.data()!;
-  return { modus: d.modus, vastePrijzen: d.vastePrijzen, minimumScore: d.minimumScore };
+/**
+ * Bepaalt welke reeds verwerkte trekkingen van dit seizoen bij de HUIDIGE
+ * speelreeks horen: alles ná de laatste trekking met een winnaar, of alles
+ * vanaf het begin als er nog nooit gewonnen is. Geen orderBy() gebruikt
+ * (architectuurregel) — sortering gebeurt hier in JS.
+ *
+ * `uitgesloten` is de trekkingId die zelf nog niet meetelt (de trekking
+ * die op dit moment verwerkt wordt).
+ */
+async function bepaalSpeelreeksTrekkingen(
+  seizoenId: string,
+  uitgesloten?: string
+): Promise<{ id: string; datum: Date }[]> {
+  const snap = await db.collection('trekkingen')
+    .where('seizoenId', '==', seizoenId)
+    .where('verwerkt', '==', true)
+    .get();
+
+  const trekkingen = snap.docs
+    .map(d => ({ id: d.id, datum: (d.data().datum as admin.firestore.Timestamp | null)?.toDate() ?? new Date(0) }))
+    .filter(t => t.id !== uitgesloten)
+    .sort((a, b) => a.datum.getTime() - b.datum.getTime());
+
+  if (trekkingen.length === 0) return [];
+
+  // Zoek de laatste trekking (chronologisch) met een winnaar — alles
+  // daarna hoort bij de huidige speelreeks.
+  let speelreeksStart = 0;
+  for (let i = trekkingen.length - 1; i >= 0; i--) {
+    const winnaarSnap = await db.collection('resultaten')
+      .where('trekkingId', '==', trekkingen[i].id)
+      .where('isWinnaar', '==', true)
+      .limit(1)
+      .get();
+    if (!winnaarSnap.empty) {
+      speelreeksStart = i + 1;
+      break;
+    }
+  }
+  return trekkingen.slice(speelreeksStart);
+}
+
+/**
+ * Haalt per ticketId de meest actuele cumulatieve matchedNumbers op
+ * binnen de huidige speelreeks (van vóór de trekking die nu verwerkt
+ * wordt). Leeg als dit de eerste trekking van een nieuwe speelreeks is.
+ */
+async function getVorigeMatchesPerTicket(seizoenId: string, huidigeTrekkingId: string): Promise<Map<string, number[]>> {
+  const speelreeksTrekkingen = await bepaalSpeelreeksTrekkingen(seizoenId, huidigeTrekkingId);
+  if (speelreeksTrekkingen.length === 0) return new Map();
+
+  const laatste = speelreeksTrekkingen[speelreeksTrekkingen.length - 1];
+  const resultatenSnap = await db.collection('resultaten').where('trekkingId', '==', laatste.id).get();
+
+  const map = new Map<string, number[]>();
+  resultatenSnap.docs.forEach(d => {
+    const data = d.data();
+    map.set(data.ticketId as string, (data.matchedNumbers as number[] | undefined) ?? []);
+  });
+  return map;
 }
 
 /**
@@ -145,7 +200,10 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
     const trekkingWeek = getTrekkingWeek(trekkingDatum);
     functions.logger.info(`TrekkingWeek: ${trekkingWeek}`);
 
-    const [spelConfig, prijsConfig] = await Promise.all([getSpelConfig(), getPrijsConfig()]);
+    const [spelConfig, vorigeMatchesPerTicket] = await Promise.all([
+      getSpelConfig(),
+      getVorigeMatchesPerTicket(trekking.seizoenId, trekkingId),
+    ]);
     const betalers = await getBetalersVoorWeek(trekkingWeek);
 
     const usersSnap = await db.collection('users').where('actief', '==', true).get();
@@ -161,7 +219,11 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       if (tickets.length === 0) continue;
 
       if (betalers.has(lid.id)) {
-        deelnemers.push({ userId: lid.id, userNaam: userData.naam as string ?? 'Onbekend', tickets });
+        deelnemers.push({
+          userId: lid.id,
+          userNaam: userData.naam as string ?? 'Onbekend',
+          tickets: tickets.map(t => ({ ticket: t, vorigeMatches: vorigeMatchesPerTicket.get(t.id) ?? [] })),
+        });
       } else {
         nietBetalers.push({ userId: lid.id, userNaam: userData.naam as string ?? 'Onbekend' });
       }
@@ -169,7 +231,7 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
 
     functions.logger.info(`Deelnemers: ${deelnemers.length}, Niet betaald: ${nietBetalers.length}`);
 
-    const output = verwerkTrekking({ trekking, deelnemers, spelConfig, prijsConfig });
+    const output = verwerkTrekking({ trekking, deelnemers, spelConfig });
 
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
@@ -382,3 +444,137 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
     }
   }
 );
+
+// ─────────────────────── herberekenSpeelreeks ───────────────────────
+
+/**
+ * Herberekent alle resultaten van de HUIDIGE speelreeks opnieuw, van
+ * begin tot eind, chronologisch. Nuttig als er ooit een fout wordt
+ * ontdekt in de score-berekening, of tijdens het testen — zonder dat
+ * daar een eenmalig migratiescript voor nodig is.
+ *
+ * Bewust alleen de huidige speelreeks: oudere, al afgesloten
+ * speelreeksen (met een winnaar) blijven ongewijzigd.
+ *
+ * Alleen beheerders mogen dit aanroepen.
+ */
+export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const userDoc = await db.doc(`users/${request.auth.uid}`).get();
+  if (!userDoc.exists || userDoc.data()?.rol !== 'beheerder') {
+    throw new functions.https.HttpsError('permission-denied', 'Alleen beheerders mogen dit uitvoeren.');
+  }
+
+  const seizoenId = request.data?.seizoenId as string | undefined;
+  if (!seizoenId) {
+    throw new functions.https.HttpsError('invalid-argument', 'seizoenId is verplicht.');
+  }
+
+  const speelreeksTrekkingenBasis = await bepaalSpeelreeksTrekkingen(seizoenId);
+  if (speelreeksTrekkingenBasis.length === 0) {
+    return { herberekend: 0, bericht: 'Geen trekkingen gevonden in de huidige speelreeks.' };
+  }
+
+  functions.logger.info(`Herberekening gestart: ${speelreeksTrekkingenBasis.length} trekking(en) in huidige speelreeks.`);
+
+  // Volledige trekking-data ophalen (basis had alleen id + datum)
+  const trekkingDocs = await Promise.all(
+    speelreeksTrekkingenBasis.map(t => db.doc(`trekkingen/${t.id}`).get())
+  );
+
+  // Oude resultaten verwijderen + eerder toegekende punten noteren om terug te trekken
+  const puntenTerugtrekken: Record<string, number> = {};
+  for (const t of speelreeksTrekkingenBasis) {
+    const oudeResultatenSnap = await db.collection('resultaten').where('trekkingId', '==', t.id).get();
+    for (const r of oudeResultatenSnap.docs) {
+      const data = r.data();
+      const userId = data.userId as string;
+      const punten = data.punten as number ?? 0;
+      puntenTerugtrekken[userId] = (puntenTerugtrekken[userId] ?? 0) + punten;
+      await r.ref.delete();
+    }
+  }
+
+  const spelConfig = await getSpelConfig();
+  const usersSnap = await db.collection('users').where('actief', '==', true).get();
+  const alleLeden = usersSnap.docs.map(d => ({ id: d.id, data: d.data() }));
+
+  let vorigeMatchesPerTicket = new Map<string, number[]>();
+  const alleNieuwePunten: Record<string, number> = {};
+  const alleWinnaarNamen: string[] = [];
+
+  for (const trekkingDoc of trekkingDocs) {
+    const data = trekkingDoc.data();
+    if (!data) continue;
+
+    const trekking: Trekking = {
+      id: trekkingDoc.id,
+      rondeId: data.rondeId ?? '',
+      seizoenId: data.seizoenId ?? '',
+      nummers: data.nummers ?? [],
+      bonusBal: data.bonusBal ?? null,
+      datum: data.datum ?? null,
+      ingevoerdDoor: data.ingevoerdDoor ?? '',
+      ingevoerdDoorNaam: data.ingevoerdDoorNaam ?? '',
+      verwerkt: true,
+    };
+
+    const deelnemers: LidTickets[] = [];
+    for (const lid of alleLeden) {
+      const tickets = ((lid.data.tickets ?? []) as { id: string; naam: string; nummers: number[] }[])
+        .filter(t => t.nummers && t.nummers.length > 0);
+      if (tickets.length === 0) continue;
+      deelnemers.push({
+        userId: lid.id,
+        userNaam: lid.data.naam as string ?? 'Onbekend',
+        tickets: tickets.map(t => ({ ticket: t, vorigeMatches: vorigeMatchesPerTicket.get(t.id) ?? [] })),
+      });
+    }
+
+    const output = verwerkTrekking({ trekking, deelnemers, spelConfig });
+
+    const batch = db.batch();
+    for (const resultaat of output.resultaten) {
+      const ref = db.collection('resultaten').doc();
+      batch.set(ref, { ...resultaat, verwerktOp: admin.firestore.FieldValue.serverTimestamp() });
+    }
+    await batch.commit();
+
+    for (const r of output.resultaten) {
+      vorigeMatchesPerTicket.set(r.ticketId, r.matchedNumbers);
+    }
+    for (const update of output.ranglijstUpdates) {
+      alleNieuwePunten[update.userId] = (alleNieuwePunten[update.userId] ?? 0) + update.extraPunten;
+    }
+    alleWinnaarNamen.push(...output.winnaars.map(w => w.userNaam));
+  }
+
+  // ranglijstPunten corrigeren: oude punten van deze speelreeks eraf, nieuwe erbij
+  const puntenBatch = db.batch();
+  const alleUserIds = new Set([...Object.keys(puntenTerugtrekken), ...Object.keys(alleNieuwePunten)]);
+  for (const userId of alleUserIds) {
+    const delta = (alleNieuwePunten[userId] ?? 0) - (puntenTerugtrekken[userId] ?? 0);
+    if (delta !== 0) {
+      puntenBatch.update(db.doc(`users/${userId}`), {
+        ranglijstPunten: admin.firestore.FieldValue.increment(delta),
+      });
+    }
+  }
+  await puntenBatch.commit();
+
+  await logAudit(
+    'trekking_gewijzigd',
+    `Speelreeks herberekend: ${speelreeksTrekkingenBasis.length} trekking(en) opnieuw verwerkt. Winnaar(s): ${alleWinnaarNamen.join(', ') || 'geen'}.`,
+    request.auth.uid,
+    userDoc.data()?.naam ?? 'Beheerder'
+  );
+
+  functions.logger.info(`Herberekening voltooid: ${speelreeksTrekkingenBasis.length} trekking(en).`);
+
+  return {
+    herberekend: speelreeksTrekkingenBasis.length,
+    winnaars: alleWinnaarNamen,
+  };
+});

@@ -18,17 +18,8 @@ export interface SpelConfig {
   bonusBal: boolean;
 }
 
-export type PrijsConfigModus =
-  | 'alle_goed_wint'
-  | 'hoogste_score_wint'
-  | 'meerdere_winnaars'
-  | 'vaste_prijzen';
-
-export interface PrijsConfig {
-  modus: PrijsConfigModus;
-  vastePrijzen?: Record<number, number>;
-  minimumScore?: number;
-}
+// PrijsConfig is bewust verwijderd: LottoClub gebruikt altijd dezelfde
+// vaste spelmodus ("6 goed is winnaar", cumulatief per speelreeks).
 
 export interface Trekking {
   id: string;
@@ -52,6 +43,7 @@ export interface Resultaat {
   seizoenId: string;
   trekkingId: string;
   nummersGoed: number[];
+  matchedNumbers: number[];
   aantalGoed: number;
   bonusGoed: boolean;
   punten: number;

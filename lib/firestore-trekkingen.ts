@@ -9,7 +9,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Trekking, Resultaat, SpelConfig, PrijsConfig } from './types';
+import { Trekking, Resultaat, SpelConfig } from './types';
 
 // ─────────────────────── Helpers ───────────────────────
 
@@ -80,6 +80,7 @@ export function subscribeResultaten(trekkingId: string, callback: (resultaten: R
           seizoenId: data.seizoenId,
           trekkingId: data.trekkingId,
           nummersGoed: data.nummersGoed ?? [],
+          matchedNumbers: data.matchedNumbers ?? [],
           aantalGoed: data.aantalGoed ?? 0,
           bonusGoed: data.bonusGoed ?? false,
           punten: data.punten ?? 0,

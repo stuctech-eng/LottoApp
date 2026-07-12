@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribeAlleTrekkingen, slaaTrekkingOpEnVerwerk } from '@/lib/firestore-trekkingen';
-import { subscribeSpelConfig, subscribePrijsConfig, DEFAULT_SPELCONFIG, DEFAULT_PRIJSCONFIG } from '@/lib/firestore-spelconfig';
-import { Trekking, Seizoen, SpelConfig, PrijsConfig } from '@/lib/types';
+import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelconfig';
+import { Trekking, Seizoen, SpelConfig } from '@/lib/types';
 
 const LOTTO_UITSLAG_URL = 'https://lotto.nederlandseloterij.nl/trekkingsuitslag';
 
@@ -37,13 +37,12 @@ function TrekkingBallen({ nummers, bonusBal }: { nummers: number[]; bonusBal: nu
 }
 
 function TrekkingInvoerModal({
-  open, onClose, seizoen, spelConfig, prijsConfig
+  open, onClose, seizoen, spelConfig
 }: {
   open: boolean;
   onClose: () => void;
   seizoen: Seizoen | null;
   spelConfig: SpelConfig;
-  prijsConfig: PrijsConfig;
 }) {
   const { user, profile } = useAuth();
   const [nummers, setNummers] = useState<string[]>(Array(spelConfig.aantalGetallen).fill(''));
@@ -244,7 +243,6 @@ function TrekkingPageContent() {
   const [trekkingen, setTrekkingen] = useState<Trekking[]>([]);
   const [seizoen, setSeizoen] = useState<Seizoen | null>(null);
   const [spelConfig, setSpelConfig] = useState<SpelConfig>(DEFAULT_SPELCONFIG);
-  const [prijsConfig, setPrijsConfig] = useState<PrijsConfig>(DEFAULT_PRIJSCONFIG);
   const [laden, setLaden] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -254,8 +252,7 @@ function TrekkingPageContent() {
     const u1 = subscribeAlleTrekkingen(data => { setTrekkingen(data); setLaden(false); });
     const u2 = subscribeSeizoen(setSeizoen);
     const u3 = subscribeSpelConfig(setSpelConfig);
-    const u4 = subscribePrijsConfig(setPrijsConfig);
-    return () => { u1(); u2(); u3(); u4(); };
+    return () => { u1(); u2(); u3(); };
   }, []);
 
   return (
@@ -332,7 +329,6 @@ function TrekkingPageContent() {
         onClose={() => setModalOpen(false)}
         seizoen={seizoen}
         spelConfig={spelConfig}
-        prijsConfig={prijsConfig}
       />
     </>
   );
