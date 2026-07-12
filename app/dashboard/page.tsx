@@ -416,9 +416,12 @@ function DashboardPageContent() {
                   {winnaarResultaat ? <span className="badge badge-gold">🏆 Winnaar</span> : <span className="badge badge-green">✓ Verwerkt</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {laatsteTrekking.nummers.map(n => (
-                    <div key={n} className="bal bal-normal" style={{ width: 34, height: 34, fontSize: 12 }}>{n}</div>
-                  ))}
+                  {laatsteTrekking.nummers.map(n => {
+                    const isHit = mijnResultaatLaatste?.nummersGoed?.includes(n) ?? false;
+                    return (
+                      <div key={n} className={`bal ${isHit ? 'bal-hit' : 'bal-normal'}`} style={{ width: 34, height: 34, fontSize: 12 }}>{n}</div>
+                    );
+                  })}
                   {laatsteTrekking.bonusBal !== null && (
                     <div className="bal bal-bonus" style={{ width: 34, height: 34, fontSize: 11 }}>B·{laatsteTrekking.bonusBal}</div>
                   )}
