@@ -485,15 +485,13 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
     speelreeksTrekkingenBasis.map(t => db.doc(`trekkingen/${t.id}`).get())
   );
 
-  // Oude resultaten verwijderen + eerder toegekende punten noteren om terug te trekken
-  const puntenTerugtrekken: Record<string, number> = {};
+  // Oude resultaten van de huidige speelreeks verwijderen. Punten worden
+  // straks NIET via een delta-correctie bijgewerkt (dat bleek foutgevoelig
+  // bij herhaald herberekenen) maar na afloop in één keer hard herberekend
+  // als de exacte som van alle resultaten — zie verderop.
   for (const t of speelreeksTrekkingenBasis) {
     const oudeResultatenSnap = await db.collection('resultaten').where('trekkingId', '==', t.id).get();
     for (const r of oudeResultatenSnap.docs) {
-      const data = r.data();
-      const userId = data.userId as string;
-      const punten = data.punten as number ?? 0;
-      puntenTerugtrekken[userId] = (puntenTerugtrekken[userId] ?? 0) + punten;
       await r.ref.delete();
     }
   }
@@ -503,7 +501,6 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
   const alleLeden = usersSnap.docs.map(d => ({ id: d.id, data: d.data() }));
 
   let vorigeMatchesPerTicket = new Map<string, number[]>();
-  const alleNieuwePunten: Record<string, number> = {};
   const alleWinnaarNamen: string[] = [];
 
   for (const trekkingDoc of trekkingDocs) {
@@ -555,22 +552,29 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
     for (const r of output.resultaten) {
       vorigeMatchesPerTicket.set(r.ticketId, r.matchedNumbers);
     }
-    for (const update of output.ranglijstUpdates) {
-      alleNieuwePunten[update.userId] = (alleNieuwePunten[update.userId] ?? 0) + update.extraPunten;
-    }
     alleWinnaarNamen.push(...output.winnaars.map(w => w.userNaam));
   }
 
-  // ranglijstPunten corrigeren: oude punten van deze speelreeks eraf, nieuwe erbij
+  // ranglijstPunten hard herberekenen als de exacte som van alle
+  // punten-velden over ÁLLE resultaten van een gebruiker (niet alleen
+  // deze speelreeks) — dit is zelfherstellend, ongeacht hoe vaak
+  // herberekenSpeelreeks eerder is aangeroepen. Een fragiele
+  // optel/aftrek-delta bleek bij herhaald herberekenen te kunnen
+  // afwijken van de werkelijke som in /resultaten.
+  const alleResultatenSnap = await db.collection('resultaten').get();
+  const totaalPuntenPerUser: Record<string, number> = {};
+  alleResultatenSnap.docs.forEach(d => {
+    const data = d.data();
+    const userId = data.userId as string;
+    const punten = data.punten as number ?? 0;
+    totaalPuntenPerUser[userId] = (totaalPuntenPerUser[userId] ?? 0) + punten;
+  });
+
   const puntenBatch = db.batch();
-  const alleUserIds = new Set([...Object.keys(puntenTerugtrekken), ...Object.keys(alleNieuwePunten)]);
-  for (const userId of alleUserIds) {
-    const delta = (alleNieuwePunten[userId] ?? 0) - (puntenTerugtrekken[userId] ?? 0);
-    if (delta !== 0) {
-      puntenBatch.update(db.doc(`users/${userId}`), {
-        ranglijstPunten: admin.firestore.FieldValue.increment(delta),
-      });
-    }
+  for (const lid of alleLeden) {
+    puntenBatch.update(db.doc(`users/${lid.id}`), {
+      ranglijstPunten: totaalPuntenPerUser[lid.id] ?? 0,
+    });
   }
   await puntenBatch.commit();
 
