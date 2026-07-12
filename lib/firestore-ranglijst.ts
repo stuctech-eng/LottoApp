@@ -1,10 +1,8 @@
 import {
   collection,
   onSnapshot,
-  orderBy,
   query,
   where,
-  limit as fbLimit,
   getDocs,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -22,12 +20,17 @@ export interface RanglijstEntry {
   totaalPunten: number;
 }
 
-/** Live ranglijst op basis van ranglijstPunten in /users, gesorteerd hoog→laag. */
+/**
+ * Live ranglijst op basis van ranglijstPunten in /users.
+ *
+ * Geen orderBy() — architectuurregel: orderBy() gecombineerd met een
+ * where() op een ander veld vereist een composite index en geeft
+ * zonder die index stil 0 resultaten terug. Sortering gebeurt hier in JS.
+ */
 export function subscribeRanglijst(callback: (entries: RanglijstEntry[]) => void) {
   const q = query(
     collection(db, 'users'),
-    where('actief', '==', true),
-    orderBy('ranglijstPunten', 'desc')
+    where('actief', '==', true)
   );
   return onSnapshot(
     q,
@@ -52,7 +55,10 @@ export function subscribeRanglijst(callback: (entries: RanglijstEntry[]) => void
       const resultatenSnap = await getDocs(collection(db, 'resultaten'));
       const resultaten = resultatenSnap.docs.map(d => d.data() as Resultaat);
 
-      const entries: RanglijstEntry[] = users.map((user, i) => {
+      // Client-side sorteren op ranglijstPunten (hoog → laag) — geen orderBy().
+      const gesorteerdeUsers = [...users].sort((a, b) => b.ranglijstPunten - a.ranglijstPunten);
+
+      const entries: RanglijstEntry[] = gesorteerdeUsers.map((user, i) => {
         const userResultaten = resultaten.filter(r => r.userId === user.id);
 
         // Per trekking het beste ticket tellen (niet alle tickets optellen)
@@ -67,9 +73,17 @@ export function subscribeRanglijst(callback: (entries: RanglijstEntry[]) => void
 
         const aantalDeelnames = bestePerTrekking.length;
         const aantalGewonnen = bestePerTrekking.filter(r => r.isWinnaar).length;
-        const besteScore = aantalDeelnames > 0 ? Math.max(...bestePerTrekking.map(r => r.aantalGoed)) : 0;
+
+        // KRITIEK: besteScore/gemiddeldeScore gebruiken nummersGoed
+        // (nieuwe matches DIE trekking), niet het cumulatieve aantalGoed.
+        // aantalGoed loopt binnen een speelreeks alleen maar op, dus een
+        // gemiddelde/maximum daarvan over meerdere trekkingen zou geen
+        // zinnige "hoe goed presteer je per trekking"-waarde meer geven.
+        const besteScore = aantalDeelnames > 0
+          ? Math.max(...bestePerTrekking.map(r => r.nummersGoed?.length ?? 0))
+          : 0;
         const gemiddeldeScore = aantalDeelnames > 0
-          ? Math.round((bestePerTrekking.reduce((s, r) => s + r.aantalGoed, 0) / aantalDeelnames) * 10) / 10
+          ? Math.round((bestePerTrekking.reduce((s, r) => s + (r.nummersGoed?.length ?? 0), 0) / aantalDeelnames) * 10) / 10
           : 0;
 
         return {
@@ -100,20 +114,34 @@ export interface HallOfFameRecord {
 }
 
 /**
- * Berekent all-time records uit de /resultaten collectie.
+ * Berekent all-time records uit de /resultaten en /trekkingen collecties.
  * Returned als statische snapshot (niet live) — wordt aangeroepen
  * bij mount van de Hall of Fame pagina.
  */
 export async function haalHallOfFameOp(): Promise<HallOfFameRecord[]> {
-  const snap = await getDocs(collection(db, 'resultaten'));
-  const resultaten = snap.docs.map(d => d.data() as Resultaat & { id: string });
+  const [resultatenSnap, trekkingenSnap] = await Promise.all([
+    getDocs(collection(db, 'resultaten')),
+    getDocs(collection(db, 'trekkingen')),
+  ]);
+  const resultaten = resultatenSnap.docs.map(d => d.data() as Resultaat & { id: string });
+
+  const trekkingDatums = new Map<string, Date>();
+  trekkingenSnap.docs.forEach(d => {
+    const data = d.data();
+    trekkingDatums.set(d.id, data.datum?.toDate?.() ?? new Date(0));
+  });
 
   if (resultaten.length === 0) return [];
 
-  // Hoogste score ooit
-  const hoogsteScore = resultaten.reduce((a, b) => a.aantalGoed > b.aantalGoed ? a : b);
+  // Meeste NIEUWE nummers in één trekking — i.p.v. cumulatief aantalGoed,
+  // dat sinds de clubmodus alleen maar oploopt binnen een speelreeks en
+  // dus geen "record" meer is zodra iemand een keer heeft gewonnen.
+  const besteEnkeleTrekking = resultaten.reduce((a, b) =>
+    (b.nummersGoed?.length ?? 0) > (a.nummersGoed?.length ?? 0) ? b : a
+  );
 
-  // Meeste deelnames (per userId, beste per trekking)
+  // Meeste deelnames / meeste overwinningen (ongewijzigd — deze
+  // gebruikten al aantal trekkingen resp. isWinnaar, niet aantalGoed)
   const deelnames: Record<string, Set<string>> = {};
   const gewonnen: Record<string, number> = {};
   const namen: Record<string, string> = {};
@@ -130,15 +158,54 @@ export async function haalHallOfFameOp(): Promise<HallOfFameRecord[]> {
   const meestGewonnen = Object.entries(gewonnen)
     .sort((a, b) => b[1] - a[1])[0];
 
+  // Snelste winnaar — minste trekkingen nodig binnen één speelreeks om
+  // te winnen. Dit kan pas bestaan sinds de cumulatieve clubmodus.
+  // Benadering: per winnende trekking (chronologisch) tellen we hoeveel
+  // trekkingen van die speler vielen ná de vorige winst (of vanaf het
+  // begin) tot en met deze winst.
+  const winnendeResultaten = resultaten
+    .filter(r => r.isWinnaar)
+    .map(r => ({ ...r, datum: trekkingDatums.get(r.trekkingId) ?? new Date(0) }))
+    .sort((a, b) => a.datum.getTime() - b.datum.getTime());
+
+  let snelsteWinnaar: { userNaam: string; aantalTrekkingen: number } | null = null;
+  let vorigeWinstDatum = new Date(0);
+  for (const winst of winnendeResultaten) {
+    const aantalTrekkingen = new Set(
+      resultaten
+        .filter(r => r.userId === winst.userId)
+        .filter(r => {
+          const d = trekkingDatums.get(r.trekkingId) ?? new Date(0);
+          return d > vorigeWinstDatum && d <= winst.datum;
+        })
+        .map(r => r.trekkingId)
+    ).size;
+
+    if (!snelsteWinnaar || aantalTrekkingen < snelsteWinnaar.aantalTrekkingen) {
+      snelsteWinnaar = { userNaam: winst.userNaam, aantalTrekkingen };
+    }
+    vorigeWinstDatum = winst.datum;
+  }
+
   const records: HallOfFameRecord[] = [];
 
-  if (hoogsteScore) {
+  if (besteEnkeleTrekking) {
     records.push({
-      categorie: 'Hoogste score ooit',
+      categorie: 'Meeste nummers in één trekking',
       icoon: '🎯',
-      userNaam: hoogsteScore.userNaam,
-      waarde: `${hoogsteScore.aantalGoed} goed`,
-      sub: `${hoogsteScore.ticketNaam}`,
+      userNaam: besteEnkeleTrekking.userNaam,
+      waarde: `${besteEnkeleTrekking.nummersGoed?.length ?? 0} nieuw`,
+      sub: `${besteEnkeleTrekking.ticketNaam}`,
+    });
+  }
+
+  if (snelsteWinnaar) {
+    records.push({
+      categorie: 'Snelste winnaar',
+      icoon: '⚡',
+      userNaam: snelsteWinnaar.userNaam,
+      waarde: `${snelsteWinnaar.aantalTrekkingen} trekking${snelsteWinnaar.aantalTrekkingen === 1 ? '' : 'en'}`,
+      sub: 'tot 6 goed',
     });
   }
 
