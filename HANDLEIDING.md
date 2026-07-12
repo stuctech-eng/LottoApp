@@ -47,22 +47,36 @@ LottoClub is een app voor een lottovereniging. Leden betalen elke week €4 inle
 ## Spelregels
 
 **💳 Betaling = deelname**
-Alleen wie de inleg van die week heeft betaald én de kashouder dit heeft bevestigd doet mee. Niet betaald = automatisch uitgesloten die week.
+Alleen wie de inleg van die week heeft betaald én de kashouder dit heeft bevestigd doet mee. Niet betaald = die trekking telt niet mee — ook niet als de getrokken nummers toevallig op jouw ticket staan.
 
 **🎱 1 ticket per persoon**
 Iedereen heeft precies 1 ticket met 6 nummers. Gelijke kansen voor iedereen.
 
-**🏆 Alleen alle 6 nummers goed is winnen**
-Je wint alleen als alle 6 nummers overeenkomen met de getrokken nummers. Minder dan 6 goed = geen winnaar deze week.
+**🏆 6 goed is winnen — cumulatief, over meerdere trekkingen**
+Elke trekking worden je nummers vergeleken met de getrokken nummers. Elk nummer dat goed is, blijft voor jou meetellen — ook in volgende trekkingen. Je bouwt dus week na week je verzameling op totdat je alle 6 hebt.
+
+*Voorbeeld:*
+```
+Trekking 1: 1 nieuw goed   → totaal 1/6
+Trekking 2: 2 nieuw goed   → totaal 3/6
+Trekking 3: 3 nieuw goed   → totaal 6/6 → WINNAAR
+```
+Een nummer dat al eerder goed was, levert bij een volgende trekking geen nieuw punt meer op — het staat namelijk al op je lijst.
 
 **🔄 Geen winnaar? Pot blijft staan (rollover)**
-Pot groeit volgende week verder.
+Pot groeit volgende week verder, en iedereen behoudt zijn opgebouwde nummers.
+
+**🆕 Wel winnaar? Nieuwe ronde begint automatisch**
+Ieders verzameling begint dan weer op 0.
 
 **💰 Pot opgebouwd door betalers**
 Alleen inleg van leden die betaald hebben telt mee.
 
 **🎉 Meerdere winnaars mogelijk**
-Pot wordt gelijkelijk verdeeld.
+Komen er in dezelfde trekking meerdere spelers op 6/6 uit, dan wordt de pot gelijkelijk verdeeld.
+
+**📱 In de app**
+Op de trekking-pagina zie je per nummer een blauw balletje (al eerder geraakt) of een blauw balletje met goud randje (nieuw deze week). Bij "nog X nodig" zie je in één oogopslag hoe dicht iemand bij winnen zit.
 
 ---
 
@@ -203,10 +217,8 @@ Het dashboard toont alleen betalingen van de **huidige week**. Vorige weken tell
 4. Vul 6 nummers in → **"✓ Trekking opslaan & verwerken"**
 5. Iedereen krijgt automatisch een push
 
-### Prijsmodus instellen
-**Beheer → Admin → Prijzen → "🎯 Alleen alle nummers goed wint" → "💾 Prijsmodus opslaan"**
-
-Dit staat al correct ingesteld op `alle_goed_wint`.
+### Speelreeks herberekenen
+Mocht er ooit een fout worden ontdekt in de puntentelling, of tijdens het testen: **Beheer → Admin → Prijzen → "🔄 Herbereken huidige speelreeks"**. Dit berekent alleen de nog lopende speelreeks opnieuw vanaf de eerste trekking — al afgesloten speelreeksen (met een eerdere winnaar) blijven ongewijzigd. Veilig om zo vaak als nodig te gebruiken.
 
 ---
 
