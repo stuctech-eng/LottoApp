@@ -177,6 +177,11 @@ function TrekkingDetailContent() {
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 700, color: besteTicket.isWinnaar ? 'var(--gold)' : 'var(--white)' }}>{besteTicket.aantalGoed} {besteTicket.isWinnaar ? '🏆' : ''}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{besteTicket.ticketNaam}</div>
+                    {!besteTicket.isWinnaar && (
+                      <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 2, fontWeight: 600 }}>
+                        nog {trekking.nummers.length - besteTicket.aantalGoed} nodig
+                      </div>
+                    )}
                   </div>
                 </div>
               );
