@@ -69,14 +69,21 @@ async function getVorigeMatchesPerTicket(seizoenId: string, huidigeTrekkingId: s
   const speelreeksTrekkingen = await bepaalSpeelreeksTrekkingen(seizoenId, huidigeTrekkingId);
   if (speelreeksTrekkingen.length === 0) return new Map();
 
-  const laatste = speelreeksTrekkingen[speelreeksTrekkingen.length - 1];
-  const resultatenSnap = await db.collection('resultaten').where('trekkingId', '==', laatste.id).get();
-
+  // Loop chronologisch (oud → nieuw) door ALLE trekkingen van de
+  // speelreeks tot nu toe — niet alleen de laatste. Per ticket bewaren
+  // we het resultaat van de meest recente trekking waarin dat ticket
+  // daadwerkelijk meedeed (dus wél betaald had). Zo blijft
+  // matchedNumbers behouden voor een speler die een week overslaat
+  // (bijv. niet betaald): die week telt niet mee, maar eerder
+  // verzamelde nummers gaan niet verloren.
   const map = new Map<string, number[]>();
-  resultatenSnap.docs.forEach(d => {
-    const data = d.data();
-    map.set(data.ticketId as string, (data.matchedNumbers as number[] | undefined) ?? []);
-  });
+  for (const t of speelreeksTrekkingen) {
+    const resultatenSnap = await db.collection('resultaten').where('trekkingId', '==', t.id).get();
+    resultatenSnap.docs.forEach(d => {
+      const data = d.data();
+      map.set(data.ticketId as string, (data.matchedNumbers as number[] | undefined) ?? []);
+    });
+  }
   return map;
 }
 
