@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { subscribeTrekking, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
-import { Trekking, Resultaat, User } from '@/lib/types';
+import { subscribeBetalingen, huidigTrekkingWeek } from '@/lib/firestore-payments';
+import { Trekking, Resultaat, User, Betaling } from '@/lib/types';
 
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -28,6 +29,7 @@ function TrekkingDetailContent() {
   const [trekking, setTrekking] = useState<Trekking | null>(null);
   const [resultaten, setResultaten] = useState<Resultaat[]>([]);
   const [leden, setLeden] = useState<User[]>([]);
+  const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
@@ -35,7 +37,8 @@ function TrekkingDetailContent() {
     const u1 = subscribeTrekking(id, t => { setTrekking(t); setLaden(false); });
     const u2 = subscribeResultaten(id, setResultaten);
     const u3 = subscribeAllUsers(setLeden);
-    return () => { u1(); u2(); u3(); };
+    const u4 = subscribeBetalingen(setBetalingen);
+    return () => { u1(); u2(); u3(); u4(); };
   }, [id]);
 
   // Haal eigen ticket-nummers op voor een resultaat
@@ -48,6 +51,17 @@ function TrekkingDetailContent() {
 
   const mijnResultaten = user ? resultaten.filter(r => r.userId === user.uid) : [];
   const winnaars = resultaten.filter(r => r.isWinnaar);
+
+  // Leden die deze specifieke trekking niet hebben meegeteld omdat ze
+  // niet op tijd hadden betaald — zelfde week-berekening als de
+  // Cloud Function gebruikt (huidigTrekkingWeek accepteert een datum).
+  const trekkingWeek = trekking?.datum ? huidigTrekkingWeek(trekking.datum.toDate()) : null;
+  const betaaldeUserIdsDezeWeek = new Set(
+    betalingen.filter(b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === trekkingWeek && b.status === 'betaald').map(b => b.userId)
+  );
+  const nietBetalers = trekkingWeek
+    ? leden.filter(l => l.actief && (l.tickets?.length ?? 0) > 0 && !betaaldeUserIdsDezeWeek.has(l.id))
+    : [];
 
   if (laden) {
     return (
@@ -154,6 +168,11 @@ function TrekkingDetailContent() {
               <span className="bal bal-hit" style={{ width: 14, height: 14, fontSize: 0, display: 'inline-block', verticalAlign: 'middle', marginRight: 4 }} /> geraakt deze speelreeks ·{' '}
               <span className="bal bal-hit bal-laatste" style={{ width: 14, height: 14, fontSize: 0, display: 'inline-block', verticalAlign: 'middle', margin: '0 4px 0 6px' }} /> nieuw deze trekking
             </div>
+            {nietBetalers.length > 0 && (
+              <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontSize: 12, color: 'var(--warning)', lineHeight: 1.6 }}>
+                ⚠️ {nietBetalers.map(l => l.naam).join(', ')} {nietBetalers.length === 1 ? 'had' : 'hadden'} niet betaald voor deze trekking — {nietBetalers.length === 1 ? 'telt' : 'tellen'} niet mee.
+              </div>
+            )}
             {Object.values(
               resultaten.reduce<Record<string, Resultaat & { tickets: Resultaat[] }>>((acc, r) => {
                 if (!acc[r.userId]) acc[r.userId] = { ...r, tickets: [] };
