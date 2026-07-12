@@ -303,7 +303,7 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       if (tokens.length === 0) continue;
       await sendToTokens(tokens, {
         title: '🎱 Trekking gemist',
-        body: `Je had deze week niet betaald en deed helaas niet mee. De pot staat nu op ${potTekst}. Doe volgende week mee — hopelijk zien we je dan! 💪`,
+        body: `Je had deze week niet betaald, dus de getrokken nummers [${trekking.nummers.join(', ')}] tellen niet mee voor jouw verzameling. Je eerder verzamelde nummers blijven wel gewoon staan — betaal op tijd om weer mee te doen. De pot staat nu op ${potTekst}. 💪`,
       }, { path: '/betalen' });
     }
 

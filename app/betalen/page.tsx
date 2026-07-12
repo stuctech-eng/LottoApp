@@ -110,7 +110,10 @@ function BetalenPageContent() {
       <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
         <div style={{ fontSize: 72, marginBottom: 20 }}>🎱</div>
         <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 12 }}>Betalen niet mogelijk</div>
-        <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.7, maxWidth: 320 }}>{betaalStatus.bericht}</div>
+        <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.7, maxWidth: 320 }}>{betaalStatus.bericht}</div>
+        <div style={{ width: '100%', maxWidth: 380, background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px', marginBottom: 32, textAlign: 'left', fontSize: 12, color: 'var(--warning)', lineHeight: 1.6 }}>
+          💡 Zonder betaling tellen de getrokken nummers deze week niet mee voor jouw verzameling. Je eerder verzamelde nummers blijven wel gewoon staan — betaal volgende week op tijd om weer mee te bouwen richting 6 goed.
+        </div>
         <button onClick={() => router.push('/dashboard')} style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 16, padding: 18, fontSize: 16, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>← Terug naar dashboard</button>
       </div>
     );
@@ -184,7 +187,7 @@ function BetalenPageContent() {
         </div>
 
         {/* Bedrag hero */}
-        <div style={{ margin: '0 20px 20px' }}>
+        <div style={{ margin: '0 20px 12px' }}>
           <div style={{ background: 'linear-gradient(135deg,#1a3a5c,#0f2438)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 24, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
             <div style={{ fontSize: 40, marginBottom: 10 }}>💰</div>
@@ -192,6 +195,10 @@ function BetalenPageContent() {
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>€{STANDAARD_INLEG}</div>
             <div style={{ fontSize: 14, color: 'var(--muted)' }}>LottoClub · {huidigTrekkingWeek()}</div>
           </div>
+        </div>
+
+        <div style={{ margin: '0 20px 20px', background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '12px 14px', fontSize: 12, color: 'var(--warning)', lineHeight: 1.6 }}>
+          💡 Niet op tijd betaald? Dan tellen de getrokken nummers van deze week niet mee voor jouw verzameling richting 6 goed.
         </div>
 
         {/* Stap 1 — Tikkie */}
