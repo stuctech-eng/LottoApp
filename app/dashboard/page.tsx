@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen } from '@/lib/firestore-payments';
+import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen, huidigTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
@@ -240,7 +240,15 @@ function DashboardPageContent() {
 
   const saldo = berekenKasSaldo(mutaties);
   const actieveLeden = leden.filter(l => l.actief);
-  const betaaldeLeden = new Set(betalingen.filter(b => b.status === 'betaald').map(b => b.userId));
+  // KRITIEK: alleen betalingen van de huidige ISO-week meetellen.
+  // Zonder deze filter blijft een lid voor altijd als "betaald"
+  // gelden zodra hij ooit één week heeft ingelegd — precies het patroon
+  // dat de betaalvoortgang op de kashouder-pagina al goed afhandelt.
+  const huidigeWeek = huidigTrekkingWeek();
+  const betalingenDezeWeek = betalingen.filter(
+    b => (b as typeof betalingen[number] & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
+  );
+  const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
   const aantalOpen = actieveLeden.length - aantalBetaald;
 
