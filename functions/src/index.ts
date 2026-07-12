@@ -522,8 +522,17 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
       verwerkt: true,
     };
 
+    // KRITIEK: alleen leden die deze specifieke week hebben betaald
+    // tellen mee — zelfde regel als de live onTrekkingVerwerkt trigger.
+    // Elke trekking heeft zijn eigen trekkingWeek (afgeleid van de
+    // datum van die trekking), dus dit wordt per trekking opnieuw bepaald.
+    const trekkingDatum = data.datum ? (data.datum as admin.firestore.Timestamp).toDate() : new Date();
+    const trekkingWeekVoorDezeTrekking = getTrekkingWeek(trekkingDatum);
+    const betalersVoorDezeTrekking = await getBetalersVoorWeek(trekkingWeekVoorDezeTrekking);
+
     const deelnemers: LidTickets[] = [];
     for (const lid of alleLeden) {
+      if (!betalersVoorDezeTrekking.has(lid.id)) continue;
       const tickets = ((lid.data.tickets ?? []) as { id: string; naam: string; nummers: number[] }[])
         .filter(t => t.nummers && t.nummers.length > 0);
       if (tickets.length === 0) continue;
