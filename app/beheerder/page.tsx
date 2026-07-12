@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { subscribeAllUsers } from '@/lib/firestore-users';
-import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo } from '@/lib/firestore-payments';
+import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo, huidigTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribeSeizoen, subscribeAlleSeizoenen } from '@/lib/firestore-seizoenen';
 import { User, Kasmutatie, Betaling, Seizoen } from '@/lib/types';
 
@@ -37,8 +37,25 @@ function BeheerderPageContent() {
 
   const actieveLeden = leden.filter(l => l.actief).length;
   const saldo = berekenKasSaldo(mutaties);
-  const teVerifieren = betalingen.filter(b => b.status === 'verificatie');
-  const openBetalingen = betalingen.filter(b => b.status === 'open');
+
+  // KRITIEK: alleen betalingen van de HUIDIGE week meetellen, en
+  // vergelijken tegen wie er daadwerkelijk een ticket heeft — niet
+  // alleen kijken naar bestaande 'open'/'verificatie'-documenten. Een
+  // lid zonder betaaldocument voor deze week (bijv. omdat het ticket
+  // pas na het aanmaken van de weekbetalingen is toegevoegd) werd
+  // anders helemaal niet gesignaleerd, terwijl diegene wél niet had
+  // betaald.
+  const huidigeWeek = huidigTrekkingWeek();
+  const actieveLedenMetTicket = leden.filter(l => l.actief && (l.tickets?.length ?? 0) > 0);
+  const betalingenDezeWeek = betalingen.filter(
+    b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
+  );
+  const betaaldeUserIds = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
+  const teVerifieren = betalingenDezeWeek.filter(b => b.status === 'verificatie');
+  const verificatieUserIds = new Set(teVerifieren.map(b => b.userId));
+  const openBetalingen = actieveLedenMetTicket.filter(
+    l => !betaaldeUserIds.has(l.id) && !verificatieUserIds.has(l.id)
+  );
 
   // Aantal rondes = aantal trekkingen in actief seizoen (via resultaten tellen)
   // Vereenvoudigd: toon seizoensnummer of actief seizoen naam
@@ -48,7 +65,7 @@ function BeheerderPageContent() {
   // Alerts
   const alerts: { icon: string; title: string; sub: string }[] = [];
   if (openBetalingen.length > 0) {
-    const namen = [...new Set(openBetalingen.map(b => b.userNaam))].slice(0, 3).join(', ');
+    const namen = [...new Set(openBetalingen.map(l => l.naam))].slice(0, 3).join(', ');
     alerts.push({ icon: '⚠️', title: `${openBetalingen.length} ${openBetalingen.length === 1 ? 'lid' : 'leden'} niet betaald`, sub: namen });
   }
   if (teVerifieren.length > 0) {
@@ -105,7 +122,7 @@ function BeheerderPageContent() {
             {[
               { icon: '🎱', label: 'Trekking invoeren', href: '/trekkingen', bg: 'var(--accent-soft)' },
               { icon: '👥', label: 'Leden beheren', href: '/leden', bg: 'var(--gold-soft)' },
-              { icon: '💰', label: 'Kasboek', href: '/kas', bg: 'var(--success-soft)' },
+              { icon: '💰', label: 'Kas', href: '/kas', bg: 'var(--success-soft)' },
               { icon: '💸', label: 'Financieel beheer', href: '/kashouder/financieel', bg: 'rgba(52,201,122,0.06)' },
               { icon: '💳', label: 'Mijn inleg betalen', href: '/betalen', bg: 'rgba(74,158,255,0.06)' },
               { icon: '⚙️', label: 'Instellingen', href: '/beheerder/admin', bg: 'var(--purple-soft)' },
