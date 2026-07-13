@@ -345,13 +345,20 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
   },
   async () => {
     functions.logger.info('Betaalherinneringen versturen…');
-    const openBetalingen = await db.collection('betalingen').where('status', 'in', ['open']).get();
+    // KRITIEK: alleen 'open' betalingen van de HUIDIGE week meetellen —
+    // zonder deze filter zou een verdwaald oud 'open'-document van een
+    // eerdere week (zie README) een foutieve herinnering veroorzaken.
+    const huidigeWeek = getTrekkingWeek(new Date());
+    const openBetalingen = await db.collection('betalingen')
+      .where('status', '==', 'open')
+      .where('trekkingWeek', '==', huidigeWeek)
+      .get();
     const userIds = [...new Set(openBetalingen.docs.map(d => d.data().userId as string))];
     for (const userId of userIds) {
       const tokens = await getFcmTokens(userId, 'herinneringen');
       await sendToTokens(tokens, {
         title: '⏰ Betaalherinnering',
-        body: 'Je inleg staat nog open. Betaal en meld het in de app vóór de trekking van zaterdag.',
+        body: 'Je inleg voor deze week staat nog open. Betaal vóór zaterdag 18:00 — mis je de deadline, dan telt de trekking van morgen niet mee voor je verzameling.',
       }, { path: '/betalen' });
     }
     functions.logger.info(`Herinneringen verstuurd naar ${userIds.length} leden.`);
