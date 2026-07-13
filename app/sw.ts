@@ -30,6 +30,20 @@ const serwist = new Serwist({
       matcher: ({ url }) => url.pathname.startsWith("/api/"),
       handler: new NetworkOnly(),
     },
+    // KRITIEK: financieel-gevoelige pagina's mogen nooit (ook niet heel
+    // even bij het opstarten) een gecachete/verouderde versie tonen —
+    // zoals een oude kassaldo. Next.js' RSC-navigatiepayloads worden
+    // door defaultCache standaard met NetworkFirst gecached (probeert
+    // eerst live, valt terug op cache), wat in de praktijk soms toch
+    // een korte flits van oude content kan geven. Voor deze specifieke
+    // pagina's forceren we daarom altijd live, net als bij /api/.
+    {
+      matcher: ({ url }) => {
+        const gevoeligePaden = ["/dashboard", "/beheerder", "/kashouder", "/kas"];
+        return gevoeligePaden.some(p => url.pathname === p || url.pathname.startsWith(`${p}/`));
+      },
+      handler: new NetworkOnly(),
+    },
     // defaultCache bevat verstandige runtime-caching regels voor overige
     // Next.js assets (JS/CSS, afbeeldingen, fonts, paginashells) —
     // precies wat nodig is zodat de app laadt vanuit cache bij een
