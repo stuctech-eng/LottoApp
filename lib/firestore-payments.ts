@@ -3,6 +3,8 @@ import {
   addDoc,
   updateDoc,
   doc,
+  getDoc,
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -206,12 +208,96 @@ export async function bevestigBetaling(betaling: Betaling, kashouder: ActieUser)
     betalingId: betaling.id,
     aangemaaktDoor: kashouder.uid,
   });
+
+  if (betaling.isSaldoStorting) {
+    // Storting verhoogt het LottoSaldo. De kasmutatie hierboven dekt
+    // het "geld is er" — dit hierna is puur de boekhouding van het
+    // tegoed zelf, geen extra kasmutatie.
+    await updateDoc(doc(db, 'users', betaling.userId), {
+      lottoSaldo: increment(betaling.bedrag),
+    });
+    await verrekenLottoSaldoMetOpenstaandeWeek(betaling.userId, betaling.userNaam, kashouder);
+  }
+
   await logAudit(
     'betaling_bevestigd',
-    `${kashouder.naam} bevestigde betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)})`,
+    `${kashouder.naam} bevestigde betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)})${betaling.isSaldoStorting ? ' — LottoSaldo-storting' : ''}`,
     kashouder,
     { doelUserId: betaling.userId }
   );
+}
+
+/**
+ * Na een bevestigde LottoSaldo-storting: kijkt of het lid nu genoeg
+ * tegoed heeft om een eventuele openstaande week van DEZE week
+ * meteen automatisch te dekken — zodat je niet apart nog handmatig
+ * hoeft te betalen ná het storten. Géén nieuwe kasmutatie: het geld
+ * zat al in de kas sinds de storting hierboven.
+ */
+async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: string, kashouder: ActieUser) {
+  const userSnap = await getDoc(doc(db, 'users', userId));
+  if (!userSnap.exists()) return;
+  const lottoSaldo = (userSnap.data().lottoSaldo as number | undefined) ?? 0;
+  if (lottoSaldo < STANDAARD_INLEG) return;
+
+  const week = huidigTrekkingWeek();
+  const openSnap = await getDocs(query(
+    collection(db, 'betalingen'),
+    where('userId', '==', userId),
+    where('trekkingWeek', '==', week),
+    where('status', '==', 'open')
+  ));
+  if (openSnap.empty) return;
+
+  const openDoc = openSnap.docs[0];
+  await updateDoc(openDoc.ref, {
+    status: 'betaald',
+    bevestigd: serverTimestamp(),
+    bevestigdDoor: 'systeem-lottosaldo',
+  });
+  await updateDoc(doc(db, 'users', userId), {
+    lottoSaldo: increment(-STANDAARD_INLEG),
+  });
+  await logAudit(
+    'betaling_bevestigd',
+    `Automatisch verrekend: het LottoSaldo van ${userNaam} dekte de openstaande week ${week}`,
+    kashouder,
+    { doelUserId: userId }
+  );
+}
+
+/**
+ * Lid meldt zelf een storting op het eigen LottoSaldo — komt bij de
+ * kashouder terecht als 'te verifiëren', net als een normale
+ * betaalmelding. Wordt pas daadwerkelijk verwerkt na bevestiging
+ * (zie bevestigBetaling hierboven).
+ */
+export async function meldLottoSaldoStorting(user: ActieUser, bedrag: number) {
+  await addDoc(collection(db, 'betalingen'), {
+    userId: user.uid,
+    userNaam: user.naam,
+    bedrag,
+    omschrijving: 'Vooruitbetaling LottoSaldo',
+    provider: 'offline',
+    status: 'verificatie',
+    tikkieGeopend: true,
+    isSaldoStorting: true,
+    aangemaakt: serverTimestamp(),
+  });
+  await logAudit(
+    'betaling_gemeld',
+    `${user.naam} meldde een LottoSaldo-storting van €${bedrag.toFixed(2)}`,
+    user,
+    { doelUserId: user.uid }
+  );
+}
+
+/** Markeert de eenmalige LottoSaldo-uitlegbanner als gezien — puur een
+ *  UI-voorkeur, geen financieel risico, dus zelf-service voor het lid. */
+export async function markeerLottoSaldoIntroGezien(userId: string) {
+  await updateDoc(doc(db, 'users', userId), {
+    lottoSaldoIntroSeen: true,
+  });
 }
 
 export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {

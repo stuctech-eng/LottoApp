@@ -38,6 +38,7 @@ export function subscribeAllUsers(
           ranglijstPunten: data.ranglijstPunten ?? 0,
           actief: data.actief ?? true,
           lottoSaldo: data.lottoSaldo ?? 0,
+          lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
         };
       });
       // Sorteer client-side op naam

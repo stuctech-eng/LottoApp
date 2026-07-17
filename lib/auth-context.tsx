@@ -77,6 +77,7 @@ async function ensureUserDoc(user: FirebaseUser) {
       ranglijstPunten: 0,
       actief: true,
       lottoSaldo: 0,
+      lottoSaldoIntroSeen: false,
     });
     await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: user.uid, naam }, { doelUserId: user.uid });
   }
@@ -136,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ranglijstPunten: data.ranglijstPunten ?? 0,
             actief: data.actief ?? true,
             lottoSaldo: data.lottoSaldo ?? 0,
+            lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
           });
         } else {
           setProfile(null);
@@ -166,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ranglijstPunten: 0,
       actief: true,
       lottoSaldo: 0,
+      lottoSaldoIntroSeen: false,
     });
     await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: cred.user.uid, naam }, { doelUserId: cred.user.uid });
   };

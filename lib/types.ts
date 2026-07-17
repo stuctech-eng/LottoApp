@@ -17,6 +17,10 @@ export interface User {
    *  STANDAARD_INLEG verlaagd zolang er genoeg saldo is. Ontbreekt op
    *  oudere userdocs; overal lezen als `lottoSaldo ?? 0`. */
   lottoSaldo?: number;
+  /** Of de eenmalige LottoSaldo-uitlegbanner al gezien is. In Firestore
+   *  opgeslagen (niet localStorage) zodat het blijft werken na een
+   *  herinstallatie of op een ander apparaat. */
+  lottoSaldoIntroSeen?: boolean;
 }
 
 export interface Ticket {
@@ -126,6 +130,13 @@ export interface Betaling {
   bevestigdDoor?: string | null;
   rondeId?: string;
   tikkieGeopend?: boolean; // true zodra lid op Tikkie-knop heeft getikt — persistente blokkade
+  /** ISO-8601 weeknotatie (bijv. "2026-W29"). Ontbreekt bij een
+   *  LottoSaldo-storting (die is niet aan één specifieke week gekoppeld). */
+  trekkingWeek?: string;
+  /** true als dit een vooruitstorting op het LottoSaldo is, in plaats
+   *  van een reguliere wekelijkse betaling. Bepaalt hoe bevestigBetaling
+   *  het bedrag verwerkt — zie lib/firestore-payments.ts. */
+  isSaldoStorting?: boolean;
 }
 
 export type AuditAction =
