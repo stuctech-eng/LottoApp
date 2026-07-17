@@ -11,6 +11,7 @@ import {
   wijsBetalingAf,
   registreerUitbetaling,
   registreerCorrectie,
+  stortLottoSaldo,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
@@ -18,12 +19,25 @@ import { whatsappLink, buildWhatsappHerinnering } from '@/lib/providers/notifica
 import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, Kasmutatie, User, PaymentConfig } from '@/lib/types';
 
-const NAV = [
+// Deze pagina is toegankelijk voor zowel kashouder als beheerder
+// (zie allowedRoles hieronder). Navigatie moet daarom de rol van de
+// bezoeker volgen — anders verliest een beheerder hier de toegang tot
+// zijn eigen "Beheer"-tab en zit hij vast zonder weg terug.
+const NAV_KASHOUDER = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
-  { href: '/kas', icon: '📒', label: 'Kasboek' },
-  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel', active: true },
+  { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel', active: true },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/profiel', icon: '👤', label: 'Profiel' },
+];
+
+const NAV_BEHEERDER = [
+  { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
@@ -45,6 +59,11 @@ function FinancieelPageContent() {
   const [corBezig, setCorBezig] = useState(false);
   const [corOk, setCorOk] = useState(false);
 
+  const [stortLidId, setStortLidId] = useState('');
+  const [stortBedrag, setStortBedrag] = useState('');
+  const [stortBezig, setStortBezig] = useState(false);
+  const [stortOk, setStortOk] = useState(false);
+
   useEffect(() => {
     const u1 = subscribeKasmutaties(setMutaties);
     const u2 = subscribeBetalingen(setBetalingen);
@@ -65,6 +84,11 @@ function FinancieelPageContent() {
   const teVerifieren = betalingen.filter(b => b.status === 'verificatie');
   const ledenZonderTelefoon = leden.filter(l => l.actief && !l.telefoon);
   const ledenMetTelefoon = leden.filter(l => l.actief && l.telefoon);
+  const actieveLeden = leden.filter(l => l.actief);
+
+  const isBeheerder = profile?.rol === 'beheerder';
+  const NAV = isBeheerder ? NAV_BEHEERDER : NAV_KASHOUDER;
+  const dashboardHref = isBeheerder ? '/beheerder' : '/kashouder';
 
   const tikkieLink = (paymentConfig as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
 
@@ -115,16 +139,33 @@ function FinancieelPageContent() {
     }
   };
 
+  const handleStorting = async () => {
+    const au = actieUser();
+    const bedrag = parseFloat(stortBedrag.replace(',', '.'));
+    const lid = leden.find(l => l.id === stortLidId);
+    if (!au || !lid || isNaN(bedrag) || bedrag <= 0) return;
+    setStortBezig(true);
+    try {
+      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, bedrag, au);
+      setStortBedrag('');
+      setStortLidId('');
+      setStortOk(true);
+      setTimeout(() => setStortOk(false), 2000);
+    } finally {
+      setStortBezig(false);
+    }
+  };
+
   return (
     <>
       <div className="bg-grid" />
       <div className="page">
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px' }}>
           <div>
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, marginBottom: 2 }}>⚡ Kashouder</div>
+            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, marginBottom: 2 }}>{isBeheerder ? '👑 Beheerder' : '⚡ Kashouder'}</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Financieel</div>
           </div>
-          <Link href="/kashouder" style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
+          <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
         </div>
 
         {/* Overzicht */}
@@ -211,6 +252,48 @@ function FinancieelPageContent() {
               {ledenZonderTelefoon.length} lid/leden zonder telefoonnummer: {ledenZonderTelefoon.map(l => l.naam).join(', ')}
             </div>
           )}
+        </div>
+
+        {/* LottoSaldo */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">LottoSaldo</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+            Zie je in Tikkie dat iemand vooruit heeft gestort? Registreer het hier — het bedrag wordt week voor week automatisch verrekend, zonder dat het lid iets hoeft te doen.
+          </div>
+          {actieveLeden.map(lid => {
+            const saldo = lid.lottoSaldo ?? 0;
+            const wekenTegoed = Math.floor(saldo / STANDAARD_INLEG);
+            const kleur = wekenTegoed >= 5 ? 'var(--success)' : wekenTegoed >= 3 ? 'var(--warning)' : 'var(--error)';
+            const stip = wekenTegoed >= 5 ? '🟢' : wekenTegoed >= 3 ? '🟡' : wekenTegoed >= 1 ? '🔴' : '⚪';
+            return (
+              <div key={lid.id} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{stip} {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} tegoed</div>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: kleur }}>€{saldo.toFixed(2)}</div>
+              </div>
+            );
+          })}
+
+          <div className="card" style={{ padding: 18, marginTop: 12 }}>
+            <label className="form-label">Lid</label>
+            <select className="form-input" value={stortLidId} onChange={e => setStortLidId(e.target.value)} style={{ marginBottom: 14 }}>
+              <option value="">Kies een lid…</option>
+              {actieveLeden.map(lid => (
+                <option key={lid.id} value={lid.id}>{lid.naam}</option>
+              ))}
+            </select>
+            <label className="form-label">Bedrag</label>
+            <input type="text" inputMode="decimal" placeholder="€50,00" className="form-input" value={stortBedrag} onChange={e => setStortBedrag(e.target.value)} />
+            <button
+              onClick={handleStorting}
+              disabled={stortBezig || !stortLidId || !stortBedrag}
+              style={{ width: '100%', background: stortOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 14, padding: 15, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: stortBezig || !stortLidId || !stortBedrag ? 0.6 : 1 }}
+            >
+              {stortOk ? '✓ Gestort' : stortBezig ? 'Bezig…' : '💰 Storting registreren'}
+            </button>
+          </div>
         </div>
 
         {/* Uitbetaling */}

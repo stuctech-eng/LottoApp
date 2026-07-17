@@ -13,6 +13,10 @@ export interface User {
   lidSinds: Timestamp | null;
   ranglijstPunten: number;
   actief: boolean;
+  /** Vooruitbetaald tegoed in euro's — wordt elke week automatisch met
+   *  STANDAARD_INLEG verlaagd zolang er genoeg saldo is. Ontbreekt op
+   *  oudere userdocs; overal lezen als `lottoSaldo ?? 0`. */
+  lottoSaldo?: number;
 }
 
 export interface Ticket {
@@ -99,6 +103,12 @@ export type PaymentProviderId = 'offline' | 'mollie' | 'tikkie' | 'stripe' | 'in
 export interface PaymentConfig {
   activeProvider: PaymentProviderId;
   providers: Record<PaymentProviderId, { enabled: boolean }>;
+  tikkieLink?: string;
+  /** Wanneer de Tikkie-link voor het laatst is bijgewerkt — Tikkie-
+   *  betaalverzoeken verlopen standaard na 14 dagen en de app kan dat
+   *  niet automatisch detecteren (geen Tikkie-API-toegang). Dit veld
+   *  is puur een herinnering voor de beheerder. */
+  tikkieLinkBijgewerkt?: Timestamp | null;
 }
 
 export type BetalingStatus = 'open' | 'verificatie' | 'betaald' | 'afgewezen';
@@ -129,6 +139,7 @@ export type AuditAction =
   | 'betaling_gemeld'
   | 'betaling_bevestigd'
   | 'betaling_afgewezen'
+  | 'lottosaldo_storting'
   | 'uitbetaling_geregistreerd'
   | 'kascorrectie'
   | 'trekking_ingevoerd'

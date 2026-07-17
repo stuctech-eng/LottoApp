@@ -37,6 +37,7 @@ export function subscribeAllUsers(
           lidSinds: data.lidSinds ?? null,
           ranglijstPunten: data.ranglijstPunten ?? 0,
           actief: data.actief ?? true,
+          lottoSaldo: data.lottoSaldo ?? 0,
         };
       });
       // Sorteer client-side op naam

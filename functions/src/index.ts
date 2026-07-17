@@ -420,6 +420,9 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
 
     const batch = db.batch();
     let aantalAangemaakt = 0;
+    let aantalAutomatischBetaald = 0;
+    const laagSaldoMeldingen: { userId: string; weken: number }[] = [];
+    const INLEG = 4; // gelijk aan STANDAARD_INLEG in lib/constants.ts
 
     for (const userDoc of usersSnap.docs) {
       if (alBetaling.has(userDoc.id)) continue;
@@ -427,28 +430,83 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
       const tickets = (userData.tickets ?? []) as { id: string; nummers: number[] }[];
       if (tickets.length === 0) continue;
 
-      const ref = db.collection('betalingen').doc();
-      batch.set(ref, {
-        userId: userDoc.id,
-        userNaam: userData.naam ?? 'Onbekend',
-        bedrag: 4,
-        omschrijving: 'Inleg LottoClub',
-        provider: 'offline',
-        status: 'open',
-        trekkingWeek: volgendeWeek,
-        tikkieGeopend: false,
-        aangemaakt: admin.firestore.FieldValue.serverTimestamp(),
-        bevestigd: null,
-        bevestigdDoor: null,
-      });
-      aantalAangemaakt++;
+      const lottoSaldo = (userData.lottoSaldo as number | undefined) ?? 0;
+
+      if (lottoSaldo >= INLEG) {
+        // LottoSaldo-systeem: genoeg tegoed → automatisch afboeken,
+        // week direct op 'betaald' zetten, kas bijwerken. Lid hoeft
+        // niets te doen.
+        const betalingRef = db.collection('betalingen').doc();
+        batch.set(betalingRef, {
+          userId: userDoc.id,
+          userNaam: userData.naam ?? 'Onbekend',
+          bedrag: INLEG,
+          omschrijving: 'Inleg LottoClub (automatisch via LottoSaldo)',
+          provider: 'offline',
+          status: 'betaald',
+          trekkingWeek: volgendeWeek,
+          tikkieGeopend: false,
+          aangemaakt: admin.firestore.FieldValue.serverTimestamp(),
+          bevestigd: admin.firestore.FieldValue.serverTimestamp(),
+          bevestigdDoor: 'systeem-lottosaldo',
+        });
+        batch.update(userDoc.ref, { lottoSaldo: admin.firestore.FieldValue.increment(-INLEG) });
+        const kasmutatieRef = db.collection('kasmutaties').doc();
+        batch.set(kasmutatieRef, {
+          datum: admin.firestore.FieldValue.serverTimestamp(),
+          omschrijving: `Inleg LottoClub (LottoSaldo) — ${userData.naam ?? 'Onbekend'}`,
+          bedrag: INLEG,
+          type: 'inleg',
+          userId: userDoc.id,
+          betalingId: betalingRef.id,
+          aangemaaktDoor: 'systeem-lottosaldo',
+        });
+        aantalAutomatischBetaald++;
+
+        const nieuwSaldo = lottoSaldo - INLEG;
+        const wekenTegoed = Math.floor(nieuwSaldo / INLEG);
+        if (wekenTegoed === 2 || wekenTegoed === 1) {
+          laagSaldoMeldingen.push({ userId: userDoc.id, weken: wekenTegoed });
+        }
+      } else {
+        // Onvoldoende (of geen) LottoSaldo → normale handmatige flow,
+        // ongewijzigd gedrag.
+        const ref = db.collection('betalingen').doc();
+        batch.set(ref, {
+          userId: userDoc.id,
+          userNaam: userData.naam ?? 'Onbekend',
+          bedrag: INLEG,
+          omschrijving: 'Inleg LottoClub',
+          provider: 'offline',
+          status: 'open',
+          trekkingWeek: volgendeWeek,
+          tikkieGeopend: false,
+          aangemaakt: admin.firestore.FieldValue.serverTimestamp(),
+          bevestigd: null,
+          bevestigdDoor: null,
+        });
+        aantalAangemaakt++;
+      }
     }
 
-    if (aantalAangemaakt > 0) {
+    if (aantalAangemaakt > 0 || aantalAutomatischBetaald > 0) {
       await batch.commit();
       functions.logger.info(`${aantalAangemaakt} betalingen aangemaakt voor week ${volgendeWeek}`);
     } else {
       functions.logger.info(`Geen nieuwe betalingen nodig voor week ${volgendeWeek} — al aangemaakt`);
+    }
+
+    // Lage-saldo pushmeldingen — na de batch, zodat een eventuele
+    // Firestore-fout in de batch niet halverwege al meldingen verstuurt.
+    for (const { userId, weken } of laagSaldoMeldingen) {
+      const tokens = await getFcmTokens(userId, 'herinneringen');
+      if (tokens.length === 0) continue;
+      await sendToTokens(tokens, {
+        title: weken === 1 ? '🔴 LottoSaldo bijna op' : '🟡 LottoSaldo wordt laag',
+        body: weken === 1
+          ? 'Je hebt nog maar 1 week LottoSaldo over. Stort bij zodat je automatisch blijft meedoen.'
+          : 'Je hebt nog 2 weken LottoSaldo over. Denk aan bijstorten om automatisch te blijven meedoen.',
+      }, { path: '/profiel' });
     }
   }
 );

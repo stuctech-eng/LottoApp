@@ -47,6 +47,7 @@ export function subscribeRanglijst(callback: (entries: RanglijstEntry[]) => void
           lidSinds: data.lidSinds ?? null,
           ranglijstPunten: data.ranglijstPunten ?? 0,
           actief: data.actief ?? true,
+          lottoSaldo: data.lottoSaldo ?? 0,
         } as User;
       });
 

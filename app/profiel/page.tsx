@@ -11,6 +11,7 @@ import { activeerNotificaties, deactiveerNotificaties } from '@/lib/firebase-mes
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
+import { STANDAARD_INLEG } from '@/lib/constants';
 
 const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -226,6 +227,31 @@ function ProfielPageContent() {
         </div>
 
         <div style={{ height: 20 }} />
+
+        {/* LottoSaldo */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">LottoSaldo</div>
+          {(() => {
+            const saldo = profile?.lottoSaldo ?? 0;
+            const wekenTegoed = Math.floor(saldo / STANDAARD_INLEG);
+            const status = wekenTegoed >= 5
+              ? { kleur: 'var(--success)', bg: 'var(--success-soft)', label: '🟢 Ruim voldoende tegoed' }
+              : wekenTegoed >= 3
+              ? { kleur: 'var(--warning)', bg: 'var(--warning-soft)', label: '🟡 Denk aan bijstorten' }
+              : wekenTegoed >= 1
+              ? { kleur: 'var(--error)', bg: 'var(--error-soft)', label: '🔴 Bijna op — stort snel bij' }
+              : { kleur: 'var(--muted)', bg: 'var(--surface2)', label: '⚪ Geen tegoed — betaal wekelijks handmatig' };
+            return (
+              <div className="card" style={{ padding: 18, background: status.bg, border: `1px solid ${status.kleur}33` }}>
+                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, color: status.kleur, marginBottom: 4 }}>€{saldo.toFixed(2)}</div>
+                <div style={{ fontSize: 12, color: status.kleur, fontWeight: 600, marginBottom: 8 }}>{status.label}</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                  Nog {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} automatisch gedekt (à €{STANDAARD_INLEG.toFixed(2)} per week). Wil je bijstorten? Betaal een bedrag naar keuze via Tikkie en meld dit bij de kashouder.
+                </div>
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Naam wijzigen */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>

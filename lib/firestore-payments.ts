@@ -7,6 +7,7 @@ import {
   query,
   where,
   serverTimestamp,
+  increment,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Betaling, Kasmutatie } from './types';
@@ -287,6 +288,35 @@ export async function markeerBetaaldDoorKashouder(
   await logAudit(
     'betaling_bevestigd',
     `${kashouder.naam} markeerde ${lid.naam} direct als betaald (€${bedrag.toFixed(2)}) — via Tikkie geverifieerd, niet gemeld door lid`,
+    kashouder,
+    { doelUserId: lid.id }
+  );
+}
+
+/**
+ * Kashouder registreert een storting op het LottoSaldo van een lid,
+ * op basis van eigen verificatie (bijv. gezien in Tikkie) — net als
+ * markeerBetaaldDoorKashouder is de kashouder hier zelf de
+ * verificatiestap; een lid kan zijn eigen saldo niet direct verhogen.
+ *
+ * Verhoogt ALLEEN lottoSaldo — maakt bewust GEEN kasmutatie aan. Het
+ * gestorte bedrag is nog geen "pot-geld"; dat wordt het pas stukje bij
+ * beetje zodra de wekelijkse automatische afboeking het daadwerkelijk
+ * omzet in een 'betaald'-week (zie functions/src/index.ts,
+ * onBetalingenAanmaken). Zo blijft kasSaldo = som van kasmutaties
+ * kloppen zonder dat vooruitbetaald geld de pot te vroeg opblaast.
+ */
+export async function stortLottoSaldo(
+  lid: { id: string; naam: string },
+  bedrag: number,
+  kashouder: ActieUser
+) {
+  await updateDoc(doc(db, 'users', lid.id), {
+    lottoSaldo: increment(bedrag),
+  });
+  await logAudit(
+    'lottosaldo_storting',
+    `${kashouder.naam} registreerde een storting van €${bedrag.toFixed(2)} op het LottoSaldo van ${lid.naam}`,
     kashouder,
     { doelUserId: lid.id }
   );
