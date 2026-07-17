@@ -20,7 +20,7 @@ import { Betaling, Kasmutatie, User, Seizoen, PaymentConfig } from '@/lib/types'
 
 const NAV = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard', active: true },
-  { href: '/kas', icon: '📒', label: 'Kasboek' },
+  { href: '/kas', icon: '📒', label: 'Kas' },
   { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
@@ -60,15 +60,25 @@ function KashouderPageContent() {
   );
 
   const teVerifieren = betalingenDezeWeek.filter(b => b.status === 'verificatie');
-  const openBetalingen = betalingenDezeWeek.filter(b => b.status === 'open');
 
   // Betaalvoortgang alleen op basis van huidige week
   const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
+  const verificatieUserIds = new Set(teVerifieren.map(b => b.userId));
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
   const totaalLeden = actieveLeden.length;
   const percentage = totaalLeden > 0 ? Math.round((aantalBetaald / totaalLeden) * 100) : 0;
   const totaalVerwacht = totaalLeden * STANDAARD_INLEG;
   const totaalOntvangen = aantalBetaald * STANDAARD_INLEG;
+
+  // KRITIEK: 'openBetalingen' is niet alleen leden met een bestaand
+  // 'open'-document — ook leden zonder ENIG betaaldocument voor deze
+  // week (bijv. omdat hun ticket pas na het aanmaken van de
+  // weekbetalingen is toegevoegd) hebben niet betaald en horen hier
+  // te staan. Anders toont "Alles in orde" een groen vinkje terwijl er
+  // feitelijk niemand heeft betaald.
+  const openBetalingen = actieveLeden.filter(
+    l => !betaaldeLeden.has(l.id) && !verificatieUserIds.has(l.id)
+  );
 
   const handleBevestig = async (b: Betaling) => {
     const au = actieUser();
@@ -107,7 +117,7 @@ function KashouderPageContent() {
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>💸 Uitbetalen</div>
               </Link>
               <Link href="/kas" style={{ background: 'rgba(52,201,122,0.1)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 13, padding: 12, textAlign: 'center', textDecoration: 'none' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>📒 Kasboek</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--success)' }}>💰 Kas</div>
               </Link>
             </div>
           </div>
@@ -161,16 +171,21 @@ function KashouderPageContent() {
         {openBetalingen.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: 16 }}>
             <div className="section-title">Openstaand</div>
-            {openBetalingen.map(b => {
-              const lid = leden.find(l => l.id === b.userId);
+            {openBetalingen.map(lid => {
+              // Bestaand 'open'-document gebruiken voor bedrag/omschrijving
+              // als dat er is; anders (lid heeft nog GEEN document voor
+              // deze week) terugvallen op de standaardwaarden.
+              const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open');
+              const bedrag = bestaandDocument?.bedrag ?? STANDAARD_INLEG;
+              const omschrijving = bestaandDocument?.omschrijving ?? STANDAARD_OMSCHRIJVING;
               return (
-                <div key={b.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <div key={lid.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                   <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👤</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{b.userNaam}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€{b.bedrag.toFixed(2)} · {b.omschrijving}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€{bedrag.toFixed(2)} · {omschrijving}</div>
                   </div>
-                  {lid?.telefoon && (
+                  {lid.telefoon && (
                     <a
                       href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING, tikkieLink))}
                       target="_blank"
