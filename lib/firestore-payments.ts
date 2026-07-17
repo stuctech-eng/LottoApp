@@ -11,6 +11,7 @@ import {
 import { db } from './firebase';
 import { Betaling, Kasmutatie } from './types';
 import { logAudit } from './firestore-audit';
+import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from './constants';
 
 interface ActieUser {
   uid: string;
@@ -223,6 +224,71 @@ export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
     `${kashouder.naam} wees betaling van ${betaling.userNaam} af (€${betaling.bedrag.toFixed(2)})`,
     kashouder,
     { doelUserId: betaling.userId }
+  );
+}
+
+/**
+ * Kashouder markeert een lid direct als betaald voor de huidige week,
+ * op basis van eigen verificatie (bijv. gezien in de Tikkie-app) —
+ * zonder te wachten tot het lid zelf op "Ik heb betaald" tikt.
+ *
+ * Werkt in twee situaties:
+ * - Er bestaat al een 'open' (of 'verificatie') document voor deze
+ *   week → dat wordt bijgewerkt naar 'betaald'.
+ * - Er bestaat nog HELEMAAL GEEN document (bijv. omdat het lid pas na
+ *   het aanmaken van de weekbetalingen een ticket kreeg) → er wordt
+ *   een nieuw document direct met status 'betaald' aangemaakt.
+ *
+ * In beide gevallen wordt een kasmutatie aangemaakt, net als bij de
+ * normale bevestigBetaling-flow.
+ */
+export async function markeerBetaaldDoorKashouder(
+  lid: { id: string; naam: string },
+  bestaandDocument: Betaling | null,
+  kashouder: ActieUser
+) {
+  const week = huidigTrekkingWeek();
+  const bedrag = bestaandDocument?.bedrag ?? STANDAARD_INLEG;
+  const omschrijving = bestaandDocument?.omschrijving ?? STANDAARD_OMSCHRIJVING;
+  let betalingId: string;
+
+  if (bestaandDocument) {
+    await updateDoc(doc(db, 'betalingen', bestaandDocument.id), {
+      status: 'betaald',
+      bevestigd: serverTimestamp(),
+      bevestigdDoor: kashouder.uid,
+    });
+    betalingId = bestaandDocument.id;
+  } else {
+    const ref = await addDoc(collection(db, 'betalingen'), {
+      userId: lid.id,
+      userNaam: lid.naam,
+      bedrag,
+      omschrijving,
+      provider: 'offline',
+      status: 'betaald',
+      trekkingWeek: week,
+      tikkieGeopend: false,
+      aangemaakt: serverTimestamp(),
+      bevestigd: serverTimestamp(),
+      bevestigdDoor: kashouder.uid,
+    });
+    betalingId = ref.id;
+  }
+
+  await maakKasmutatie({
+    omschrijving: `${omschrijving} — ${lid.naam}`,
+    bedrag: Math.abs(bedrag),
+    type: 'inleg',
+    userId: lid.id,
+    betalingId,
+    aangemaaktDoor: kashouder.uid,
+  });
+  await logAudit(
+    'betaling_bevestigd',
+    `${kashouder.naam} markeerde ${lid.naam} direct als betaald (€${bedrag.toFixed(2)}) — via Tikkie geverifieerd, niet gemeld door lid`,
+    kashouder,
+    { doelUserId: lid.id }
   );
 }
 

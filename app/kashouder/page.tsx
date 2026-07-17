@@ -10,6 +10,7 @@ import {
   bevestigBetaling,
   wijsBetalingAf,
   huidigTrekkingWeek,
+  markeerBetaaldDoorKashouder,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
@@ -90,6 +91,15 @@ function KashouderPageContent() {
     const au = actieUser();
     if (!au) return;
     await wijsBetalingAf(b, au);
+  };
+
+  const handleMarkeerBetaald = async (lid: User) => {
+    const au = actieUser();
+    if (!au) return;
+    const bevestigd = window.confirm(`${lid.naam} als betaald markeren? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
+    if (!bevestigd) return;
+    const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open') ?? null;
+    await markeerBetaaldDoorKashouder({ id: lid.id, naam: lid.naam }, bestaandDocument, au);
   };
 
   return (
@@ -185,16 +195,24 @@ function KashouderPageContent() {
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€{bedrag.toFixed(2)} · {omschrijving}</div>
                   </div>
-                  {lid.telefoon && (
-                    <a
-                      href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING, tikkieLink))}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => handleMarkeerBetaald(lid)}
+                      style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
                     >
-                      💬 Herinner
-                    </a>
-                  )}
+                      ✓ Betaald
+                    </button>
+                    {lid.telefoon && (
+                      <a
+                        href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING, tikkieLink))}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+                      >
+                        💬 Herinner
+                      </a>
+                    )}
+                  </div>
                 </div>
               );
             })}
