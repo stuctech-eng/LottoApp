@@ -72,7 +72,7 @@ export default function DebugFcmPage() {
   };
 
   return (
-    <div style={{ background: '#0d1b2a', minHeight: '100dvh', padding: 20, fontFamily: 'monospace' }}>
+    <div style={{ background: '#0d1b2a', minHeight: '100dvh', padding: '20px', paddingTop: 'max(20px, env(safe-area-inset-top, 20px))', fontFamily: 'monospace' }}>
       <div style={{ color: '#4a9eff', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>🔍 FCM Diagnostiek</div>
       <button onClick={runDiagnostiek} disabled={bezig} style={{ width: '100%', padding: 14, background: '#4a9eff', color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, marginBottom: 16, opacity: bezig ? 0.6 : 1 }}>
         {bezig ? '⏳ Bezig...' : '▶ Start diagnostiek'}
