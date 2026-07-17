@@ -393,6 +393,55 @@ export const onTrekkingHerinnering = functions.scheduler.onSchedule(
   }
 );
 
+// ─────────────────────── onTikkieLinkVerval ───────────────────────
+
+/**
+ * Tikkie-betaalverzoeken verlopen doorgaans na 14 dagen. De app heeft
+ * geen Tikkie-API-toegang en kan dus niet daadwerkelijk detecteren of
+ * de link nog werkt — dit is een tijd-gebaseerde herinnering, geen
+ * garantie. Draait elke maandag; stuurt alleen een melding als de
+ * link 12+ dagen niet is bijgewerkt (twee dagen buffer vóór de
+ * typische 14-dagen-vervaldatum).
+ */
+export const onTikkieLinkVerval = functions.scheduler.onSchedule(
+  {
+    schedule: '0 9 * * 1', // elke maandag 09:00
+    timeZone: 'Europe/Amsterdam',
+  },
+  async () => {
+    const configSnap = await db.doc('paymentConfig/main').get();
+    const bijgewerkt = configSnap.data()?.tikkieLinkBijgewerkt as admin.firestore.Timestamp | undefined;
+    if (!bijgewerkt) {
+      functions.logger.info('Geen tikkieLinkBijgewerkt-datum bekend — melding overgeslagen.');
+      return;
+    }
+
+    const dagenGeleden = Math.floor((Date.now() - bijgewerkt.toDate().getTime()) / 86400000);
+    if (dagenGeleden < 12) {
+      functions.logger.info(`Tikkie-link is ${dagenGeleden} dagen oud — nog geen melding nodig.`);
+      return;
+    }
+
+    functions.logger.info(`Tikkie-link is ${dagenGeleden} dagen oud — melding versturen naar beheerders…`);
+    const usersSnap = await db.collection('users')
+      .where('actief', '==', true)
+      .where('rol', '==', 'beheerder')
+      .get();
+    let aantalVerstuurd = 0;
+    for (const userDoc of usersSnap.docs) {
+      const tokens = await getFcmTokens(userDoc.id, 'herinneringen');
+      if (tokens.length > 0) {
+        await sendToTokens(tokens, {
+          title: '🔗 Tikkie-link waarschijnlijk verlopen',
+          body: `De Tikkie-link is ${dagenGeleden} dagen niet bijgewerkt en verloopt doorgaans na 14 dagen. Ververs 'm via Beheer → Instellingen.`,
+        }, { path: '/beheerder/admin' });
+        aantalVerstuurd++;
+      }
+    }
+    functions.logger.info(`Tikkie-vervalmelding verstuurd naar ${aantalVerstuurd} beheerder(s).`);
+  }
+);
+
 // ─────────────────────── onBetalingenAanmaken ───────────────────────
 
 export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(

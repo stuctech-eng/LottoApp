@@ -2,7 +2,7 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subscribeAuditLog } from '@/lib/firestore-audit';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
@@ -47,8 +47,7 @@ function AdminPageContent() {
     const u1 = subscribeAuditLog(setAuditLog, 50);
     const u2 = subscribePaymentConfig((config) => {
       setPaymentConfig(config);
-      const cfg = config as PaymentConfig & { tikkieLink?: string };
-      setTikkieLink(cfg.tikkieLink ?? '');
+      setTikkieLink(config.tikkieLink ?? '');
     });
     const u3 = subscribeSpelConfig(setSpelConfig);
     const u5 = subscribeAlleSeizoenen(setSeizoenen);
@@ -113,7 +112,7 @@ function AdminPageContent() {
     setTikkieError(null);
     setTikkieBezig(true);
     try {
-      await setDoc(doc(db, 'paymentConfig', 'main'), { tikkieLink: tikkieLink.trim() }, { merge: true });
+      await setDoc(doc(db, 'paymentConfig', 'main'), { tikkieLink: tikkieLink.trim(), tikkieLinkBijgewerkt: serverTimestamp() }, { merge: true });
       setTikkieOk(true);
       setTimeout(() => setTikkieOk(false), 2000);
     } finally {
@@ -241,6 +240,19 @@ function AdminPageContent() {
                     ✓ Link ingesteld: {tikkieLink}
                   </div>
                 )}
+                {(() => {
+                  const bijgewerkt = paymentConfig.tikkieLinkBijgewerkt;
+                  if (!bijgewerkt) return null;
+                  const dagenGeleden = Math.floor((Date.now() - bijgewerkt.toDate().getTime()) / 86400000);
+                  const kleur = dagenGeleden >= 12 ? 'var(--error)' : dagenGeleden >= 8 ? 'var(--warning)' : 'var(--muted)';
+                  const waarschuwing = dagenGeleden >= 12;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: waarschuwing ? 'var(--error-soft)' : 'transparent', border: waarschuwing ? '1px solid rgba(255,90,90,0.2)' : 'none', borderRadius: 10, padding: waarschuwing ? '8px 10px' : 0, marginBottom: 12, fontSize: 11, color: kleur, lineHeight: 1.5 }}>
+                      {waarschuwing ? '⚠️' : '🕓'} Laatst bijgewerkt: {dagenGeleden === 0 ? 'vandaag' : `${dagenGeleden} ${dagenGeleden === 1 ? 'dag' : 'dagen'} geleden`}
+                      {waarschuwing && ' — Tikkie-links verlopen doorgaans na 14 dagen. Ververs deze link.'}
+                    </div>
+                  );
+                })()}
                 <button onClick={handleTikkie} disabled={tikkieBezig} style={{ width: '100%', background: tikkieOk ? 'linear-gradient(135deg,var(--success),#1a8a50)' : 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: tikkieBezig ? 0.6 : 1 }}>
                   {tikkieOk ? '✓ Opgeslagen' : tikkieBezig ? 'Opslaan…' : '💳 Tikkie-link opslaan'}
                 </button>
