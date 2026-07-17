@@ -299,12 +299,12 @@ export async function markeerBetaaldDoorKashouder(
  * markeerBetaaldDoorKashouder is de kashouder hier zelf de
  * verificatiestap; een lid kan zijn eigen saldo niet direct verhogen.
  *
- * Verhoogt ALLEEN lottoSaldo — maakt bewust GEEN kasmutatie aan. Het
- * gestorte bedrag is nog geen "pot-geld"; dat wordt het pas stukje bij
- * beetje zodra de wekelijkse automatische afboeking het daadwerkelijk
- * omzet in een 'betaald'-week (zie functions/src/index.ts,
- * onBetalingenAanmaken). Zo blijft kasSaldo = som van kasmutaties
- * kloppen zonder dat vooruitbetaald geld de pot te vroeg opblaast.
+ * Verhoogt lottoSaldo ÉN maakt direct een kasmutatie aan: het geld is
+ * vanaf het moment dat de kashouder het ontvangt economisch al van de
+ * club, ook al wordt het pas later als wekelijkse inleg "verbruikt".
+ * De wekelijkse automatische afboeking (zie functions/src/index.ts,
+ * onBetalingenAanmaken) verlaagt daarna alleen lottoSaldo — die maakt
+ * bewust GEEN nieuwe kasmutatie, want dat geld zit al in de kas.
  */
 export async function stortLottoSaldo(
   lid: { id: string; naam: string },
@@ -313,6 +313,13 @@ export async function stortLottoSaldo(
 ) {
   await updateDoc(doc(db, 'users', lid.id), {
     lottoSaldo: increment(bedrag),
+  });
+  await maakKasmutatie({
+    omschrijving: `Vooruitbetaling LottoSaldo — ${lid.naam}`,
+    bedrag,
+    type: 'inleg',
+    userId: lid.id,
+    aangemaaktDoor: kashouder.uid,
   });
   await logAudit(
     'lottosaldo_storting',

@@ -434,8 +434,14 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
 
       if (lottoSaldo >= INLEG) {
         // LottoSaldo-systeem: genoeg tegoed → automatisch afboeken,
-        // week direct op 'betaald' zetten, kas bijwerken. Lid hoeft
-        // niets te doen.
+        // week direct op 'betaald' zetten. Lid hoeft niets te doen.
+        //
+        // BELANGRIJK: hier wordt GEEN nieuwe kasmutatie aangemaakt.
+        // Het geld is al bij de storting zelf als kasmutatie geteld
+        // (zie lib/firestore-payments.ts, stortLottoSaldo) — de
+        // kashouder ontvangt het namelijk direct op het moment van
+        // storten, niet pas bij deze wekelijkse "verbruik"-stap. Nog
+        // een kasmutatie hier zou het bedrag dubbel tellen.
         const betalingRef = db.collection('betalingen').doc();
         batch.set(betalingRef, {
           userId: userDoc.id,
@@ -451,16 +457,6 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
           bevestigdDoor: 'systeem-lottosaldo',
         });
         batch.update(userDoc.ref, { lottoSaldo: admin.firestore.FieldValue.increment(-INLEG) });
-        const kasmutatieRef = db.collection('kasmutaties').doc();
-        batch.set(kasmutatieRef, {
-          datum: admin.firestore.FieldValue.serverTimestamp(),
-          omschrijving: `Inleg LottoClub (LottoSaldo) — ${userData.naam ?? 'Onbekend'}`,
-          bedrag: INLEG,
-          type: 'inleg',
-          userId: userDoc.id,
-          betalingId: betalingRef.id,
-          aangemaaktDoor: 'systeem-lottosaldo',
-        });
         aantalAutomatischBetaald++;
 
         const nieuwSaldo = lottoSaldo - INLEG;

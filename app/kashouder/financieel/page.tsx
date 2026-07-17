@@ -85,6 +85,8 @@ function FinancieelPageContent() {
   const ledenZonderTelefoon = leden.filter(l => l.actief && !l.telefoon);
   const ledenMetTelefoon = leden.filter(l => l.actief && l.telefoon);
   const actieveLeden = leden.filter(l => l.actief);
+  const totaalLottoSaldo = actieveLeden.reduce((s, l) => s + (l.lottoSaldo ?? 0), 0);
+  const vrijBeschikbaar = saldo - totaalLottoSaldo;
 
   const isBeheerder = profile?.rol === 'beheerder';
   const NAV = isBeheerder ? NAV_BEHEERDER : NAV_KASHOUDER;
@@ -166,6 +168,29 @@ function FinancieelPageContent() {
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Financieel</div>
           </div>
           <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
+        </div>
+
+        {/* Kas-uitsplitsing */}
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
+          <div className="section-title">Kas-uitsplitsing</div>
+          <div className="card" style={{ padding: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Totale kas</span>
+              <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 22, color: 'var(--gold)' }}>€{saldo.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>− Gereserveerd als LottoSaldo</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--accent)' }}>€{totaalLottoSaldo.toFixed(2)}</span>
+            </div>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0 14px' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Vrij beschikbaar</span>
+              <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, color: vrijBeschikbaar >= 0 ? 'var(--success)' : 'var(--error)' }}>€{vrijBeschikbaar.toFixed(2)}</span>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 10, lineHeight: 1.5 }}>
+              "Gereserveerd" is het deel van de kas dat al door leden is vooruitbetaald maar nog niet als wekelijkse inleg is verbruikt — technisch gezien al clubgeld, maar nog niet "vrij" te gebruiken voor bijv. een uitbetaling.
+            </div>
+          </div>
         </div>
 
         {/* Overzicht */}
