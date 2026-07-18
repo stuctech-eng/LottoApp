@@ -19,6 +19,19 @@ async function getSpelConfig(): Promise<SpelConfig> {
 }
 
 /**
+ * Haalt de actueel ingestelde standaard inleg op uit
+ * /verenigingConfig/main (beheerbaar via Beheer → Instellingen).
+ * Valt terug op 4 (gelijk aan STANDAARD_INLEG in lib/constants.ts)
+ * als het document nog niet bestaat of het veld ontbreekt/ongeldig is.
+ */
+async function getStandaardInleg(): Promise<number> {
+  const snap = await db.doc('verenigingConfig/main').get();
+  const bedrag = snap.data()?.standaardInleg;
+  if (typeof bedrag === 'number' && bedrag > 0) return bedrag;
+  return 4;
+}
+
+/**
  * Bepaalt welke reeds verwerkte trekkingen van dit seizoen bij de HUIDIGE
  * speelreeks horen: alles ná de laatste trekking met een winnaar, of alles
  * vanaf het begin als er nog nooit gewonnen is. Geen orderBy() gebruikt
@@ -471,7 +484,7 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
     let aantalAangemaakt = 0;
     let aantalAutomatischBetaald = 0;
     const laagSaldoMeldingen: { userId: string; weken: number }[] = [];
-    const INLEG = 4; // gelijk aan STANDAARD_INLEG in lib/constants.ts
+    const INLEG = await getStandaardInleg();
 
     for (const userDoc of usersSnap.docs) {
       if (alBetaling.has(userDoc.id)) continue;

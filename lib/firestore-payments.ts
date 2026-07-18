@@ -14,7 +14,8 @@ import {
 import { db } from './firebase';
 import { Betaling, Kasmutatie } from './types';
 import { logAudit } from './firestore-audit';
-import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from './constants';
+import { STANDAARD_OMSCHRIJVING } from './constants';
+import { haalVerenigingConfigOp } from './firestore-vereniging';
 
 interface ActieUser {
   uid: string;
@@ -238,7 +239,8 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
   const userSnap = await getDoc(doc(db, 'users', userId));
   if (!userSnap.exists()) return;
   const lottoSaldo = (userSnap.data().lottoSaldo as number | undefined) ?? 0;
-  if (lottoSaldo < STANDAARD_INLEG) return;
+  const { standaardInleg } = await haalVerenigingConfigOp();
+  if (lottoSaldo < standaardInleg) return;
 
   const week = huidigTrekkingWeek();
   const openSnap = await getDocs(query(
@@ -256,7 +258,7 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
     bevestigdDoor: 'systeem-lottosaldo',
   });
   await updateDoc(doc(db, 'users', userId), {
-    lottoSaldo: increment(-STANDAARD_INLEG),
+    lottoSaldo: increment(-standaardInleg),
   });
   await logAudit(
     'betaling_bevestigd',
@@ -335,7 +337,8 @@ export async function markeerBetaaldDoorKashouder(
   kashouder: ActieUser
 ) {
   const week = huidigTrekkingWeek();
-  const bedrag = bestaandDocument?.bedrag ?? STANDAARD_INLEG;
+  const { standaardInleg } = await haalVerenigingConfigOp();
+  const bedrag = bestaandDocument?.bedrag ?? standaardInleg;
   const omschrijving = bestaandDocument?.omschrijving ?? STANDAARD_OMSCHRIJVING;
   let betalingId: string;
 

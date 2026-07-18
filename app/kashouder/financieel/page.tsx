@@ -15,8 +15,9 @@ import {
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { whatsappLink, buildWhatsappHerinnering } from '@/lib/providers/notifications';
-import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
+import { STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, Kasmutatie, User, PaymentConfig } from '@/lib/types';
 
 // Deze pagina is toegankelijk voor zowel kashouder als beheerder
@@ -47,6 +48,7 @@ function FinancieelPageContent() {
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [leden, setLeden] = useState<User[]>([]);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
 
   const [uitbBedrag, setUitbBedrag] = useState('');
   const [uitbOmschrijving, setUitbOmschrijving] = useState('');
@@ -69,7 +71,8 @@ function FinancieelPageContent() {
     const u2 = subscribeBetalingen(setBetalingen);
     const u3 = subscribeAllUsers(setLeden);
     const u4 = subscribePaymentConfig(setPaymentConfig);
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
   const saldo = berekenKasSaldo(mutaties);
@@ -92,7 +95,7 @@ function FinancieelPageContent() {
   const NAV = isBeheerder ? NAV_BEHEERDER : NAV_KASHOUDER;
   const dashboardHref = isBeheerder ? '/beheerder' : '/kashouder';
 
-  const tikkieLink = (paymentConfig as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
+  const tikkieLink = paymentConfig.tikkieLink || undefined;
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
 
@@ -263,7 +266,7 @@ function FinancieelPageContent() {
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>{lid.telefoon}</div>
               </div>
               <a
-                href={whatsappLink(lid.telefoon!, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING, tikkieLink))}
+                href={whatsappLink(lid.telefoon!, buildWhatsappHerinnering(lid.naam, standaardInleg, STANDAARD_OMSCHRIJVING, tikkieLink))}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ background: 'var(--success-soft)', color: 'var(--success)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
@@ -287,7 +290,7 @@ function FinancieelPageContent() {
           </div>
           {actieveLeden.map(lid => {
             const saldo = lid.lottoSaldo ?? 0;
-            const wekenTegoed = Math.floor(saldo / STANDAARD_INLEG);
+            const wekenTegoed = Math.floor(saldo / standaardInleg);
             const kleur = wekenTegoed >= 5 ? 'var(--success)' : wekenTegoed >= 3 ? 'var(--warning)' : 'var(--error)';
             const stip = wekenTegoed >= 5 ? '🟢' : wekenTegoed >= 3 ? '🟡' : wekenTegoed >= 1 ? '🔴' : '⚪';
             return (

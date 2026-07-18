@@ -15,8 +15,9 @@ import {
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { whatsappLink, buildWhatsappHerinnering } from '@/lib/providers/notifications';
-import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
+import { STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, Kasmutatie, User, Seizoen, PaymentConfig } from '@/lib/types';
 
 const NAV = [
@@ -35,6 +36,7 @@ function KashouderPageContent() {
   const [leden, setLeden] = useState<User[]>([]);
   const [seizoen, setSeizoen] = useState<Seizoen | null>(null);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
@@ -45,14 +47,15 @@ function KashouderPageContent() {
     const u3 = subscribeAllUsers((l) => { setLeden(l); klaar(); });
     const u4 = subscribeSeizoen((s) => { setSeizoen(s); klaar(); });
     const u5 = subscribePaymentConfig(setPaymentConfig);
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    const u6 = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
 
   const saldo = berekenKasSaldo(mutaties);
   const actieveLeden = leden.filter(l => l.actief);
-  const tikkieLink = (paymentConfig as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
+  const tikkieLink = paymentConfig.tikkieLink || undefined;
 
   // Filter op huidige week — alleen betalingen van deze week tellen mee
   const huidigeWeek = huidigTrekkingWeek();
@@ -68,8 +71,8 @@ function KashouderPageContent() {
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
   const totaalLeden = actieveLeden.length;
   const percentage = totaalLeden > 0 ? Math.round((aantalBetaald / totaalLeden) * 100) : 0;
-  const totaalVerwacht = totaalLeden * STANDAARD_INLEG;
-  const totaalOntvangen = aantalBetaald * STANDAARD_INLEG;
+  const totaalVerwacht = totaalLeden * standaardInleg;
+  const totaalOntvangen = aantalBetaald * standaardInleg;
 
   // KRITIEK: 'openBetalingen' is niet alleen leden met een bestaand
   // 'open'-document — ook leden zonder ENIG betaaldocument voor deze
@@ -186,7 +189,7 @@ function KashouderPageContent() {
               // als dat er is; anders (lid heeft nog GEEN document voor
               // deze week) terugvallen op de standaardwaarden.
               const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open');
-              const bedrag = bestaandDocument?.bedrag ?? STANDAARD_INLEG;
+              const bedrag = bestaandDocument?.bedrag ?? standaardInleg;
               const omschrijving = bestaandDocument?.omschrijving ?? STANDAARD_OMSCHRIJVING;
               return (
                 <div key={lid.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -204,7 +207,7 @@ function KashouderPageContent() {
                     </button>
                     {lid.telefoon && (
                       <a
-                        href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, STANDAARD_INLEG, STANDAARD_OMSCHRIJVING, tikkieLink))}
+                        href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, standaardInleg, STANDAARD_OMSCHRIJVING, tikkieLink))}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}

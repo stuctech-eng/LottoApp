@@ -11,7 +11,7 @@ import { activeerNotificaties, deactiveerNotificaties } from '@/lib/firebase-mes
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
-import { STANDAARD_INLEG } from '@/lib/constants';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 
 const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -73,6 +73,13 @@ function ProfielPageContent() {
   const [notifActief, setNotifActief] = useState(false);
   const [notifBezig, setNotifBezig] = useState(false);
   const [notifToast, setNotifToast] = useState<string | null>(null);
+
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+
+  useEffect(() => {
+    const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (profile?.naam) setNaam(profile.naam);
@@ -233,7 +240,7 @@ function ProfielPageContent() {
           <div className="section-title">LottoSaldo</div>
           {(() => {
             const saldo = profile?.lottoSaldo ?? 0;
-            const wekenTegoed = Math.floor(saldo / STANDAARD_INLEG);
+            const wekenTegoed = Math.floor(saldo / standaardInleg);
             const status = wekenTegoed >= 5
               ? { kleur: 'var(--success)', bg: 'var(--success-soft)', label: '🟢 Ruim voldoende tegoed' }
               : wekenTegoed >= 3
@@ -246,7 +253,7 @@ function ProfielPageContent() {
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, color: status.kleur, marginBottom: 4 }}>€{saldo.toFixed(2)}</div>
                 <div style={{ fontSize: 12, color: status.kleur, fontWeight: 600, marginBottom: 8 }}>{status.label}</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
-                  Nog {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} automatisch gedekt (à €{STANDAARD_INLEG.toFixed(2)} per week). Wil je bijstorten? Betaal een bedrag naar keuze via Tikkie en meld dit bij de kashouder.
+                  Nog {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} automatisch gedekt (à €{standaardInleg.toFixed(2)} per week). Wil je bijstorten? Betaal een bedrag naar keuze via Tikkie en meld dit bij de kashouder.
                 </div>
               </div>
             );

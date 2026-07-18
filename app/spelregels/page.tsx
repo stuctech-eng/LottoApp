@@ -1,8 +1,17 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 
 function SpelregelsContent() {
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+
+  useEffect(() => {
+    const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return unsub;
+  }, []);
+
   return (
     <>
       <div className="bg-grid" />
@@ -104,7 +113,7 @@ function SpelregelsContent() {
           <div style={{ background: 'linear-gradient(135deg,#2a1c00,#0d1b2a)', border: '1px solid rgba(240,192,96,0.18)', borderRadius: 18, padding: '18px 20px', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 12, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Samenvatting</div>
             {[
-              '💳 Betaal elke week €4 via Tikkie of overboeking',
+              `💳 Betaal elke week €${standaardInleg} via Tikkie of overboeking`,
               '📲 Meld je betaling in de app na het betalen',
               '✅ Kashouder bevestigt → je doet mee deze week',
               '🎱 Zaterdag worden de nummers getrokken',

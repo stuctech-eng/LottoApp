@@ -7,10 +7,12 @@ import { db } from '@/lib/firebase';
 import { subscribeAuditLog } from '@/lib/firestore-audit';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelconfig';
+import { subscribeVerenigingConfig, updateVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
+import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
 import { herberekenHuidigeSpeelreeks } from '@/lib/firestore-herberekening';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
-import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen } from '@/lib/types';
+import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User } from '@/lib/types';
 
 const NAV = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
@@ -43,6 +45,22 @@ function AdminPageContent() {
   const [tikkieOk, setTikkieOk] = useState(false);
   const [tikkieError, setTikkieError] = useState<string | null>(null);
 
+  const [leden, setLeden] = useState<User[]>([]);
+
+  const [verenigingNaam, setVerenigingNaam] = useState(DEFAULT_VERENIGING_CONFIG.naam);
+  const [naamBewerken, setNaamBewerken] = useState(false);
+  const [naamInvoer, setNaamInvoer] = useState('');
+  const [naamBezig, setNaamBezig] = useState(false);
+  const [naamOk, setNaamOk] = useState(false);
+  const [naamError, setNaamError] = useState<string | null>(null);
+
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+  const [inlegBewerken, setInlegBewerken] = useState(false);
+  const [inlegInvoer, setInlegInvoer] = useState('');
+  const [inlegBezig, setInlegBezig] = useState(false);
+  const [inlegOk, setInlegOk] = useState(false);
+  const [inlegError, setInlegError] = useState<string | null>(null);
+
   useEffect(() => {
     const u1 = subscribeAuditLog(setAuditLog, 50);
     const u2 = subscribePaymentConfig((config) => {
@@ -52,7 +70,12 @@ function AdminPageContent() {
     const u3 = subscribeSpelConfig(setSpelConfig);
     const u5 = subscribeAlleSeizoenen(setSeizoenen);
     const u6 = subscribeSeizoen(setActiefSeizoen);
-    return () => { u1(); u2(); u3(); u5(); u6(); };
+    const u7 = subscribeVerenigingConfig((config) => {
+      setVerenigingNaam(config.naam);
+      setStandaardInleg(config.standaardInleg);
+    });
+    const u8 = subscribeAllUsers(setLeden);
+    return () => { u1(); u2(); u3(); u5(); u6(); u7(); u8(); };
   }, []);
 
   const handleSpelConfigSave = async () => {
@@ -120,6 +143,57 @@ function AdminPageContent() {
     }
   };
 
+  const handleOpenNaamBewerken = () => {
+    setNaamInvoer(verenigingNaam);
+    setNaamError(null);
+    setNaamBewerken(true);
+  };
+
+  const handleOpslaanNaam = async () => {
+    const nieuweNaam = naamInvoer.trim();
+    if (!nieuweNaam) { setNaamError('Naam mag niet leeg zijn'); return; }
+    if (nieuweNaam.length > 40) { setNaamError('Maximaal 40 tekens'); return; }
+    setNaamError(null);
+    setNaamBezig(true);
+    try {
+      await updateVerenigingConfig({ naam: nieuweNaam });
+      setNaamOk(true);
+      setTimeout(() => { setNaamOk(false); setNaamBewerken(false); }, 1200);
+    } catch {
+      setNaamError('Opslaan mislukt, probeer opnieuw');
+    } finally {
+      setNaamBezig(false);
+    }
+  };
+
+  const handleOpenInlegBewerken = () => {
+    setInlegInvoer(String(standaardInleg).replace('.', ','));
+    setInlegError(null);
+    setInlegBewerken(true);
+  };
+
+  const handleOpslaanInleg = async () => {
+    const bedrag = parseFloat(inlegInvoer.replace(',', '.'));
+    if (isNaN(bedrag) || bedrag <= 0) { setInlegError('Vul een geldig bedrag groter dan €0 in'); return; }
+    if (bedrag > 1000) { setInlegError('Dat lijkt niet te kloppen — controleer het bedrag'); return; }
+    setInlegError(null);
+    setInlegBezig(true);
+    try {
+      await updateVerenigingConfig({ standaardInleg: bedrag });
+      setInlegOk(true);
+      setTimeout(() => { setInlegOk(false); setInlegBewerken(false); }, 1200);
+    } catch {
+      setInlegError('Opslaan mislukt, probeer opnieuw');
+    } finally {
+      setInlegBezig(false);
+    }
+  };
+
+  const actieveKashouders = leden.filter(l => l.actief && l.rol === 'kashouder');
+  const kashouderNamen = actieveKashouders.length > 0
+    ? actieveKashouders.map(l => l.naam).join(', ')
+    : 'Niet toegewezen';
+
   const handleMaakSeizoen = async () => {
     const naam = nieuwSeizoenNaam.trim() || `Seizoen ${new Date().getFullYear()}`;
     await maakSeizoen(naam);
@@ -172,23 +246,91 @@ function AdminPageContent() {
         {/* INSTELLINGEN */}
         {tab==='instellingen' && (
           <div style={{ padding: '0 20px' }}>
-            {[{title:'Vereniging',rows:[{icon:'🎱',bg:'var(--gold-soft)',label:'Naam vereniging',sub:'LottoClub'},{icon:'💶',bg:'var(--accent-soft)',label:'Standaard inleg',sub:'€4,00'},{icon:'⚡',bg:'var(--success-soft)',label:'Kashouder',sub:'—'}]}].map(section => (
-              <div key={section.title} style={{ marginBottom: 20 }}>
-                <div className="section-title">{section.title}</div>
-                <div className="card" style={{ overflow: 'hidden' }}>
-                  {section.rows.map((r,i,arr) => (
-                    <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: i<arr.length-1?'1px solid rgba(74,158,255,0.06)':'none' }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 11, background: r.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{r.icon}</div>
+            <div style={{ marginBottom: 20 }}>
+              <div className="section-title">Vereniging</div>
+              <div className="card" style={{ overflow: 'hidden' }}>
+
+                {/* Naam vereniging */}
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(74,158,255,0.06)' }}>
+                  {!naamBewerken ? (
+                    <div onClick={handleOpenNaamBewerken} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--gold-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>🎱</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 500 }}>{r.label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{r.sub}</div>
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>Naam vereniging</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{verenigingNaam}</div>
                       </div>
                       <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
                     </div>
-                  ))}
+                  ) : (
+                    <div>
+                      <label className="form-label">Naam vereniging</label>
+                      <input
+                        type="text" className="form-input" value={naamInvoer}
+                        onChange={e => { setNaamInvoer(e.target.value); setNaamError(null); }}
+                        maxLength={40}
+                        style={{ marginBottom: 8, borderColor: naamError ? 'var(--error)' : undefined }}
+                        autoFocus
+                      />
+                      {naamError && <div style={{ fontSize: 11, color: 'var(--error)', marginBottom: 8 }}>⚠️ {naamError}</div>}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => setNaamBewerken(false)} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>Annuleren</button>
+                        <button onClick={handleOpslaanNaam} disabled={naamBezig} style={{ flex: 1, background: naamOk ? 'var(--success)' : 'var(--accent)', border: 'none', color: 'white', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: naamBezig ? 0.6 : 1 }}>
+                          {naamOk ? '✓ Opgeslagen' : naamBezig ? 'Bezig…' : 'Opslaan'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Standaard inleg */}
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(74,158,255,0.06)' }}>
+                  {!inlegBewerken ? (
+                    <div onClick={handleOpenInlegBewerken} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>💶</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>Standaard inleg</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€{standaardInleg.toFixed(2).replace('.', ',')}</div>
+                      </div>
+                      <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="form-label">Standaard inleg</label>
+                      <input
+                        type="text" inputMode="decimal" className="form-input" value={inlegInvoer}
+                        onChange={e => { setInlegInvoer(e.target.value); setInlegError(null); }}
+                        placeholder="4,00"
+                        style={{ marginBottom: 8, borderColor: inlegError ? 'var(--error)' : undefined }}
+                        autoFocus
+                      />
+                      {inlegError && <div style={{ fontSize: 11, color: 'var(--error)', marginBottom: 8 }}>⚠️ {inlegError}</div>}
+                      <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--warning)', lineHeight: 1.5 }}>
+                        ⚠️ Geldt vanaf de eerstvolgende trekking — al aangemaakte betalingen voor de huidige week wijzigen niet met terugwerkende kracht.
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => setInlegBewerken(false)} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>Annuleren</button>
+                        <button onClick={handleOpslaanInleg} disabled={inlegBezig} style={{ flex: 1, background: inlegOk ? 'var(--success)' : 'var(--accent)', border: 'none', color: 'white', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: inlegBezig ? 0.6 : 1 }}>
+                          {inlegOk ? '✓ Opgeslagen' : inlegBezig ? 'Bezig…' : 'Opslaan'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Kashouder — alleen-lezen, afgeleid uit de Leden-pagina */}
+                <Link href="/leden" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>⚡</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>Kashouder</div>
+                    <div style={{ fontSize: 11, color: actieveKashouders.length > 0 ? 'var(--muted)' : 'var(--warning)', marginTop: 1 }}>{kashouderNamen}</div>
+                  </div>
+                  <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+                </Link>
+                <div style={{ padding: '0 16px 12px', fontSize: 10, color: 'var(--muted)', lineHeight: 1.4 }}>
+                  Rol wordt toegewezen via Leden — tik hierboven om daarheen te gaan.
                 </div>
               </div>
-            ))}
+            </div>
 
             <div style={{ marginBottom: 20 }}>
               <div className="section-title">Betaalproviders</div>

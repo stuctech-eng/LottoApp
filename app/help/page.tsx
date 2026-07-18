@@ -1,7 +1,8 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 
 type Sectie = 'spelregels' | 'installatie' | 'inloggen' | 'lid' | 'kashouder' | 'beheerder' | 'notificaties' | 'betalen' | 'trekking' | 'faq';
 
@@ -58,6 +59,12 @@ function Tip({ tekst }: { tekst: string }) {
 
 function HelpContent() {
   const [actief, setActief] = useState<Sectie>('installatie');
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+
+  useEffect(() => {
+    const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return unsub;
+  }, []);
 
   return (
     <>
@@ -164,7 +171,7 @@ function HelpContent() {
                 <Tip tekst="Heb je een geluksgetal? Voeg meerdere tickets toe met verschillende combinaties." />
               </Blok>
               <Blok titel="💳 Betaling melden">
-                <Info tekst="Elke ronde betaal je een inleg (standaard €4). Na het betalen meld je dit in de app." />
+                <Info tekst={`Elke ronde betaal je een inleg (standaard €${standaardInleg}). Na het betalen meld je dit in de app.`} />
                 <Stap nr={1} tekst="Betaal via Tikkie-link (in het WhatsApp-bericht) of gewone overboeking" />
                 <Stap nr={2} tekst="Open de app → tik op 'Betalen'" />
                 <Stap nr={3} tekst="Tik op 'Ik heb betaald'" />
@@ -239,7 +246,7 @@ function HelpContent() {
                 <Info tekst="• Audit log — alle systeemactiviteit" />
               </Blok>
               <Blok titel="💳 Tikkie-link instellen">
-                <Stap nr={1} tekst="Maak een Tikkie-betaalverzoek aan voor €4 in de Tikkie-app" />
+                <Stap nr={1} tekst={`Maak een Tikkie-betaalverzoek aan voor €${standaardInleg} in de Tikkie-app`} />
                 <Stap nr={2} tekst="Kopieer de link (https://tikkie.me/pay/...)" />
                 <Stap nr={3} tekst="Ga naar Beheer → Admin → tab Instellingen → Tikkie-link" />
                 <Stap nr={4} tekst="Plak de link en tik 'Tikkie-link opslaan'" />
@@ -255,7 +262,7 @@ function HelpContent() {
             <>
               <Blok titel="💳 Betaalflow stap voor stap">
                 <Stap nr={1} tekst="Kashouder stuurt WhatsApp-herinnering met Tikkie-link (handmatig of automatisch elke vrijdag)" />
-                <Stap nr={2} tekst="Lid tikt op de Tikkie-link en betaalt €4 via eigen bank-app" />
+                <Stap nr={2} tekst={`Lid tikt op de Tikkie-link en betaalt €${standaardInleg} via eigen bank-app`} />
                 <Stap nr={3} tekst="Lid opent LottoClub → 'Betalen' → tikt 'Ik heb betaald'" />
                 <Stap nr={4} tekst="Kashouder ziet de melding op het dashboard" />
                 <Stap nr={5} tekst="Kashouder tikt ✓ → betaling bevestigd" />

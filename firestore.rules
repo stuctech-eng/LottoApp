@@ -19,10 +19,23 @@ service cloud.firestore {
     }
 
     // Users: iedereen die ingelogd is mag lezen (voor ranglijst/leden),
-    // maar alleen het eigen document bewerken
+    // en het eigen document volledig bewerken.
+    //
+    // Twee expliciete uitzonderingen voor het bewerken van EEN ANDER
+    // lid se document, elk beperkt tot precies het veld dat de
+    // bestaande code daadwerkelijk gebruikt (geen "mag alles van
+    // iedereen" — veiligheid per veld):
+    // - Kashouder/beheerder: alleen lottoSaldo (LottoSaldo-storting
+    //   registreren / automatisch verrekenen — lib/firestore-payments.ts)
+    // - Beheerder: alleen rol (leden beheren — updateUserRol in
+    //   lib/firestore-users.ts)
     match /users/{userId} {
       allow read: if ingelogd();
       allow write: if ingelogd() && request.auth.uid == userId;
+      allow update: if isKashouderOfBeheerder()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lottoSaldo']);
+      allow update: if isBeheerder()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rol']);
     }
 
     // Betalingen: lid maakt eigen betaling aan (status verificatie/open),
@@ -50,6 +63,13 @@ service cloud.firestore {
 
     // PaymentConfig: iedereen leest, alleen beheerder schrijft
     match /paymentConfig/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    // VerenigingConfig (naam vereniging, standaard inleg): iedereen
+    // leest, alleen beheerder schrijft — zelfde patroon als paymentConfig.
+    match /verenigingConfig/{docId} {
       allow read: if ingelogd();
       allow write: if isBeheerder();
     }

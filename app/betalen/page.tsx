@@ -11,7 +11,8 @@ import {
   huidigTrekkingWeek,
 } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
-import { STANDAARD_INLEG, STANDAARD_OMSCHRIJVING } from '@/lib/constants';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
+import { STANDAARD_OMSCHRIJVING } from '@/lib/constants';
 import { Betaling, PaymentConfig } from '@/lib/types';
 
 type Stap =
@@ -32,7 +33,8 @@ const SALDO_KEUZES = [10, 25, 50];
  * week voorbij maar de nieuwe week (ISO-W) begint pas maandag.
  * Betalen op zondag zou de betaling koppelen aan de verkeerde week.
  *
- * Let op: deze blokkade geldt alleen voor de wekelijkse €4-betaling.
+ * Let op: deze blokkade geldt alleen voor de wekelijkse betaling van
+ * het standaardbedrag (instelbaar via Beheer → Instellingen).
  * Saldo opwaarderen kan altijd — een storting is niet aan één
  * specifieke week gekoppeld.
  */
@@ -62,6 +64,7 @@ function BetalenPageContent() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [config, setConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [stap, setStap] = useState<Stap>('laden');
   const [omschrijving, setOmschrijving] = useState(STANDAARD_OMSCHRIJVING);
@@ -74,11 +77,16 @@ function BetalenPageContent() {
   const [saldoAnders, setSaldoAnders] = useState('');
   const [saldoTikkieGeopend, setSaldoTikkieGeopend] = useState(false);
 
-  const tikkieLink = (config as PaymentConfig & { tikkieLink?: string }).tikkieLink || undefined;
+  const tikkieLink = config.tikkieLink || undefined;
   const betaalStatus = getBetaalStatus();
 
   useEffect(() => {
     const unsub = subscribePaymentConfig(setConfig);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
     return unsub;
   }, []);
 
@@ -107,7 +115,7 @@ function BetalenPageContent() {
     try {
       await meldBetaling(
         { uid: user.uid, naam: profile.naam },
-        STANDAARD_INLEG,
+        standaardInleg,
         omschrijving.trim() || STANDAARD_OMSCHRIJVING
       );
       setStap('gemeld');
@@ -186,7 +194,7 @@ function BetalenPageContent() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Bedrag</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{STANDAARD_INLEG.toFixed(2)}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{standaardInleg.toFixed(2)}</span>
           </div>
         </div>
         <button onClick={() => router.push('/dashboard')} style={{ width: '100%', maxWidth: 380, background: 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 16, padding: 18, fontSize: 16, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>← Terug naar dashboard</button>
@@ -281,7 +289,7 @@ function BetalenPageContent() {
               onChange={e => { setSaldoAnders(e.target.value); setSaldoBedrag(null); }}
             />
             <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
-              Bij €{STANDAARD_INLEG.toFixed(2)} per week geeft €{SALDO_KEUZES[1]} je ongeveer {Math.floor(SALDO_KEUZES[1] / STANDAARD_INLEG)} weken speelplezier zonder eraan te hoeven denken.
+              Bij €{standaardInleg.toFixed(2)} per week geeft €{SALDO_KEUZES[1]} je ongeveer {Math.floor(SALDO_KEUZES[1] / standaardInleg)} weken speelplezier zonder eraan te hoeven denken.
             </div>
           </div>
 
@@ -351,7 +359,7 @@ function BetalenPageContent() {
   const geblokkeerd = tikkieLink ? !tikkieGeopend : false;
   const lottoSaldo = profile?.lottoSaldo ?? 0;
   const heeftIntroGezien = introGezien || profile?.lottoSaldoIntroSeen;
-  const wekenTegoed = Math.floor(lottoSaldo / STANDAARD_INLEG);
+  const wekenTegoed = Math.floor(lottoSaldo / standaardInleg);
 
   return (
     <>
@@ -390,10 +398,10 @@ function BetalenPageContent() {
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 6 }}>Je hebt nog geen saldo</div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.5 }}>Stort eenmalig en je wekelijkse bijdrage wordt daarna automatisch betaald.</div>
               </>
-            ) : lottoSaldo < STANDAARD_INLEG ? (
+            ) : lottoSaldo < standaardInleg ? (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, marginBottom: 4 }}>€{lottoSaldo.toFixed(2)}</div>
-                <div style={{ fontSize: 13, color: 'var(--warning)', marginBottom: 20, fontWeight: 600 }}>Nog €{(STANDAARD_INLEG - lottoSaldo).toFixed(2)} nodig voor deze week</div>
+                <div style={{ fontSize: 13, color: 'var(--warning)', marginBottom: 20, fontWeight: 600 }}>Nog €{(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week</div>
               </>
             ) : (
               <>
@@ -418,7 +426,7 @@ function BetalenPageContent() {
               onClick={() => setToonHandmatig(true)}
               style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}
             >
-              Liever alleen deze week betalen? (€{STANDAARD_INLEG.toFixed(0)})
+              Liever alleen deze week betalen? (€{standaardInleg.toFixed(0)})
             </button>
           </div>
         ) : (
@@ -485,7 +493,7 @@ function BetalenPageContent() {
                 className="btn-primary"
                 style={{ opacity: geblokkeerd ? 0.4 : 1, cursor: geblokkeerd ? 'not-allowed' : 'pointer' }}
               >
-                {geblokkeerd ? '🔒 Betaal eerst via Tikkie hierboven' : `✓ Ik heb betaald — €${STANDAARD_INLEG}`}
+                {geblokkeerd ? '🔒 Betaal eerst via Tikkie hierboven' : `✓ Ik heb betaald — €${standaardInleg}`}
               </button>
               {geblokkeerd && (
                 <div style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>

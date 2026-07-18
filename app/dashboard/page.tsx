@@ -8,6 +8,7 @@ import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUs
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { Kasmutatie, Betaling, Seizoen, Trekking, Resultaat, User } from '@/lib/types';
 
 // Kashouder contactgegevens dynamisch ophalen uit users collectie
@@ -199,6 +200,12 @@ function DashboardPageContent() {
   const [leden, setLeden] = useState<User[]>([]);
   const [mijnResultaten, setMijnResultaten] = useState<Resultaat[]>([]);
   const [laden, setLaden] = useState(true);
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+
+  useEffect(() => {
+    const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!profileLoading && profile) {
@@ -330,7 +337,7 @@ function DashboardPageContent() {
               {seizoen ? seizoen.naam : '—'} · {actieveLeden.length} deelnemers
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💳 Betaal €4</Link>
+              <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💳 Betaal €{standaardInleg}</Link>
               <Link href="/trekkingen" style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(74,158,255,0.2)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>🎱 Trekkingen</Link>
             </div>
           </div>
