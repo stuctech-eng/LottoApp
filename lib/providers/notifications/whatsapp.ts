@@ -44,5 +44,5 @@ export function buildWhatsappHerinnering(
   const tikkie = tikkieLink
     ? `\n💳 Betaal direct via Tikkie:\n${tikkieLink}\n`
     : '';
-  return `🎱 LottoClub\n\nHerinnering voor ${naam}:\n\nJe betaling staat nog open.\n${omschrijving}\nBedrag: €${bedrag.toFixed(2)}\n${tikkie}\nMeld je betaling in de app via "Betalen" zodra je hebt betaald.`;
+  return `🎱 LottoClub\n\nHerinnering voor ${naam}:\n\nJe betaling staat nog open.\n${omschrijving}\nBedrag: €${bedrag.toFixed(2)}\n${tikkie}\nMeld je betaling in de app via "Betalen" zodra je hebt betaald.\n\n💡 Tip: stort een keer een bedrag naar keuze op je LottoSaldo (via "Saldo opwaarderen" in de app), dan wordt dit voortaan automatisch afgeschreven — geen herinneringen meer nodig.`;
 }

@@ -49,15 +49,10 @@ export interface Seizoen {
   status: 'actief' | 'gesloten';
 }
 
-export interface Ronde {
-  id: string;
-  seizoenId: string;
-  nummer: number;
-  sluitingsDatum: Timestamp | null;
-  trekkingsDatum: Timestamp | null;
-  status: 'open' | 'gesloten' | 'verwerkt';
-  inleg: number;
-}
+// Ronde-interface (en de bijbehorende /rondes-collectie) is verwijderd:
+// nooit afgemaakt/aangesloten, nergens in de app gebruikt. De
+// speelreeks-grens wordt in plaats daarvan afgeleid uit de
+// trekkingsgeschiedenis — zie lib/controle-engine.ts.
 
 export interface Trekking {
   id: string;

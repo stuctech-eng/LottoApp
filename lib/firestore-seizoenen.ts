@@ -11,7 +11,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Seizoen, Ronde } from './types';
+import { Seizoen } from './types';
 
 // ─────────────────────── Seizoenen ───────────────────────
 
@@ -63,44 +63,4 @@ export async function sluitSeizoen(seizoenId: string) {
     status: 'gesloten',
     eindDatum: serverTimestamp(),
   });
-}
-
-// ─────────────────────── Rondes ───────────────────────
-
-function mapRonde(d: { id: string; data: () => Record<string, unknown> }): Ronde {
-  const data = d.data();
-  return {
-    id: d.id,
-    seizoenId: data.seizoenId as string ?? '',
-    nummer: data.nummer as number ?? 0,
-    sluitingsDatum: data.sluitingsDatum as Ronde['sluitingsDatum'] ?? null,
-    trekkingsDatum: data.trekkingsDatum as Ronde['trekkingsDatum'] ?? null,
-    status: data.status as Ronde['status'] ?? 'open',
-    inleg: data.inleg as number ?? 4,
-  };
-}
-
-export function subscribeRondes(seizoenId: string, callback: (rondes: Ronde[]) => void) {
-  const q = query(
-    collection(db, 'rondes'),
-    where('seizoenId', '==', seizoenId),
-    orderBy('nummer', 'desc')
-  );
-  return onSnapshot(
-    q,
-    (snap) => callback(snap.docs.map(d => mapRonde(d as Parameters<typeof mapRonde>[0]))),
-    () => callback([])
-  );
-}
-
-export async function maakRonde(seizoenId: string, nummer: number, inleg = 4): Promise<string> {
-  const ref = await addDoc(collection(db, 'rondes'), {
-    seizoenId,
-    nummer,
-    sluitingsDatum: null,
-    trekkingsDatum: null,
-    status: 'open',
-    inleg,
-  });
-  return ref.id;
 }

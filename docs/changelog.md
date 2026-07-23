@@ -4,6 +4,54 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 23 juli 2026 — LottoSaldo, Vereniging-instellingen, Firestore-rules-avontuur, opruiming
+
+Lange sessie in meerdere delen. Samengevat per onderwerp.
+
+### LottoSaldo — vooruitbetalen, automatisch verrekend
+
+**Aanleiding**: handmatig wekelijks betalen is voor een klein clubje overbodig gedoe. Voorstel (van de gebruiker, na overleg over automatiseringsgraad): een lid stort één keer een bedrag, de app trekt daarna zelf elke week de inleg af.
+
+**Ontwerpkeuzes, expliciet besproken vóór het bouwen:**
+- Geen Mollie/iDEAL-automatisering — vereist een echt zakelijk Mollie-account met API-key dat er niet is (zelfde categorie beperking als eerder bij Tikkie/WhatsApp Business API vastgesteld). In plaats daarvan: dezelfde "meld → kashouder bevestigt"-flow als de rest van de app.
+- **Storting = direct kasmutatie.** De kashouder ontvangt het geld namelijk direct — economisch is het vanaf dat moment al clubgeld, ook al wordt het pas later als wekelijkse inleg "verbruikt". Eerste ontwerp deed dit andersom (kasmutatie pas bij wekelijkse afboeking) — op aanwijzing gecorrigeerd.
+- Betaalpagina: LottoSaldo als **primaire, prominente flow**, de oude wekelijkse €4-knop als kleinere secundaire optie eronder. Eenmalige uitlegbanner ("Begrepen"), opgeslagen in Firestore (niet lokaal) zodat 'm niet opnieuw verschijnt op een ander apparaat.
+
+**Gebouwd**: `lib/firestore-vereniging.ts`-achtig patroon voor het saldo zelf in `lib/firestore-payments.ts` (`meldLottoSaldoStorting`, `stortLottoSaldo`, `verrekenLottoSaldoMetOpenstaandeWeek`, later `corrigeerLottoSaldo`), Cloud Function `onBetalingenAanmaken` uitgebreid met de wekelijkse saldo-check, lage-saldo pushmeldingen, kas-uitsplitsing op de Financieel-pagina.
+
+### Twee bugs gevonden tijdens het eerste echte testen (met een echte €10-storting)
+
+1. **`markeerBetaaldDoorKashouder` ("✓ Betaald"-knop) kende het LottoSaldo-systeem niet.** Bij een lid zonder open betaaldocument (bijv. omdat het al gedekt zou moeten zijn door saldo) maakte de knop blind een **nieuwe** betaling + kasmutatie aan — ook als er al 'betaald' stond. Concreet gebeurd: een test-tik op deze knop creëerde een spookboeking van €4 in de kas, terwijl het LottoSaldo van €10 onaangeroerd bleef. Gefixt met een striktere volgorde: al betaald deze week? weigeren → bestaand open document? bevestigen → genoeg saldo? dekken zonder kasmutatie → anders pas een nieuwe boeking.
+2. **De bestaande, foutieve boeking moest handmatig gecorrigeerd worden** — opgelost met de al bestaande Kascorrectie-functie (−€4, nette audit-regel), en met een nieuw **saldo-correctietool** (potloodje bij elk lid op de Financieel-pagina, beheerder-only in de UI) voor dit soort gevallen in de toekomst.
+
+### Vereniging-instellingen — van decoratie naar functie
+
+Beheer → Instellingen toonde al maanden drie regels ("Naam vereniging", "Standaard inleg", "Kashouder") die **niets deden** — letterlijk hardcoded tekst zonder `onClick`. Nu:
+- Nieuwe `/verenigingConfig/main`-collectie, `lib/firestore-vereniging.ts`
+- Naam en inleg echt bewerkbaar
+- Kashouder automatisch afgeleid uit de Leden-rol-toewijzing
+- **Standaard inleg overal doorgevoerd** — dit raakte uiteindelijk 12 bestanden: elke client-pagina die het bedrag toonde, `lib/firestore-payments.ts`, en een hardcoded `INLEG = 4` in de Cloud Function die nooit synchroon liep met de client-constante
+
+### Het Firestore-rules-avontuur
+
+Wat begon als "voeg een regel toe voor de nieuwe collectie" werd een langere speurtocht:
+
+1. Eerste poging: nieuwe rule toegevoegd aan de `firestore.rules` **in de repo**, zonder te beseffen dat de repo-versie **niet overeenkwam met wat er echt in Firebase actief stond** (fcmTokens, notificationSettings, en een aantal andere regels stonden er wél live, maar niet in de repo — kennelijk ooit los via de Console gewijzigd).
+2. Gebruiker plakte de daadwerkelijke, live regels — bleek significant uitgebreider. Regels samengevoegd: alles uit de live versie behouden, alleen de kashouder-lottoSaldo-uitzondering en `verenigingConfig` toegevoegd.
+3. **Nieuwe architectuurregel als gevolg**: vertrouw niet blind op `firestore.rules` in de repo voor de werkelijke staat — Firestore rules kunnen driften van code, in tegenstelling tot alle andere bestanden in dit project.
+4. Automatische deploy gebouwd (`.github/workflows/deploy-firestore-rules.yml`) om toekomstige drift te voorkomen. Twee losse levering-problemen onderweg (niet code-gerelateerd): CodeSync/Working Copy kreeg de nieuwe verborgen map `.github/workflows/` niet succesvol gesynchroniseerd (opgelost door het bestand rechtstreeks via github.com aan te maken), en een eigen fout in de zip-commando's (`-x ".*"` sloot per ongeluk de hele `.github`-map uit — geleerd: wees specifiek met excludepatronen, niet breed).
+5. Eerste deploy-run faalde met `403` op `firebaserules.googleapis.com` — de service-account miste de IAM-rol **Firebase Rules Admin** (`roles/firebaserules.admin`), los van de rollen die al voor Cloud Functions-deploys bestonden. Rol toegevoegd via Google Cloud Console (IAM & Admin → service-account → Manage access), daarna geslaagd.
+
+### Opruiming
+- Ongebruikte `rondes`-collectie en bijbehorende code volledig verwijderd (`Ronde`-interface, `subscribeRondes`, `maakRonde`, de Firestore-rule) — nooit afgemaakt, nergens gebruikt, bevatte zelf een `orderBy()`-bug.
+- WhatsApp-herinneringstekst uitgebreid met een tip over LottoSaldo.
+- `tikkieLink`/`trekkingWeek`/`isSaldoStorting` formeel toegevoegd aan de TypeScript-types (stonden er eerder nooit echt in, werden steeds met type-assertions omheen gewerkt).
+
+### Terugkerend patroon deze sessie: handmatige Firestore-veldmappings
+Alweer een paar keer een bug veroorzaakt: een nieuw veld op `User` (`lottoSaldo`, `lottoSaldoIntroSeen`) toegevoegd aan het type, maar vergeten in de **handmatige** field-by-field mapping in `lib/auth-context.tsx`, `lib/firestore-users.ts`, `lib/firestore-ranglijst.ts`. Dit keer proactief in alle drie tegelijk gefixt in plaats van er telkens achteraf achter te komen — maar het blijft een terugkerend risico bij elk nieuw veld.
+
+---
+
 ## 12 juli 2026 — PWA, cumulatieve clubmodus, navigatie- en datacorrecties
 
 Grote, meerdaagse sessie. Samengevat per onderwerp:
@@ -27,7 +75,7 @@ Grondige herbouw van de spellogica. Voorheen berekende `controle-engine.ts` per 
 
 **Nieuw datamodel**: `Resultaat.matchedNumbers` (cumulatief) naast het bestaande `nummersGoed` (nu: alleen nieuw die trekking). `aantalGoed` = `matchedNumbers.length`.
 
-**Beslissing**: geen aparte `Ronde`-databasestructuur bouwen/repareren (die bestond al half, ongebruikt, met een eigen `orderBy()`-bug). In plaats daarvan wordt de speelreeks-grens *afgeleid* uit de trekkingsgeschiedenis: alles ná de laatste trekking met een winnaar.
+**Beslissing**: geen aparte `Ronde`-databasestructuur bouwen/repareren (die bestond al half, ongebruikt, met een eigen `orderBy()`-bug). In plaats daarvan wordt de speelreeks-grens *afgeleid* uit de trekkingsgeschiedenis: alles ná de laatste trekking met een winnaar. (Deze halve `Ronde`-structuur is op 23 juli alsnog volledig opgeruimd — zie hierboven.)
 
 **Beslissing**: geen eenmalig migratiescript. In plaats daarvan de herbruikbare `herberekenSpeelreeks` Cloud Function (callable, alleen beheerder) — knop in Beheer → Prijzen.
 
