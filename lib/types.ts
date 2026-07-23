@@ -151,6 +151,7 @@ export type AuditAction =
   | 'betaling_bevestigd'
   | 'betaling_afgewezen'
   | 'lottosaldo_storting'
+  | 'lottosaldo_correctie'
   | 'uitbetaling_geregistreerd'
   | 'kascorrectie'
   | 'trekking_ingevoerd'

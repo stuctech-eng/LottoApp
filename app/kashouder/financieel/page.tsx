@@ -12,6 +12,7 @@ import {
   registreerUitbetaling,
   registreerCorrectie,
   stortLottoSaldo,
+  corrigeerLottoSaldo,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
@@ -65,6 +66,12 @@ function FinancieelPageContent() {
   const [stortBedrag, setStortBedrag] = useState('');
   const [stortBezig, setStortBezig] = useState(false);
   const [stortOk, setStortOk] = useState(false);
+
+  const [correctieLidId, setCorrectieLidId] = useState<string | null>(null);
+  const [correctieBedrag, setCorrectieBedrag] = useState('');
+  const [correctieReden, setCorrectieReden] = useState('');
+  const [correctieBezig, setCorrectieBezig] = useState(false);
+  const [correctieError, setCorrectieError] = useState<string | null>(null);
 
   useEffect(() => {
     const u1 = subscribeKasmutaties(setMutaties);
@@ -158,6 +165,31 @@ function FinancieelPageContent() {
       setTimeout(() => setStortOk(false), 2000);
     } finally {
       setStortBezig(false);
+    }
+  };
+
+  const handleOpenCorrectie = (lid: User) => {
+    setCorrectieLidId(lid.id);
+    setCorrectieBedrag(String(lid.lottoSaldo ?? 0).replace('.', ','));
+    setCorrectieReden('');
+    setCorrectieError(null);
+  };
+
+  const handleOpslaanCorrectie = async (lid: User) => {
+    const au = actieUser();
+    const nieuwSaldo = parseFloat(correctieBedrag.replace(',', '.'));
+    if (!au) return;
+    if (isNaN(nieuwSaldo) || nieuwSaldo < 0) { setCorrectieError('Vul een geldig bedrag in (0 of hoger)'); return; }
+    if (!correctieReden.trim()) { setCorrectieError('Vul een reden in — komt in het auditlog'); return; }
+    setCorrectieError(null);
+    setCorrectieBezig(true);
+    try {
+      await corrigeerLottoSaldo({ id: lid.id, naam: lid.naam }, nieuwSaldo, correctieReden.trim(), au);
+      setCorrectieLidId(null);
+    } catch {
+      setCorrectieError('Opslaan mislukt, probeer opnieuw');
+    } finally {
+      setCorrectieBezig(false);
     }
   };
 
@@ -293,13 +325,55 @@ function FinancieelPageContent() {
             const wekenTegoed = Math.floor(saldo / standaardInleg);
             const kleur = wekenTegoed >= 5 ? 'var(--success)' : wekenTegoed >= 3 ? 'var(--warning)' : 'var(--error)';
             const stip = wekenTegoed >= 5 ? '🟢' : wekenTegoed >= 3 ? '🟡' : wekenTegoed >= 1 ? '🔴' : '⚪';
+            const bewerken = correctieLidId === lid.id;
             return (
-              <div key={lid.id} className="card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{stip} {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} tegoed</div>
-                </div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: kleur }}>€{saldo.toFixed(2)}</div>
+              <div key={lid.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
+                {!bewerken ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{stip} {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} tegoed</div>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: kleur }}>€{saldo.toFixed(2)}</div>
+                    {isBeheerder && (
+                      <button
+                        onClick={() => handleOpenCorrectie(lid)}
+                        title="Saldo corrigeren"
+                        style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, width: 28, height: 28, fontSize: 13, cursor: 'pointer', color: 'var(--muted)', flexShrink: 0 }}
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Saldo corrigeren — {lid.naam}</div>
+                    <label className="form-label">Nieuw saldo</label>
+                    <input
+                      type="text" inputMode="decimal" className="form-input" value={correctieBedrag}
+                      onChange={e => { setCorrectieBedrag(e.target.value); setCorrectieError(null); }}
+                      style={{ marginBottom: 8, borderColor: correctieError ? 'var(--error)' : undefined }}
+                      autoFocus
+                    />
+                    <label className="form-label">Reden (verplicht, komt in auditlog)</label>
+                    <input
+                      type="text" className="form-input" value={correctieReden}
+                      onChange={e => { setCorrectieReden(e.target.value); setCorrectieError(null); }}
+                      placeholder="Bijv. week per ongeluk buiten saldo om afgeboekt"
+                      style={{ marginBottom: 8, borderColor: correctieError ? 'var(--error)' : undefined }}
+                    />
+                    {correctieError && <div style={{ fontSize: 11, color: 'var(--error)', marginBottom: 8 }}>⚠️ {correctieError}</div>}
+                    <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '8px 10px', marginBottom: 8, fontSize: 11, color: 'var(--warning)', lineHeight: 1.5 }}>
+                      ⚠️ Dit past alleen het saldo aan, er wordt geen kasmutatie aangemaakt — gebruik Kascorrectie hierboven als er ook echt geld gecorrigeerd moet worden.
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setCorrectieLidId(null)} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>Annuleren</button>
+                      <button onClick={() => handleOpslaanCorrectie(lid)} disabled={correctieBezig} style={{ flex: 1, background: 'var(--accent)', border: 'none', color: 'white', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: correctieBezig ? 0.6 : 1 }}>
+                        {correctieBezig ? 'Bezig…' : 'Opslaan'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

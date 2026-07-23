@@ -490,6 +490,31 @@ export async function stortLottoSaldo(
   );
 }
 
+/**
+ * Beheerder corrigeert het LottoSaldo van een lid direct naar een
+ * specifiek bedrag — voor het rechtzetten van boekhoudkundige fouten
+ * (bijv. een week die per ongeluk buiten het saldo om als betaald is
+ * gemarkeerd). In tegenstelling tot stortLottoSaldo: GEEN kasmutatie,
+ * want hier beweegt geen nieuw geld — dit is puur het gecorrigeerd
+ * weergeven van saldo dat er al was.
+ */
+export async function corrigeerLottoSaldo(
+  lid: { id: string; naam: string },
+  nieuwSaldo: number,
+  reden: string,
+  beheerder: ActieUser
+) {
+  await updateDoc(doc(db, 'users', lid.id), {
+    lottoSaldo: nieuwSaldo,
+  });
+  await logAudit(
+    'lottosaldo_correctie',
+    `${beheerder.naam} corrigeerde het LottoSaldo van ${lid.naam} naar €${nieuwSaldo.toFixed(2)} — reden: ${reden}`,
+    beheerder,
+    { doelUserId: lid.id }
+  );
+}
+
 export async function registreerUitbetaling(input: {
   bedrag: number;
   omschrijving: string;
