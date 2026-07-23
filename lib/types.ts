@@ -168,3 +168,5 @@ export interface AuditLogEntry {
   doelUserId?: string;
   datum: Timestamp | null;
 }
+
+// Aangemaakt: lottosaldo_correctie audit-type

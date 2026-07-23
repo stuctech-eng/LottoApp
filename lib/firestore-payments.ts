@@ -551,3 +551,5 @@ export async function registreerCorrectie(input: {
     kashouder
   );
 }
+
+// Aangemaakt: LottoSaldo-correctietooltje

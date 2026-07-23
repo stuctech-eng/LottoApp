@@ -452,3 +452,5 @@ export default function FinancieelPage() {
     </ProtectedRoute>
   );
 }
+
+// Aangemaakt: saldo-correctie UI
