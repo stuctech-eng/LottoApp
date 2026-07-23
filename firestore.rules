@@ -18,28 +18,25 @@ service cloud.firestore {
       return ingelogd() && rol() == 'beheerder';
     }
 
-    // Users: iedereen die ingelogd is mag lezen (voor ranglijst/leden),
-    // en het eigen document volledig bewerken.
-    //
-    // Twee expliciete uitzonderingen voor het bewerken van EEN ANDER
-    // lid se document, elk beperkt tot precies het veld dat de
-    // bestaande code daadwerkelijk gebruikt (geen "mag alles van
-    // iedereen" — veiligheid per veld):
-    // - Kashouder/beheerder: alleen lottoSaldo (LottoSaldo-storting
-    //   registreren / automatisch verrekenen — lib/firestore-payments.ts)
-    // - Beheerder: alleen rol (leden beheren — updateUserRol in
-    //   lib/firestore-users.ts)
     match /users/{userId} {
       allow read: if ingelogd();
-      allow write: if ingelogd() && request.auth.uid == userId;
+      allow write: if ingelogd() && (request.auth.uid == userId || isBeheerder());
+      // NIEUW: kashouder mag specifiek het lottoSaldo-veld van een
+      // ander lid bijwerken (storting registreren / automatisch
+      // verrekenen — lib/firestore-payments.ts). Beheerder kon dit al
+      // via de regel hierboven; deze regel dekt alleen de kashouder-rol.
       allow update: if isKashouderOfBeheerder()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lottoSaldo']);
-      allow update: if isBeheerder()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rol']);
     }
 
-    // Betalingen: lid maakt eigen betaling aan (status verificatie/open),
-    // kashouder/beheerder mag alle betalingen lezen en bijwerken (bevestigen/afwijzen)
+    match /users/{userId}/fcmTokens/{tokenId} {
+      allow read, write: if ingelogd() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/notificationSettings/{docId} {
+      allow read, write: if ingelogd() && request.auth.uid == userId;
+    }
+
     match /betalingen/{betalingId} {
       allow read: if ingelogd();
       allow create: if ingelogd() && request.resource.data.userId == request.auth.uid;
@@ -47,38 +44,62 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Kasmutaties: iedereen leest (transparantie), alleen kashouder/beheerder schrijft
     match /kasmutaties/{mutatieId} {
       allow read: if ingelogd();
       allow create: if isKashouderOfBeheerder();
       allow update, delete: if false;
     }
 
-    // AuditLog: iedereen leest, elke ingelogde gebruiker mag eigen acties loggen
     match /auditLog/{entryId} {
       allow read: if ingelogd();
       allow create: if ingelogd() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // PaymentConfig: iedereen leest, alleen beheerder schrijft
     match /paymentConfig/{docId} {
       allow read: if ingelogd();
       allow write: if isBeheerder();
     }
 
-    // VerenigingConfig (naam vereniging, standaard inleg): iedereen
-    // leest, alleen beheerder schrijft — zelfde patroon als paymentConfig.
+    // NIEUW: voor Naam vereniging / Standaard inleg (Beheer → Instellingen)
     match /verenigingConfig/{docId} {
       allow read: if ingelogd();
       allow write: if isBeheerder();
     }
 
-    // Overige collecties (seizoenen, rondes, trekkingen, hallOfFame, spelConfig, ...):
-    // alleen lezen voor ingelogde gebruikers, schrijven volgt in Fase 4/5
+    match /spelConfig/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    match /prijsConfig/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    match /seizoenen/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    match /rondes/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    match /trekkingen/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
+    match /resultaten/{docId} {
+      allow read: if ingelogd();
+      allow write: if isBeheerder();
+    }
+
     match /{document=**} {
       allow read: if ingelogd();
-      allow write: if false;
+      allow write: if isBeheerder();
     }
   }
 }
