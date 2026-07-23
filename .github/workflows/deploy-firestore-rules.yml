@@ -1,0 +1,30 @@
+name: Deploy Firestore Rules
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'firestore.rules'
+      - '.github/workflows/deploy-firestore-rules.yml'
+
+jobs:
+  deploy:
+    name: Deploy Firestore Rules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Deploy Firestore Rules
+        run: firebase deploy --only firestore:rules --project lottoclub --force
