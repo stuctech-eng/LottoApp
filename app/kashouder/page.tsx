@@ -96,13 +96,21 @@ function KashouderPageContent() {
     await wijsBetalingAf(b, au);
   };
 
+  const [markeerFout, setMarkeerFout] = useState<string | null>(null);
+
   const handleMarkeerBetaald = async (lid: User) => {
     const au = actieUser();
     if (!au) return;
     const bevestigd = window.confirm(`${lid.naam} als betaald markeren? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
     if (!bevestigd) return;
-    const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open') ?? null;
-    await markeerBetaaldDoorKashouder({ id: lid.id, naam: lid.naam }, bestaandDocument, au);
+    setMarkeerFout(null);
+    try {
+      const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open') ?? null;
+      await markeerBetaaldDoorKashouder({ id: lid.id, naam: lid.naam }, bestaandDocument, au);
+    } catch (e) {
+      setMarkeerFout(e instanceof Error ? e.message : 'Markeren als betaald is mislukt.');
+      setTimeout(() => setMarkeerFout(null), 5000);
+    }
   };
 
   return (
@@ -184,6 +192,11 @@ function KashouderPageContent() {
         {openBetalingen.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: 16 }}>
             <div className="section-title">Openstaand</div>
+            {markeerFout && (
+              <div style={{ background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontSize: 12, color: 'var(--error)' }}>
+                ⚠️ {markeerFout}
+              </div>
+            )}
             {openBetalingen.map(lid => {
               // Bestaand 'open'-document gebruiken voor bedrag/omschrijving
               // als dat er is; anders (lid heeft nog GEEN document voor
