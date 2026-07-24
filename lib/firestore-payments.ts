@@ -466,6 +466,12 @@ export async function markeerBetaaldDoorKashouder(
  * De wekelijkse automatische afboeking (zie functions/src/index.ts,
  * onBetalingenAanmaken) verlaagt daarna alleen lottoSaldo — die maakt
  * bewust GEEN nieuwe kasmutatie, want dat geld zit al in de kas.
+ *
+ * KRITIEK: roept daarna verrekenLottoSaldoMetOpenstaandeWeek aan —
+ * zonder deze check bleef een al openstaand betaaldocument voor de
+ * huidige week onopgemerkt staan, waardoor een kashouder die daarna
+ * ook nog los op "✓ Betaald" tikte een dubbele, ongedekte kasmutatie
+ * kon veroorzaken (precies zo gebeurd en gecorrigeerd — zie changelog).
  */
 export async function stortLottoSaldo(
   lid: { id: string; naam: string },
@@ -488,6 +494,7 @@ export async function stortLottoSaldo(
     kashouder,
     { doelUserId: lid.id }
   );
+  await verrekenLottoSaldoMetOpenstaandeWeek(lid.id, lid.naam, kashouder);
 }
 
 /**
