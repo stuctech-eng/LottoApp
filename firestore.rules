@@ -40,7 +40,17 @@ service cloud.firestore {
 
     match /betalingen/{betalingId} {
       allow read: if ingelogd();
-      allow create: if ingelogd() && request.resource.data.userId == request.auth.uid;
+      // Zowel "voor jezelf" (defensief, huidige code gebruikt dit pad
+      // niet meer actief) als "kashouder/beheerder maakt namens een
+      // ander lid aan" (wél actief gebruikt — zie
+      // verrekenLottoSaldoMetOpenstaandeWeek in lib/firestore-payments.ts,
+      // aangeroepen vanuit stortLottoSaldo. Zonder deze uitzondering
+      // zou de kashouder geblokkeerd worden zodra een lid nog
+      // helemaal geen betaaldocument voor de huidige week heeft).
+      allow create: if ingelogd() && (
+        request.resource.data.userId == request.auth.uid ||
+        isKashouderOfBeheerder()
+      );
       allow update: if isKashouderOfBeheerder();
       allow delete: if false;
     }
