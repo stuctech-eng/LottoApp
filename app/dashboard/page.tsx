@@ -351,7 +351,6 @@ function DashboardPageContent() {
               Kassaldo (incl. vooruitbetaald LottoSaldo): €{saldo.toFixed(0)}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💰 Storten</Link>
               <Link href="/trekkingen" style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(74,158,255,0.2)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>🎱 Trekkingen</Link>
             </div>
           </div>
