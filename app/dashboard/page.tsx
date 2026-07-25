@@ -351,10 +351,41 @@ function DashboardPageContent() {
               Kassaldo (incl. vooruitbetaald LottoSaldo): €{saldo.toFixed(0)}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💳 Betaal €{standaardInleg}</Link>
+              <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💰 Storten</Link>
               <Link href="/trekkingen" style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(74,158,255,0.2)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>🎱 Trekkingen</Link>
             </div>
           </div>
+        </div>
+
+        {/* Mijn LottoSaldo */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          {(() => {
+            const lottoSaldo = profile?.lottoSaldo ?? 0;
+            const wekenTegoed = Math.floor(lottoSaldo / standaardInleg);
+            const status = lottoSaldo <= 0
+              ? { kleur: 'var(--muted)', bg: 'var(--surface)', bericht: 'Nog geen saldo — stort om automatisch mee te blijven doen' }
+              : lottoSaldo < standaardInleg
+              ? { kleur: 'var(--error)', bg: 'var(--error-soft)', bericht: `Nog €${(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week` }
+              : wekenTegoed <= 1
+              ? { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: 'Bijna op — denk aan bijstorten' }
+              : { kleur: 'var(--success)', bg: 'var(--success-soft)', bericht: `Nog ${wekenTegoed} weken automatisch gedekt` };
+            return (
+              <div className="card" style={{ padding: 16, background: status.bg, border: `1px solid ${status.kleur}33` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>💰</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>Mijn LottoSaldo</div>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, color: status.kleur, letterSpacing: -0.5 }}>€{lottoSaldo.toFixed(2)}</div>
+                  </div>
+                  <Link href="/betalen" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>Storten</Link>
+                </div>
+                <div style={{ fontSize: 12, color: status.kleur, fontWeight: 600, marginTop: 10 }}>{status.bericht}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  Bij elke nieuwe speelweek wordt hier automatisch €{standaardInleg.toFixed(2)} van afgeschreven — geen actie nodig zolang er saldo is.
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Betaalstatus */}
@@ -365,9 +396,9 @@ function DashboardPageContent() {
               <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--warning-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>⏳</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>Nog niet betaald</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Betaal via de Tikkie-link of overboeking</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Stort om mee te doen deze week</div>
               </div>
-              <Link href="/betalen" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Betaal →</Link>
+              <Link href="/betalen" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Storten →</Link>
             </div>
           )}
           {inVerificatie && (
