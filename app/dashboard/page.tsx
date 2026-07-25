@@ -9,6 +9,7 @@ import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
+import { berekenActuelePrijzenpot } from '@/lib/firestore-prijzenpot';
 import { Kasmutatie, Betaling, Seizoen, Trekking, Resultaat, User } from '@/lib/types';
 
 // Kashouder contactgegevens dynamisch ophalen uit users collectie
@@ -201,11 +202,21 @@ function DashboardPageContent() {
   const [mijnResultaten, setMijnResultaten] = useState<Resultaat[]>([]);
   const [laden, setLaden] = useState(true);
   const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+  const [prijzenpot, setPrijzenpot] = useState<number | null>(null);
 
   useEffect(() => {
     const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
     return unsub;
   }, []);
+
+  useEffect(() => {
+    // Eenmalige berekening, herhaald zodra betalingen wijzigen — geen
+    // live subscription mogelijk voor deze afgeleide, samengestelde
+    // waarde (vereist meerdere losse queries).
+    let actief = true;
+    berekenActuelePrijzenpot().then(p => { if (actief) setPrijzenpot(p); });
+    return () => { actief = false; };
+  }, [betalingen]);
 
   useEffect(() => {
     if (!profileLoading && profile) {
@@ -329,12 +340,15 @@ function DashboardPageContent() {
         <div style={{ margin: '0 20px 16px' }}>
           <div style={{ background: 'linear-gradient(135deg,#1a3a5c 0%,#0f2438 100%)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 20, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>💰 Huidige pot</div>
+            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>🏆 Te winnen deze speelreeks</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>
-              {laden ? '…' : `€${saldo.toFixed(0)}`}
+              {laden || prijzenpot === null ? '…' : `€${prijzenpot.toFixed(0)}`}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>
               {seizoen ? seizoen.naam : '—'} · {actieveLeden.length} deelnemers
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7, marginBottom: 16 }}>
+              Kassaldo (incl. vooruitbetaald LottoSaldo): €{saldo.toFixed(0)}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <Link href="/betalen" style={{ flex: 1, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none', boxShadow: '0 6px 20px rgba(74,158,255,0.3)' }}>💳 Betaal €{standaardInleg}</Link>
