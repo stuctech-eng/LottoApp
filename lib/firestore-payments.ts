@@ -235,34 +235,77 @@ export async function bevestigBetaling(betaling: Betaling, kashouder: ActieUser)
  * hoeft te betalen ná het storten. Géén nieuwe kasmutatie: het geld
  * zat al in de kas sinds de storting hierboven.
  */
+/**
+ * Na een bevestigde LottoSaldo-storting: kijkt of het lid nu genoeg
+ * tegoed heeft om de huidige week automatisch te dekken.
+ *
+ * Twee situaties, allebei afgehandeld:
+ * 1. Er bestaat al een 'open' betaaldocument voor deze week → dat
+ *    wordt bevestigd (zoals voorheen).
+ * 2. Er bestaat HELEMAAL GEEN document voor deze week (bijv. omdat
+ *    het lid het wekelijkse-betalingen-aanmaken-moment heeft gemist —
+ *    zelfde klasse probleem als eerder bij een ander lid geconstateerd)
+ *    → er wordt direct een nieuw 'betaald'-document aangemaakt, mits
+ *    het lid een ticket heeft. Zonder deze tweede check bleef saldo
+ *    onaangeroerd staan terwijl het lid toch als "niet betaald"
+ *    gesignaleerd bleef — precies zo geconstateerd bij Ing.
+ *
+ * Géén nieuwe kasmutatie in beide gevallen: dat geld zat al in de kas
+ * sinds de storting zelf werd bevestigd.
+ */
 async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: string, kashouder: ActieUser) {
   const userSnap = await getDoc(doc(db, 'users', userId));
   if (!userSnap.exists()) return;
-  const lottoSaldo = (userSnap.data().lottoSaldo as number | undefined) ?? 0;
-  const { standaardInleg } = await haalVerenigingConfigOp();
+  const userData = userSnap.data();
+  const lottoSaldo = (userData.lottoSaldo as number | undefined) ?? 0;
+  const { standaardInleg, } = await haalVerenigingConfigOp();
+  const omschrijvingDefault = STANDAARD_OMSCHRIJVING;
   if (lottoSaldo < standaardInleg) return;
 
   const week = huidigTrekkingWeek();
-  const openSnap = await getDocs(query(
+  const bestaandSnap = await getDocs(query(
     collection(db, 'betalingen'),
     where('userId', '==', userId),
-    where('trekkingWeek', '==', week),
-    where('status', '==', 'open')
+    where('trekkingWeek', '==', week)
   ));
-  if (openSnap.empty) return;
 
-  const openDoc = openSnap.docs[0];
-  await updateDoc(openDoc.ref, {
-    status: 'betaald',
-    bevestigd: serverTimestamp(),
-    bevestigdDoor: 'systeem-lottosaldo',
-  });
+  // Al een 'betaald'-document voor deze week? Niets te doen.
+  if (bestaandSnap.docs.some(d => d.data().status === 'betaald')) return;
+
+  const openDoc = bestaandSnap.docs.find(d => d.data().status === 'open');
+
+  if (openDoc) {
+    await updateDoc(openDoc.ref, {
+      status: 'betaald',
+      bevestigd: serverTimestamp(),
+      bevestigdDoor: 'systeem-lottosaldo',
+    });
+  } else {
+    // Geen enkel document voor deze week — alleen relevant als het
+    // lid daadwerkelijk een ticket heeft (anders speelt hij toch niet mee).
+    const tickets = (userData.tickets as unknown[] | undefined) ?? [];
+    if (tickets.length === 0) return;
+    await addDoc(collection(db, 'betalingen'), {
+      userId,
+      userNaam,
+      bedrag: standaardInleg,
+      omschrijving: `${omschrijvingDefault} (automatisch via LottoSaldo)`,
+      provider: 'offline',
+      status: 'betaald',
+      trekkingWeek: week,
+      tikkieGeopend: false,
+      aangemaakt: serverTimestamp(),
+      bevestigd: serverTimestamp(),
+      bevestigdDoor: 'systeem-lottosaldo',
+    });
+  }
+
   await updateDoc(doc(db, 'users', userId), {
     lottoSaldo: increment(-standaardInleg),
   });
   await logAudit(
     'betaling_bevestigd',
-    `Automatisch verrekend: het LottoSaldo van ${userNaam} dekte de openstaande week ${week}`,
+    `Automatisch verrekend: het LottoSaldo van ${userNaam} dekte de week ${week}${openDoc ? '' : ' (geen bestaand document — nieuw aangemaakt)'}`,
     kashouder,
     { doelUserId: userId }
   );
