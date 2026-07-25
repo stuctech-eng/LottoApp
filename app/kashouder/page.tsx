@@ -7,8 +7,6 @@ import {
   subscribeKasmutaties,
   subscribeBetalingen,
   berekenKasSaldo,
-  bevestigBetaling,
-  wijsBetalingAf,
   huidigTrekkingWeek,
   stortLottoSaldo,
 } from '@/lib/firestore-payments';
@@ -63,11 +61,8 @@ function KashouderPageContent() {
     b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
   );
 
-  const teVerifieren = betalingenDezeWeek.filter(b => b.status === 'verificatie');
-
   // Betaalvoortgang alleen op basis van huidige week
   const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
-  const verificatieUserIds = new Set(teVerifieren.map(b => b.userId));
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
   const totaalLeden = actieveLeden.length;
   const percentage = totaalLeden > 0 ? Math.round((aantalBetaald / totaalLeden) * 100) : 0;
@@ -80,21 +75,7 @@ function KashouderPageContent() {
   // weekbetalingen is toegevoegd) hebben niet betaald en horen hier
   // te staan. Anders toont "Alles in orde" een groen vinkje terwijl er
   // feitelijk niemand heeft betaald.
-  const openBetalingen = actieveLeden.filter(
-    l => !betaaldeLeden.has(l.id) && !verificatieUserIds.has(l.id)
-  );
-
-  const handleBevestig = async (b: Betaling) => {
-    const au = actieUser();
-    if (!au) return;
-    await bevestigBetaling(b, au);
-  };
-
-  const handleAfwijzen = async (b: Betaling) => {
-    const au = actieUser();
-    if (!au) return;
-    await wijsBetalingAf(b, au);
-  };
+  const openBetalingen = actieveLeden.filter(l => !betaaldeLeden.has(l.id));
 
   const [markeerFout, setMarkeerFout] = useState<string | null>(null);
 
@@ -164,29 +145,6 @@ function KashouderPageContent() {
           </div>
         )}
 
-        {/* Te verifiëren betalingen */}
-        {teVerifieren.length > 0 && (
-          <div style={{ padding: '0 20px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div className="section-title" style={{ marginBottom: 0 }}>Betaalbewijzen</div>
-              <span style={{ fontSize: 12, background: 'var(--warning-soft)', color: 'var(--warning)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{teVerifieren.length} open</span>
-            </div>
-            {teVerifieren.map(b => (
-              <div key={b.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>💬</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{b.userNaam}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>€{b.bedrag.toFixed(2)} · {b.omschrijving}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <button onClick={() => handleBevestig(b)} style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>✓</button>
-                  <button onClick={() => handleAfwijzen(b)} style={{ background: 'var(--error-soft)', color: 'var(--error)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>✕</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Openstaande betalingen */}
         {openBetalingen.length > 0 && (
           <div style={{ padding: '0 20px', marginBottom: 16 }}>
@@ -235,7 +193,7 @@ function KashouderPageContent() {
         )}
 
         {/* Alles in orde */}
-        {!laden && teVerifieren.length === 0 && openBetalingen.length === 0 && (
+        {!laden && openBetalingen.length === 0 && (
           <div style={{ padding: '0 20px', marginBottom: 16 }}>
             <div className="card" style={{ padding: '16px 18px', textAlign: 'center', color: 'var(--success)', fontSize: 13 }}>
               ✅ Alles in orde — geen openstaande acties deze week

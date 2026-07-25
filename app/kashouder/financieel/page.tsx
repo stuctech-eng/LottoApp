@@ -7,8 +7,6 @@ import {
   subscribeKasmutaties,
   subscribeBetalingen,
   berekenKasSaldo,
-  bevestigBetaling,
-  wijsBetalingAf,
   registreerUitbetaling,
   registreerCorrectie,
   stortLottoSaldo,
@@ -101,7 +99,6 @@ function FinancieelPageContent() {
     .filter(m => m.type === 'uitbetaling' && m.datum && m.datum.toDate().getMonth() === nu.getMonth() && m.datum.toDate().getFullYear() === nu.getFullYear())
     .reduce((s, m) => s + m.bedrag, 0);
 
-  const teVerifieren = betalingen.filter(b => b.status === 'verificatie');
   const ledenZonderTelefoon = leden.filter(l => l.actief && !l.telefoon);
   const ledenMetTelefoon = leden.filter(l => l.actief && l.telefoon);
   const actieveLeden = leden.filter(l => l.actief);
@@ -115,18 +112,6 @@ function FinancieelPageContent() {
   const tikkieLink = paymentConfig.tikkieLink || undefined;
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
-
-  const handleBevestig = async (b: Betaling) => {
-    const au = actieUser();
-    if (!au) return;
-    await bevestigBetaling(b, au);
-  };
-
-  const handleAfwijzen = async (b: Betaling) => {
-    const au = actieUser();
-    if (!au) return;
-    await wijsBetalingAf(b, au);
-  };
 
   const handleUitbetaling = async () => {
     const au = actieUser();
@@ -166,10 +151,6 @@ function FinancieelPageContent() {
     const bedrag = parseFloat(stortBedrag.replace(',', '.'));
     const lid = leden.find(l => l.id === stortLidId);
     if (!au || !lid || isNaN(bedrag) || bedrag <= 0) return;
-    if (bedrag < standaardInleg) {
-      setStortError(`Minimaal €${standaardInleg.toFixed(2)} (de huidige standaard inleg).`);
-      return;
-    }
     setStortError(null);
     setStortBezig(true);
     try {
@@ -285,7 +266,6 @@ function FinancieelPageContent() {
               { label: 'Kassaldo', value: `€${saldo.toFixed(2)}`, color: 'var(--gold)', sub: 'som van kasmutaties' },
               { label: 'Ontvangen', value: `+€${ontvangenDezeMaand.toFixed(2)}`, color: 'var(--success)', sub: 'deze maand' },
               { label: 'Uitbetaald', value: `−€${Math.abs(uitbetaaldDezeMaand).toFixed(2)}`, color: 'var(--error)', sub: 'deze maand' },
-              { label: 'Te verifiëren', value: String(teVerifieren.length), color: teVerifieren.length > 0 ? 'var(--warning)' : 'var(--white)', sub: 'betalingen' },
             ].map(s => (
               <div key={s.label} className="card" style={{ padding: 14 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--muted)', marginBottom: 8 }}>{s.label}</div>
@@ -294,32 +274,6 @@ function FinancieelPageContent() {
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Te verifiëren betalingen */}
-        <div style={{ padding: '0 20px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="section-title" style={{ marginBottom: 0 }}>Te verifiëren betalingen</div>
-            {teVerifieren.length > 0 && <span style={{ fontSize: 12, background: 'var(--warning-soft)', color: 'var(--warning)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{teVerifieren.length}</span>}
-          </div>
-          {teVerifieren.length === 0 && (
-            <div className="card" style={{ padding: '20px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-              Geen openstaande meldingen
-            </div>
-          )}
-          {teVerifieren.map(b => (
-            <div key={b.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>💬</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{b.userNaam}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>€{b.bedrag.toFixed(2)} · {b.omschrijving}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <button onClick={() => handleBevestig(b)} style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>✓</button>
-                <button onClick={() => handleAfwijzen(b)} style={{ background: 'var(--error-soft)', color: 'var(--error)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>✕</button>
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* WhatsApp herinneringen */}
@@ -438,7 +392,7 @@ function FinancieelPageContent() {
             <label className="form-label">Bedrag</label>
             <input
               type="text" inputMode="decimal"
-              placeholder={`Min. €${standaardInleg.toFixed(2)}`}
+              placeholder="Bedrag dat je in Tikkie ziet…"
               className="form-input"
               value={stortBedrag}
               onChange={e => { setStortBedrag(e.target.value); setStortError(null); }}

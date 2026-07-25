@@ -177,46 +177,13 @@ export async function markeerTikkieGeopend(betalingId: string): Promise<void> {
   });
 }
 
-export async function bevestigBetaling(betaling: Betaling, kashouder: ActieUser) {
-  await updateDoc(doc(db, 'betalingen', betaling.id), {
-    status: 'betaald',
-    bevestigd: serverTimestamp(),
-    bevestigdDoor: kashouder.uid,
-  });
-  await maakKasmutatie({
-    omschrijving: `${betaling.omschrijving} — ${betaling.userNaam}`,
-    bedrag: Math.abs(betaling.bedrag),
-    type: 'inleg',
-    userId: betaling.userId,
-    betalingId: betaling.id,
-    aangemaaktDoor: kashouder.uid,
-  });
+// bevestigBetaling is verwijderd (25 juli 2026) — er bestaat niets
+// meer dat een 'verificatie'-status betaling aanmaakt (meldBetaling en
+// meldLottoSaldoStorting zijn eerder al verwijderd), dus deze functie
+// had geen enkel scenario meer waarin ze zinvol kon worden aangeroepen.
+// Kashouder registreert stortingen voortaan altijd direct via
+// stortLottoSaldo (hieronder), zonder tussenliggende verificatiestap.
 
-  if (betaling.isSaldoStorting) {
-    // Storting verhoogt het LottoSaldo. De kasmutatie hierboven dekt
-    // het "geld is er" — dit hierna is puur de boekhouding van het
-    // tegoed zelf, geen extra kasmutatie.
-    await updateDoc(doc(db, 'users', betaling.userId), {
-      lottoSaldo: increment(betaling.bedrag),
-    });
-    await verrekenLottoSaldoMetOpenstaandeWeek(betaling.userId, betaling.userNaam, kashouder);
-  }
-
-  await logAudit(
-    'betaling_bevestigd',
-    `${kashouder.naam} bevestigde betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)})${betaling.isSaldoStorting ? ' — LottoSaldo-storting' : ''}`,
-    kashouder,
-    { doelUserId: betaling.userId }
-  );
-}
-
-/**
- * Na een bevestigde LottoSaldo-storting: kijkt of het lid nu genoeg
- * tegoed heeft om een eventuele openstaande week van DEZE week
- * meteen automatisch te dekken — zodat je niet apart nog handmatig
- * hoeft te betalen ná het storten. Géén nieuwe kasmutatie: het geld
- * zat al in de kas sinds de storting hierboven.
- */
 /**
  * Na een bevestigde LottoSaldo-storting: kijkt of het lid nu genoeg
  * tegoed heeft om de huidige week automatisch te dekken.
@@ -307,19 +274,9 @@ export async function markeerLottoSaldoIntroGezien(userId: string) {
   });
 }
 
-export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
-  await updateDoc(doc(db, 'betalingen', betaling.id), {
-    status: 'afgewezen',
-    bevestigd: serverTimestamp(),
-    bevestigdDoor: kashouder.uid,
-  });
-  await logAudit(
-    'betaling_afgewezen',
-    `${kashouder.naam} wees betaling van ${betaling.userNaam} af (€${betaling.bedrag.toFixed(2)})`,
-    kashouder,
-    { doelUserId: betaling.userId }
-  );
-}
+// wijsBetalingAf is verwijderd (25 juli 2026) — zelfde reden als
+// bevestigBetaling hierboven: geen enkele bron maakt nog een
+// 'verificatie'-status betaling aan om af te wijzen.
 
 /**
  * Beheerder markeert een reeds 'betaald'-betaling achteraf als
@@ -386,14 +343,22 @@ export async function herstelBetalingGecorrigeerd(
 // doordat de twee routes elkaars saldo-verrekening niet kenden.
 // Zie docs/changelog.md voor de aanleiding.
 
+/**
+ * Kashouder registreert een storting namens een lid, op basis van wat
+ * ze zelf in Tikkie zien binnenkomen — elk bedrag, geen minimum. Een
+ * eerdere versie eiste minimaal de standaard inleg, maar dat botste
+ * met de realiteit: de kashouder registreert exact wat er binnenkwam
+ * (bijv. €2), niet een kunstmatig afgerond bedrag. Een klein bedrag
+ * telt gewoon mee in het saldo en wordt later, samen met een volgende
+ * storting, alsnog gebruikt zodra het genoeg is voor een hele week.
+ */
 export async function stortLottoSaldo(
   lid: { id: string; naam: string },
   bedrag: number,
   kashouder: ActieUser
 ) {
-  const { standaardInleg } = await haalVerenigingConfigOp();
-  if (bedrag < standaardInleg) {
-    throw new Error(`Minimaal €${standaardInleg.toFixed(2)} (de huidige standaard inleg).`);
+  if (bedrag <= 0) {
+    throw new Error('Bedrag moet groter dan €0 zijn.');
   }
   await updateDoc(doc(db, 'users', lid.id), {
     lottoSaldo: increment(bedrag),
