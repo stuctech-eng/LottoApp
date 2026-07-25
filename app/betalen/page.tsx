@@ -17,6 +17,34 @@ import { Betaling, PaymentConfig } from '@/lib/types';
  * verificatie-wachtrij meer voor leden. Zie docs/changelog.md.
  */
 
+/**
+ * Zet een ISO-weeknotatie ("2026-W31") om naar de zaterdag-datum van
+ * die week, netjes geformatteerd in het Nederlands.
+ *
+ * BEWUST gebaseerd op de weekstring zelf, niet op "vandaag + dagen
+ * tot zaterdag" — die laatste aanpak gaf op zaterdagavond, ná de
+ * trekking van de huidige week, de datum van de zojuist-afgelopen
+ * trekking in plaats van de eerstvolgende (`huidigTrekkingWeek()`
+ * blijft immers gewoon de kalenderweek van vandaag teruggeven, ook
+ * na 22:00 op zaterdag). Door uit te gaan van de daadwerkelijke
+ * `trekkingWeek`-waarde van de relevante betaling blijft de datum
+ * altijd consistent met wat er al als "betaald" wordt getoond.
+ */
+function weekStringNaarDatum(weekString: string): string {
+  const [jaarStr, weekStr] = weekString.split('-W');
+  const jaar = parseInt(jaarStr, 10);
+  const weekNr = parseInt(weekStr, 10);
+  // ISO-8601: 4 januari valt altijd in week 1. Vind de maandag van
+  // week 1, tel er (weekNr - 1) weken bij op, dan +5 dagen voor zaterdag.
+  const vierJan = new Date(Date.UTC(jaar, 0, 4));
+  const dayNumVierJan = vierJan.getUTCDay() || 7;
+  const maandagWeek1 = new Date(vierJan);
+  maandagWeek1.setUTCDate(vierJan.getUTCDate() - dayNumVierJan + 1);
+  const zaterdag = new Date(maandagWeek1);
+  zaterdag.setUTCDate(maandagWeek1.getUTCDate() + (weekNr - 1) * 7 + 5);
+  return zaterdag.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
 function BetalenPageContent() {
   const router = useRouter();
   const { user, profile } = useAuth();
@@ -82,15 +110,19 @@ function BetalenPageContent() {
         </div>
 
         {/* Betaalstatus deze week — klein label, blokkeert nooit het storten */}
-        {heeftBetaaldDezeWeek && (
-          <div style={{ margin: '0 20px 12px', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 14, padding: '12px 14px' }}>
-            <span style={{ fontSize: 20 }}>✅</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>Deze week al betaald</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Je doet mee aan de trekking — hieronder kun je ook alvast bijstorten voor latere weken</div>
+        {heeftBetaaldDezeWeek && huidigeBetaling?.trekkingWeek && (() => {
+          const datumTekst = weekStringNaarDatum(huidigeBetaling.trekkingWeek!);
+          const weekNr = huidigeBetaling.trekkingWeek!.split('-W')[1];
+          return (
+            <div style={{ margin: '0 20px 12px', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 14, padding: '12px 14px' }}>
+              <span style={{ fontSize: 20 }}>✅</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>Trekking {datumTekst} betaald (week {weekNr})</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Je doet mee — hieronder kun je ook alvast bijstorten voor latere weken</div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Eenmalige uitleg */}
         {!heeftIntroGezien && (
@@ -114,6 +146,13 @@ function BetalenPageContent() {
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
             <div style={{ fontSize: 40, marginBottom: 10 }}>💰</div>
             <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>LottoSaldo</div>
+            {(() => {
+              const datumTekst = weekStringNaarDatum(week);
+              const weekNr = week.split('-W')[1];
+              return (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 14 }}>Trekking: {datumTekst} (week {weekNr})</div>
+              );
+            })()}
 
             {lottoSaldo <= 0 ? (
               <>
