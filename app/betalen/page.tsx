@@ -127,7 +127,8 @@ function BetalenPageContent() {
 
   const handleMeldSaldoStorting = async () => {
     if (!user || !profile) return;
-    const bedrag = saldoBedrag ?? parseFloat(saldoAnders.replace(',', '.'));
+    const aangepastBedrag = saldoAnders.trim() ? parseFloat(saldoAnders.replace(',', '.')) : null;
+    const bedrag = aangepastBedrag ?? saldoBedrag ?? 0;
     if (!bedrag || isNaN(bedrag) || bedrag <= 0) return;
     setStap('saldo_bezig');
     setError(null);
@@ -248,7 +249,12 @@ function BetalenPageContent() {
   }
 
   if (stap === 'saldo_kiezen') {
-    const bedrag = saldoBedrag ?? parseFloat(saldoAnders.replace(',', '.'));
+    // Vrij invoerveld krijgt ALTIJD voorrang zodra het niet leeg is —
+    // ongeacht de volgorde waarin geklikt/getypt is. Dit voorkomt dat
+    // een per ongeluk (nogmaals) aangetikte preset-knop een al
+    // ingetypt bedrag stilletjes overschrijft.
+    const aangepastBedrag = saldoAnders.trim() ? parseFloat(saldoAnders.replace(',', '.')) : null;
+    const bedrag = aangepastBedrag ?? saldoBedrag ?? 0;
     const geldigBedrag = !isNaN(bedrag) && bedrag > 0;
     const kanMelden = tikkieLink ? saldoTikkieGeopend && geldigBedrag : geldigBedrag;
 
@@ -339,6 +345,13 @@ function BetalenPageContent() {
           )}
 
           <div style={{ flex: 1 }} />
+
+          {geldigBedrag && (
+            <div style={{ padding: '0 20px', marginBottom: 10, textAlign: 'center' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Je stort</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, color: 'var(--accent)' }}>€{bedrag.toFixed(2)}</div>
+            </div>
+          )}
 
           <div style={{ padding: '0 20px', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
             <button
