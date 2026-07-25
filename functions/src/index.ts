@@ -406,6 +406,52 @@ export const onTrekkingHerinnering = functions.scheduler.onSchedule(
   }
 );
 
+// ─────────────────────── onTikkieCheckHerinnering ───────────────────────
+
+/**
+ * Sinds leden hun storting niet meer zelf melden in de app (25 juli
+ * 2026), is er geen automatisch signaal meer wanneer er geld is
+ * binnengekomen. Deze herinnering compenseert dat: elke vrijdagavond
+ * een duwtje richting kashouder/beheerder om zelf even in Tikkie te
+ * kijken en eventuele stortingen te registreren, vóórdat het weekend
+ * ingaat en de trekking van zaterdag verwerkt moet worden.
+ */
+export const onTikkieCheckHerinnering = functions.scheduler.onSchedule(
+  {
+    schedule: '0 20 * * 5', // elke vrijdag 20:00
+    timeZone: 'Europe/Amsterdam',
+  },
+  async () => {
+    functions.logger.info('Tikkie-check-herinnering versturen naar kashouder(s)/beheerder(s)…');
+    // Twee losse queries i.p.v. één where('rol','in',[...]) gecombineerd
+    // met where('actief','==',true) — die combinatie kan een
+    // composite index vereisen die, indien afwezig, stil een lege
+    // array teruggeeft (zelfde klasse probleem als eerder met
+    // orderBy() geconstateerd). Twee simpele queries zijn altijd veilig.
+    const kashoudersSnap = await db.collection('users')
+      .where('actief', '==', true)
+      .where('rol', '==', 'kashouder')
+      .get();
+    const beheerdersSnap = await db.collection('users')
+      .where('actief', '==', true)
+      .where('rol', '==', 'beheerder')
+      .get();
+    const alleDocs = [...kashoudersSnap.docs, ...beheerdersSnap.docs];
+    let aantalVerstuurd = 0;
+    for (const userDoc of alleDocs) {
+      const tokens = await getFcmTokens(userDoc.id, 'herinneringen');
+      if (tokens.length > 0) {
+        await sendToTokens(tokens, {
+          title: '💳 Tikkie checken',
+          body: 'Tijd om Tikkie te checken op nieuwe stortingen, vóór de trekking van morgen.',
+        }, { path: '/kashouder/financieel' });
+        aantalVerstuurd++;
+      }
+    }
+    functions.logger.info(`Tikkie-check-herinnering verstuurd naar ${aantalVerstuurd} kashouder(s)/beheerder(s).`);
+  }
+);
+
 // ─────────────────────── onTikkieLinkVerval ───────────────────────
 
 /**
