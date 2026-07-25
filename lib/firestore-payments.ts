@@ -165,29 +165,11 @@ export function subscribeUserBetalingen(uid: string, callback: (betalingen: Beta
   );
 }
 
-export async function meldBetaling(user: ActieUser, bedrag: number, omschrijving: string) {
-  const week = huidigTrekkingWeek();
-  const ref = await addDoc(collection(db, 'betalingen'), {
-    userId: user.uid,
-    userNaam: user.naam,
-    bedrag,
-    omschrijving,
-    provider: 'offline',
-    status: 'verificatie',
-    trekkingWeek: week,
-    tikkieGeopend: false,
-    aangemaakt: serverTimestamp(),
-    bevestigd: null,
-    bevestigdDoor: null,
-  });
-  await logAudit(
-    'betaling_gemeld',
-    `${user.naam} meldde een betaling van €${bedrag.toFixed(2)} (${omschrijving}) voor week ${week}`,
-    user,
-    { doelUserId: user.uid }
-  );
-  return ref.id;
-}
+// meldBetaling is verwijderd (25 juli 2026) — vervangen door
+// meldLottoSaldoStorting voor ALLE bedragen, groot of klein. Er
+// bestaat geen apart "gewoon betalen"-pad meer; alles is een storting
+// die direct verrekent met een openstaande week indien van
+// toepassing. Zie docs/changelog.md voor de aanleiding.
 
 export async function markeerTikkieGeopend(betalingId: string): Promise<void> {
   await updateDoc(doc(db, 'betalingen', betalingId), {
@@ -317,7 +299,17 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
  * betaalmelding. Wordt pas daadwerkelijk verwerkt na bevestiging
  * (zie bevestigBetaling hierboven).
  */
+/**
+ * Lid meldt zelf een storting — sinds 25 juli 2026 het ENIGE pad voor
+ * een lid om een betaling te initiëren, groot of klein (voorheen was
+ * er ook nog een apart "gewoon €4 betalen"-pad; dat bestaat niet meer).
+ * Minimumbedrag = de actuele standaard inleg.
+ */
 export async function meldLottoSaldoStorting(user: ActieUser, bedrag: number) {
+  const { standaardInleg } = await haalVerenigingConfigOp();
+  if (bedrag < standaardInleg) {
+    throw new Error(`Minimaal €${standaardInleg.toFixed(2)} (de huidige standaard inleg).`);
+  }
   await addDoc(collection(db, 'betalingen'), {
     userId: user.uid,
     userNaam: user.naam,
@@ -417,169 +409,22 @@ export async function herstelBetalingGecorrigeerd(
     { doelUserId: betaling.userId }
   );
 }
+// markeerBetaaldDoorKashouder is verwijderd (25 juli 2026) —
+// vervangen door stortLottoSaldo voor ALLE bedragen. Er bestaat
+// geen apart "markeer als betaald"-pad meer naast de storting-route;
+// dat leidde herhaaldelijk tot dubbele/inconsistente boekingen
+// doordat de twee routes elkaars saldo-verrekening niet kenden.
+// Zie docs/changelog.md voor de aanleiding.
 
-/**
- * Kashouder markeert een lid direct als betaald voor de huidige week,
- * op basis van eigen verificatie (bijv. gezien in de Tikkie-app) —
- * zonder te wachten tot het lid zelf op "Ik heb betaald" tikt.
- *
- * Werkt in twee situaties:
- * - Er bestaat al een 'open' (of 'verificatie') document voor deze
- *   week → dat wordt bijgewerkt naar 'betaald'.
- * - Er bestaat nog HELEMAAL GEEN document (bijv. omdat het lid pas na
- *   het aanmaken van de weekbetalingen een ticket kreeg) → er wordt
- *   een nieuw document direct met status 'betaald' aangemaakt.
- *
- * In beide gevallen wordt een kasmutatie aangemaakt, net als bij de
- * normale bevestigBetaling-flow.
- */
-/**
- * Kashouder markeert een lid direct als betaald voor de huidige week,
- * op basis van eigen verificatie (bijv. gezien in de Tikkie-app) —
- * zonder te wachten tot het lid zelf op "Ik heb betaald" tikt.
- *
- * Volgorde van checks (belangrijk — voorkomt dubbele/foutieve boekingen):
- * 1. Al 'betaald' deze week? → gooit een fout, doet niets. Voorkomt een
- *    tweede, overbodige betaling + kasmutatie voor iemand die al klaar is.
- * 2. Bestaat er een 'open' document? → dat wordt bevestigd (kashouder
- *    heeft een ECHTE, nieuwe Tikkie-betaling gezien). Kasmutatie erbij,
- *    want dit is nieuw binnengekomen geld.
- * 3. Geen document, maar wel genoeg LottoSaldo? → week wordt gedekt
- *    vanuit het saldo. GEEN nieuwe kasmutatie — dat geld zit al in de
- *    kas sinds de storting werd bevestigd.
- * 4. Geen document, geen (toereikend) saldo? → aanname: kashouder zag
- *    een echte Tikkie-betaling die het lid niet zelf heeft gemeld.
- *    Nieuwe betaling + kasmutatie, zoals voorheen.
- */
-export async function markeerBetaaldDoorKashouder(
-  lid: { id: string; naam: string },
-  bestaandDocument: Betaling | null,
-  kashouder: ActieUser
-) {
-  const week = huidigTrekkingWeek();
-
-  // 1. Voorkom dubbele registratie
-  const alBetaaldSnap = await getDocs(query(
-    collection(db, 'betalingen'),
-    where('userId', '==', lid.id),
-    where('trekkingWeek', '==', week),
-    where('status', '==', 'betaald')
-  ));
-  if (!alBetaaldSnap.empty) {
-    throw new Error(`${lid.naam} had deze week al betaald — geen nieuwe boeking aangemaakt.`);
-  }
-
-  const { standaardInleg } = await haalVerenigingConfigOp();
-
-  // 2. Bestaand 'open' document bevestigen — echte, nieuwe betaling
-  if (bestaandDocument) {
-    await updateDoc(doc(db, 'betalingen', bestaandDocument.id), {
-      status: 'betaald',
-      bevestigd: serverTimestamp(),
-      bevestigdDoor: kashouder.uid,
-    });
-    await maakKasmutatie({
-      omschrijving: `${bestaandDocument.omschrijving} — ${lid.naam}`,
-      bedrag: Math.abs(bestaandDocument.bedrag),
-      type: 'inleg',
-      userId: lid.id,
-      betalingId: bestaandDocument.id,
-      aangemaaktDoor: kashouder.uid,
-    });
-    await logAudit(
-      'betaling_bevestigd',
-      `${kashouder.naam} bevestigde de betaling van ${lid.naam} (€${bestaandDocument.bedrag.toFixed(2)})`,
-      kashouder,
-      { doelUserId: lid.id }
-    );
-    return;
-  }
-
-  // 3. Geen document — check eerst LottoSaldo vóórdat er een NIEUWE,
-  // kasmutatie-verhogende betaling wordt aangemaakt.
-  const userSnap = await getDoc(doc(db, 'users', lid.id));
-  const lottoSaldo = (userSnap.exists() ? (userSnap.data().lottoSaldo as number | undefined) : undefined) ?? 0;
-
-  if (lottoSaldo >= standaardInleg) {
-    const ref = await addDoc(collection(db, 'betalingen'), {
-      userId: lid.id,
-      userNaam: lid.naam,
-      bedrag: standaardInleg,
-      omschrijving: 'Inleg LottoClub (automatisch via LottoSaldo)',
-      provider: 'offline',
-      status: 'betaald',
-      trekkingWeek: week,
-      tikkieGeopend: false,
-      aangemaakt: serverTimestamp(),
-      bevestigd: serverTimestamp(),
-      bevestigdDoor: 'systeem-lottosaldo',
-    });
-    await updateDoc(doc(db, 'users', lid.id), {
-      lottoSaldo: increment(-standaardInleg),
-    });
-    await logAudit(
-      'betaling_bevestigd',
-      `${kashouder.naam} liet de week van ${lid.naam} dekken vanuit LottoSaldo (€${standaardInleg.toFixed(2)})`,
-      kashouder,
-      { doelUserId: lid.id }
-    );
-    return;
-  }
-
-  // 4. Geen document, geen toereikend saldo — echte, ongemelde Tikkie-betaling
-  const ref = await addDoc(collection(db, 'betalingen'), {
-    userId: lid.id,
-    userNaam: lid.naam,
-    bedrag: standaardInleg,
-    omschrijving: STANDAARD_OMSCHRIJVING,
-    provider: 'offline',
-    status: 'betaald',
-    trekkingWeek: week,
-    tikkieGeopend: false,
-    aangemaakt: serverTimestamp(),
-    bevestigd: serverTimestamp(),
-    bevestigdDoor: kashouder.uid,
-  });
-  await maakKasmutatie({
-    omschrijving: `${STANDAARD_OMSCHRIJVING} — ${lid.naam}`,
-    bedrag: standaardInleg,
-    type: 'inleg',
-    userId: lid.id,
-    betalingId: ref.id,
-    aangemaaktDoor: kashouder.uid,
-  });
-  await logAudit(
-    'betaling_bevestigd',
-    `${kashouder.naam} markeerde ${lid.naam} direct als betaald (€${standaardInleg.toFixed(2)}) — via Tikkie geverifieerd, niet gemeld door lid`,
-    kashouder,
-    { doelUserId: lid.id }
-  );
-}
-
-/**
- * Kashouder registreert een storting op het LottoSaldo van een lid,
- * op basis van eigen verificatie (bijv. gezien in Tikkie) — net als
- * markeerBetaaldDoorKashouder is de kashouder hier zelf de
- * verificatiestap; een lid kan zijn eigen saldo niet direct verhogen.
- *
- * Verhoogt lottoSaldo ÉN maakt direct een kasmutatie aan: het geld is
- * vanaf het moment dat de kashouder het ontvangt economisch al van de
- * club, ook al wordt het pas later als wekelijkse inleg "verbruikt".
- * De wekelijkse automatische afboeking (zie functions/src/index.ts,
- * onBetalingenAanmaken) verlaagt daarna alleen lottoSaldo — die maakt
- * bewust GEEN nieuwe kasmutatie, want dat geld zit al in de kas.
- *
- * KRITIEK: roept daarna verrekenLottoSaldoMetOpenstaandeWeek aan —
- * zonder deze check bleef een al openstaand betaaldocument voor de
- * huidige week onopgemerkt staan, waardoor een kashouder die daarna
- * ook nog los op "✓ Betaald" tikte een dubbele, ongedekte kasmutatie
- * kon veroorzaken (precies zo gebeurd en gecorrigeerd — zie changelog).
- */
 export async function stortLottoSaldo(
   lid: { id: string; naam: string },
   bedrag: number,
   kashouder: ActieUser
 ) {
+  const { standaardInleg } = await haalVerenigingConfigOp();
+  if (bedrag < standaardInleg) {
+    throw new Error(`Minimaal €${standaardInleg.toFixed(2)} (de huidige standaard inleg).`);
+  }
   await updateDoc(doc(db, 'users', lid.id), {
     lottoSaldo: increment(bedrag),
   });

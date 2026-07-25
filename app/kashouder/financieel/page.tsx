@@ -68,6 +68,7 @@ function FinancieelPageContent() {
   const [stortBedrag, setStortBedrag] = useState('');
   const [stortBezig, setStortBezig] = useState(false);
   const [stortOk, setStortOk] = useState(false);
+  const [stortError, setStortError] = useState<string | null>(null);
 
   const [correctieLidId, setCorrectieLidId] = useState<string | null>(null);
   const [correctieBedrag, setCorrectieBedrag] = useState('');
@@ -165,6 +166,11 @@ function FinancieelPageContent() {
     const bedrag = parseFloat(stortBedrag.replace(',', '.'));
     const lid = leden.find(l => l.id === stortLidId);
     if (!au || !lid || isNaN(bedrag) || bedrag <= 0) return;
+    if (bedrag < standaardInleg) {
+      setStortError(`Minimaal €${standaardInleg.toFixed(2)} (de huidige standaard inleg).`);
+      return;
+    }
+    setStortError(null);
     setStortBezig(true);
     try {
       await stortLottoSaldo({ id: lid.id, naam: lid.naam }, bedrag, au);
@@ -172,6 +178,8 @@ function FinancieelPageContent() {
       setStortLidId('');
       setStortOk(true);
       setTimeout(() => setStortOk(false), 2000);
+    } catch (e) {
+      setStortError(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
     } finally {
       setStortBezig(false);
     }
@@ -428,7 +436,17 @@ function FinancieelPageContent() {
               ))}
             </select>
             <label className="form-label">Bedrag</label>
-            <input type="text" inputMode="decimal" placeholder="€50,00" className="form-input" value={stortBedrag} onChange={e => setStortBedrag(e.target.value)} />
+            <input
+              type="text" inputMode="decimal"
+              placeholder={`Min. €${standaardInleg.toFixed(2)}`}
+              className="form-input"
+              value={stortBedrag}
+              onChange={e => { setStortBedrag(e.target.value); setStortError(null); }}
+              style={{ borderColor: stortError ? 'var(--error)' : undefined }}
+            />
+            {stortError && (
+              <div style={{ fontSize: 11, color: 'var(--error)', marginTop: -8, marginBottom: 12 }}>⚠️ {stortError}</div>
+            )}
             <button
               onClick={handleStorting}
               disabled={stortBezig || !stortLidId || !stortBedrag}

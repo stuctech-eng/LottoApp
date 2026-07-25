@@ -10,7 +10,7 @@ import {
   bevestigBetaling,
   wijsBetalingAf,
   huidigTrekkingWeek,
-  markeerBetaaldDoorKashouder,
+  stortLottoSaldo,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
@@ -101,14 +101,13 @@ function KashouderPageContent() {
   const handleMarkeerBetaald = async (lid: User) => {
     const au = actieUser();
     if (!au) return;
-    const bevestigd = window.confirm(`${lid.naam} als betaald markeren? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
+    const bevestigd = window.confirm(`€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
     if (!bevestigd) return;
     setMarkeerFout(null);
     try {
-      const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open') ?? null;
-      await markeerBetaaldDoorKashouder({ id: lid.id, naam: lid.naam }, bestaandDocument, au);
+      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, au);
     } catch (e) {
-      setMarkeerFout(e instanceof Error ? e.message : 'Markeren als betaald is mislukt.');
+      setMarkeerFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
       setTimeout(() => setMarkeerFout(null), 5000);
     }
   };
@@ -216,7 +215,7 @@ function KashouderPageContent() {
                       onClick={() => handleMarkeerBetaald(lid)}
                       style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
                     >
-                      ✓ Betaald
+                      💰 Storten
                     </button>
                     {lid.telefoon && (
                       <a
