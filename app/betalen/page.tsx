@@ -83,7 +83,21 @@ function BetalenPageContent() {
     );
   }
 
-  const week = huidigTrekkingWeek();
+  // De "relevante" week is NIET simpelweg de kalender-ISO-week van
+  // vandaag (huidigTrekkingWeek() zonder argument blijft "W30" tonen
+  // tot en met zondag, ook al is de trekking van vanavond allang
+  // verwerkt en is er al een betaling voor W31 aangemaakt). In plaats
+  // daarvan: de hoogste trekkingWeek die daadwerkelijk in de eigen
+  // betalingen voorkomt — dat is altijd de week waarvoor je nu
+  // daadwerkelijk speelt, ongeacht wat de kalender kalendermatig zegt.
+  // Fallback op huidigTrekkingWeek() alleen als er nog helemaal geen
+  // betalingen bestaan (gloednieuw lid, nog nooit gespeeld).
+  const gesorteerdeWeken = betalingen
+    .map(b => b.trekkingWeek)
+    .filter((w): w is string => !!w)
+    .sort();
+  const hoogsteWeekInData = gesorteerdeWeken[gesorteerdeWeken.length - 1];
+  const week = hoogsteWeekInData ?? huidigTrekkingWeek();
   const huidigeBetaling = betalingen.find(b => b.trekkingWeek === week);
 
   const heeftBetaaldDezeWeek = huidigeBetaling?.status === 'betaald';
