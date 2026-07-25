@@ -293,41 +293,11 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
   );
 }
 
-/**
- * Lid meldt zelf een storting op het eigen LottoSaldo — komt bij de
- * kashouder terecht als 'te verifiëren', net als een normale
- * betaalmelding. Wordt pas daadwerkelijk verwerkt na bevestiging
- * (zie bevestigBetaling hierboven).
- */
-/**
- * Lid meldt zelf een storting — sinds 25 juli 2026 het ENIGE pad voor
- * een lid om een betaling te initiëren, groot of klein (voorheen was
- * er ook nog een apart "gewoon €4 betalen"-pad; dat bestaat niet meer).
- * Minimumbedrag = de actuele standaard inleg.
- */
-export async function meldLottoSaldoStorting(user: ActieUser, bedrag: number) {
-  const { standaardInleg } = await haalVerenigingConfigOp();
-  if (bedrag < standaardInleg) {
-    throw new Error(`Minimaal €${standaardInleg.toFixed(2)} (de huidige standaard inleg).`);
-  }
-  await addDoc(collection(db, 'betalingen'), {
-    userId: user.uid,
-    userNaam: user.naam,
-    bedrag,
-    omschrijving: 'Vooruitbetaling LottoSaldo',
-    provider: 'offline',
-    status: 'verificatie',
-    tikkieGeopend: true,
-    isSaldoStorting: true,
-    aangemaakt: serverTimestamp(),
-  });
-  await logAudit(
-    'betaling_gemeld',
-    `${user.naam} meldde een LottoSaldo-storting van €${bedrag.toFixed(2)}`,
-    user,
-    { doelUserId: user.uid }
-  );
-}
+// meldLottoSaldoStorting is verwijderd (25 juli 2026) — leden
+// vergaten de melding structureel, waardoor stortingen onopgemerkt
+// bleven staan. De kashouder checkt nu zelf Tikkie en registreert
+// direct via stortLottoSaldo; geen tussenstap met een lid-melding
+// meer. Zie docs/changelog.md.
 
 /** Markeert de eenmalige LottoSaldo-uitlegbanner als gezien — puur een
  *  UI-voorkeur, geen financieel risico, dus zelf-service voor het lid. */
