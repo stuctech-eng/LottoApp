@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeUserBetalingen, huidigTrekkingWeek, markeerLottoSaldoIntroGezien } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, relevanteTrekkingWeek, markeerLottoSaldoIntroGezien } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { Betaling, PaymentConfig } from '@/lib/types';
@@ -83,21 +83,11 @@ function BetalenPageContent() {
     );
   }
 
-  // De "relevante" week is NIET simpelweg de kalender-ISO-week van
-  // vandaag (huidigTrekkingWeek() zonder argument blijft "W30" tonen
-  // tot en met zondag, ook al is de trekking van vanavond allang
-  // verwerkt en is er al een betaling voor W31 aangemaakt). In plaats
-  // daarvan: de hoogste trekkingWeek die daadwerkelijk in de eigen
-  // betalingen voorkomt — dat is altijd de week waarvoor je nu
-  // daadwerkelijk speelt, ongeacht wat de kalender kalendermatig zegt.
-  // Fallback op huidigTrekkingWeek() alleen als er nog helemaal geen
-  // betalingen bestaan (gloednieuw lid, nog nooit gespeeld).
-  const gesorteerdeWeken = betalingen
-    .map(b => b.trekkingWeek)
-    .filter((w): w is string => !!w)
-    .sort();
-  const hoogsteWeekInData = gesorteerdeWeken[gesorteerdeWeken.length - 1];
-  const week = hoogsteWeekInData ?? huidigTrekkingWeek();
+  // Zie relevanteTrekkingWeek in lib/firestore-payments.ts: gebruikt
+  // de hoogste trekkingWeek uit de eigen data i.p.v. blind de
+  // kalenderdatum, zodat dit ook op zaterdagavond ná de trekking al
+  // de nieuwe week toont in plaats van de zojuist-afgelopen.
+  const week = relevanteTrekkingWeek(betalingen);
   const huidigeBetaling = betalingen.find(b => b.trekkingWeek === week);
 
   const heeftBetaaldDezeWeek = huidigeBetaling?.status === 'betaald';

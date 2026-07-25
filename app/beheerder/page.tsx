@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { subscribeAllUsers } from '@/lib/firestore-users';
-import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo, huidigTrekkingWeek } from '@/lib/firestore-payments';
+import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo, huidigTrekkingWeek, relevanteTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribeSeizoen, subscribeAlleSeizoenen } from '@/lib/firestore-seizoenen';
 import { User, Kasmutatie, Betaling, Seizoen } from '@/lib/types';
 
@@ -45,7 +45,7 @@ function BeheerderPageContent() {
   // pas na het aanmaken van de weekbetalingen is toegevoegd) werd
   // anders helemaal niet gesignaleerd, terwijl diegene wél niet had
   // betaald.
-  const huidigeWeek = huidigTrekkingWeek();
+  const huidigeWeek = relevanteTrekkingWeek(betalingen);
   const actieveLedenMetTicket = leden.filter(l => l.actief && (l.tickets?.length ?? 0) > 0);
   const betalingenDezeWeek = betalingen.filter(
     b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek

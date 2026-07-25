@@ -39,6 +39,35 @@ export function huidigTrekkingWeek(datum?: Date): string {
   return `${d.getUTCFullYear()}-W${String(weekNr).padStart(2, '0')}`;
 }
 
+/**
+ * De week die relevant is voor weergave/filtering op betaalstatus —
+ * NIET simpelweg `huidigTrekkingWeek()` (de kalender-ISO-week van
+ * vandaag). Die laatste blijft na een trekking gewoon dezelfde week
+ * tonen tot en met zondag, ook al is er allang een nieuw betaaldocument
+ * voor de eerstvolgende week aangemaakt (bijv. door de automatische
+ * wekelijkse LottoSaldo-afschrijving, die direct ná elke trekking
+ * draait). Gevolg zonder deze functie: dashboard, kashouder-overzicht
+ * en beheerder-signalering tonen op zaterdagavond/zondag de al
+ * afgelopen week in plaats van de week waarvoor daadwerkelijk wordt
+ * gespeeld — bij de kashouder-pagina specifiek betekent dat een
+ * verkeerde of lege "Openstaand"-lijst op precies het moment dat het
+ * er het meest toe doet.
+ *
+ * Neemt in plaats daarvan de HOOGSTE trekkingWeek die daadwerkelijk
+ * voorkomt in de gegeven betalingen — dat weerspiegelt altijd de
+ * werkelijke stand van de data, ongeacht wat de kalender zegt. Valt
+ * terug op huidigTrekkingWeek() alleen als er nog helemaal geen
+ * betalingen bestaan (bijv. het allereerste gebruik van de app, vóór
+ * ooit een week is aangemaakt).
+ */
+export function relevanteTrekkingWeek(alleBetalingen: Betaling[]): string {
+  const weken = alleBetalingen
+    .map(b => b.trekkingWeek)
+    .filter((w): w is string => !!w)
+    .sort();
+  return weken[weken.length - 1] ?? huidigTrekkingWeek();
+}
+
 // ───────────────────────── Kasmutaties ─────────────────────────
 
 export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void) {

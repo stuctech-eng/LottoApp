@@ -8,6 +8,7 @@ import {
   subscribeBetalingen,
   berekenKasSaldo,
   huidigTrekkingWeek,
+  relevanteTrekkingWeek,
   stortLottoSaldo,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
@@ -56,7 +57,7 @@ function KashouderPageContent() {
   const tikkieLink = paymentConfig.tikkieLink || undefined;
 
   // Filter op huidige week — alleen betalingen van deze week tellen mee
-  const huidigeWeek = huidigTrekkingWeek();
+  const huidigeWeek = relevanteTrekkingWeek(betalingen);
   const betalingenDezeWeek = betalingen.filter(
     b => (b as Betaling & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
   );

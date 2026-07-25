@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen, huidigTrekkingWeek } from '@/lib/firestore-payments';
+import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen, huidigTrekkingWeek, relevanteTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
@@ -262,7 +262,7 @@ function DashboardPageContent() {
   // Zonder deze filter blijft een lid voor altijd als "betaald"
   // gelden zodra hij ooit één week heeft ingelegd — precies het patroon
   // dat de betaalvoortgang op de kashouder-pagina al goed afhandelt.
-  const huidigeWeek = huidigTrekkingWeek();
+  const huidigeWeek = relevanteTrekkingWeek(betalingen);
   const betalingenDezeWeek = betalingen.filter(
     b => (b as typeof betalingen[number] & { trekkingWeek?: string }).trekkingWeek === huidigeWeek
   );
