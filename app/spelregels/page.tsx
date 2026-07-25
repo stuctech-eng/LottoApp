@@ -113,7 +113,7 @@ function SpelregelsContent() {
           <div style={{ background: 'linear-gradient(135deg,#2a1c00,#0d1b2a)', border: '1px solid rgba(240,192,96,0.18)', borderRadius: 18, padding: '18px 20px', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', marginBottom: 12, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Samenvatting</div>
             {[
-              `💳 Stort minimaal €${standaardInleg} per week via Tikkie of overboeking`,
+              `💳 Wekelijkse inleg is €${standaardInleg} — stort naar keuze via Tikkie of overboeking`,
               '📲 Meld je betaling in de app na het betalen',
               '✅ Kashouder bevestigt → je doet mee deze week',
               '🎱 Zaterdag worden de nummers getrokken',

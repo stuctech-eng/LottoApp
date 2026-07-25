@@ -97,7 +97,7 @@ function BetalenPageContent() {
           <div style={{ margin: '0 20px 16px', background: 'linear-gradient(135deg,rgba(74,158,255,0.12),rgba(74,158,255,0.04))', border: '1px solid rgba(74,158,255,0.25)', borderRadius: 18, padding: 18 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>🆕 Hoe betalen werkt</div>
             <div style={{ fontSize: 13, color: 'var(--white)', lineHeight: 1.6, marginBottom: 14 }}>
-              Stort een bedrag naar keuze via Tikkie (minimaal €{standaardInleg.toFixed(2)}). De kashouder ziet je storting en verwerkt 'm — jij hoeft verder niks te melden in de app. Bij elke nieuwe speelweek wordt automatisch €{standaardInleg.toFixed(2)} van je saldo afgeschreven, zolang er saldo is.
+              Stort een bedrag naar keuze via Tikkie. De kashouder ziet je storting en verwerkt 'm — jij hoeft verder niks te melden in de app. Bij elke nieuwe speelweek wordt automatisch €{standaardInleg.toFixed(2)} van je saldo afgeschreven, zolang er saldo is.
             </div>
             <button
               onClick={handleIntroBegrepen}
@@ -118,7 +118,7 @@ function BetalenPageContent() {
             {lottoSaldo <= 0 ? (
               <>
                 <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 6 }}>Je hebt nog geen saldo</div>
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.5 }}>Stort minimaal €{standaardInleg.toFixed(2)} via Tikkie om mee te doen.</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.5 }}>Stort via Tikkie om mee te doen.</div>
               </>
             ) : lottoSaldo < standaardInleg ? (
               <>
