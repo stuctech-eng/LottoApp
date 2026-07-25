@@ -13,6 +13,7 @@ import {
   registreerCorrectie,
   stortLottoSaldo,
   corrigeerLottoSaldo,
+  markeerBetalingGecorrigeerd,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
@@ -72,6 +73,13 @@ function FinancieelPageContent() {
   const [correctieReden, setCorrectieReden] = useState('');
   const [correctieBezig, setCorrectieBezig] = useState(false);
   const [correctieError, setCorrectieError] = useState<string | null>(null);
+
+  const [zoekTerm, setZoekTerm] = useState('');
+  const [betalingCorrigerenId, setBetalingCorrigerenId] = useState<string | null>(null);
+  const [betalingCorrigerenReden, setBetalingCorrigerenReden] = useState('');
+  const [betalingCorrigerenBezig, setBetalingCorrigerenBezig] = useState(false);
+  const [betalingCorrigerenError, setBetalingCorrigerenError] = useState<string | null>(null);
+  const [betalingGecorrigeerdOk, setBetalingGecorrigeerdOk] = useState<string | null>(null);
 
   useEffect(() => {
     const u1 = subscribeKasmutaties(setMutaties);
@@ -190,6 +198,25 @@ function FinancieelPageContent() {
       setCorrectieError('Opslaan mislukt, probeer opnieuw');
     } finally {
       setCorrectieBezig(false);
+    }
+  };
+
+  const handleMarkeerBetalingGecorrigeerd = async (betaling: Betaling) => {
+    const au = actieUser();
+    if (!au) return;
+    if (!betalingCorrigerenReden.trim()) { setBetalingCorrigerenError('Vul een reden in — komt in het auditlog'); return; }
+    setBetalingCorrigerenError(null);
+    setBetalingCorrigerenBezig(true);
+    try {
+      await markeerBetalingGecorrigeerd(betaling, betalingCorrigerenReden.trim(), au);
+      setBetalingCorrigerenId(null);
+      setBetalingCorrigerenReden('');
+      setBetalingGecorrigeerdOk(betaling.id);
+      setTimeout(() => setBetalingGecorrigeerdOk(null), 3000);
+    } catch {
+      setBetalingCorrigerenError('Opslaan mislukt, probeer opnieuw');
+    } finally {
+      setBetalingCorrigerenBezig(false);
     }
   };
 
@@ -430,6 +457,76 @@ function FinancieelPageContent() {
             </button>
           </div>
         </div>
+
+        {/* Betaling corrigeren — beheerder-only */}
+        {isBeheerder && (
+          <div style={{ padding: '0 20px', marginBottom: 20 }}>
+            <div className="section-title">Betaling corrigeren</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Blijkt een eerder bevestigde betaling achteraf fout (bijv. een dubbele boeking)? Markeer 'm hier als gecorrigeerd — het document blijft zichtbaar in de geschiedenis, maar telt nergens meer mee als "betaald". Dit corrigeert geen geld — gebruik daarvoor de Kascorrectie hierboven.
+            </div>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Zoek op naam…"
+              value={zoekTerm}
+              onChange={e => setZoekTerm(e.target.value)}
+              style={{ marginBottom: 12 }}
+            />
+            {betalingen
+              .filter(b => b.status === 'betaald')
+              .filter(b => !zoekTerm.trim() || b.userNaam.toLowerCase().includes(zoekTerm.trim().toLowerCase()))
+              .sort((a, b) => (b.bevestigd?.toMillis() ?? 0) - (a.bevestigd?.toMillis() ?? 0))
+              .slice(0, 20)
+              .map(b => {
+                const inBewerking = betalingCorrigerenId === b.id;
+                const zojuistGecorrigeerd = betalingGecorrigeerdOk === b.id;
+                return (
+                  <div key={b.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
+                    {!inBewerking ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 500 }}>{b.userNaam}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                            €{b.bedrag.toFixed(2)} · {b.trekkingWeek ?? (b.isSaldoStorting ? 'storting' : '—')} · {b.bevestigd ? b.bevestigd.toDate().toLocaleDateString('nl-NL') : '—'}
+                          </div>
+                        </div>
+                        {zojuistGecorrigeerd ? (
+                          <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Gecorrigeerd</span>
+                        ) : (
+                          <button
+                            onClick={() => { setBetalingCorrigerenId(b.id); setBetalingCorrigerenReden(''); setBetalingCorrigerenError(null); }}
+                            style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: 'var(--warning)', flexShrink: 0 }}
+                          >
+                            Corrigeer
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{b.userNaam} — €{b.bedrag.toFixed(2)} als gecorrigeerd markeren</div>
+                        <label className="form-label">Reden (verplicht, komt in auditlog)</label>
+                        <input
+                          type="text" className="form-input" value={betalingCorrigerenReden}
+                          onChange={e => { setBetalingCorrigerenReden(e.target.value); setBetalingCorrigerenError(null); }}
+                          placeholder="Bijv. dubbele boeking na storting"
+                          style={{ marginBottom: 8, borderColor: betalingCorrigerenError ? 'var(--error)' : undefined }}
+                          autoFocus
+                        />
+                        {betalingCorrigerenError && <div style={{ fontSize: 11, color: 'var(--error)', marginBottom: 8 }}>⚠️ {betalingCorrigerenError}</div>}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => setBetalingCorrigerenId(null)} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>Annuleren</button>
+                          <button onClick={() => handleMarkeerBetalingGecorrigeerd(b)} disabled={betalingCorrigerenBezig} style={{ flex: 1, background: 'var(--warning)', border: 'none', color: 'var(--navy)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betalingCorrigerenBezig ? 0.6 : 1 }}>
+                            {betalingCorrigerenBezig ? 'Bezig…' : 'Bevestigen'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       <nav className="bottom-nav">

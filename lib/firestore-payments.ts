@@ -360,6 +360,41 @@ export async function wijsBetalingAf(betaling: Betaling, kashouder: ActieUser) {
 }
 
 /**
+ * Beheerder markeert een reeds 'betaald'-betaling achteraf als
+ * 'gecorrigeerd' — voor het geval de betaling zelf een fout bleek
+ * (bijv. een dubbele boeking, of een betaling die feitelijk uit
+ * LottoSaldo had moeten komen in plaats van een losse bevestiging).
+ *
+ * Het document blijft bestaan (traceerbaar in de geschiedenis), maar
+ * telt vanaf nu nergens meer mee als "betaald" — niet in de
+ * prijzenpot-berekening (lib/firestore-prijzenpot.ts), niet in
+ * betaalstatus-checks op de dashboards. Het lid komt daardoor,
+ * terecht, weer als "niet betaald" naar voren voor die week — dat is
+ * gewenst gedrag, geen bug: als de betaling zelf ongeldig was, is de
+ * deelname dat ook.
+ *
+ * Dit vervangt GEEN kascorrectie — corrigeer het geld apart via
+ * Financieel → Kascorrectie. Deze functie corrigeert alleen de
+ * betaalstatus-administratie.
+ */
+export async function markeerBetalingGecorrigeerd(
+  betaling: Betaling,
+  reden: string,
+  beheerder: ActieUser
+) {
+  await updateDoc(doc(db, 'betalingen', betaling.id), {
+    status: 'gecorrigeerd',
+    gecorrigeerdReden: reden,
+  });
+  await logAudit(
+    'betaling_gecorrigeerd',
+    `${beheerder.naam} markeerde de betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)}, ${betaling.trekkingWeek ?? 'geen week'}) als gecorrigeerd — reden: ${reden}`,
+    beheerder,
+    { doelUserId: betaling.userId }
+  );
+}
+
+/**
  * Kashouder markeert een lid direct als betaald voor de huidige week,
  * op basis van eigen verificatie (bijv. gezien in de Tikkie-app) —
  * zonder te wachten tot het lid zelf op "Ik heb betaald" tikt.

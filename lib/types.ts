@@ -110,7 +110,7 @@ export interface PaymentConfig {
   tikkieLinkBijgewerkt?: Timestamp | null;
 }
 
-export type BetalingStatus = 'open' | 'verificatie' | 'betaald' | 'afgewezen';
+export type BetalingStatus = 'open' | 'verificatie' | 'betaald' | 'afgewezen' | 'gecorrigeerd';
 
 export interface Betaling {
   id: string;
@@ -132,6 +132,10 @@ export interface Betaling {
    *  van een reguliere wekelijkse betaling. Bepaalt hoe bevestigBetaling
    *  het bedrag verwerkt — zie lib/firestore-payments.ts. */
   isSaldoStorting?: boolean;
+  /** Reden waarom deze betaling naar status 'gecorrigeerd' is gezet —
+   *  alleen aanwezig als status === 'gecorrigeerd'. Zie
+   *  markeerBetalingGecorrigeerd in lib/firestore-payments.ts. */
+  gecorrigeerdReden?: string;
 }
 
 export type AuditAction =
@@ -149,6 +153,7 @@ export type AuditAction =
   | 'lottosaldo_correctie'
   | 'uitbetaling_geregistreerd'
   | 'kascorrectie'
+  | 'betaling_gecorrigeerd'
   | 'trekking_ingevoerd'
   | 'trekking_gewijzigd'
   | 'seizoen_gestart'
