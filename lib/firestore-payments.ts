@@ -395,6 +395,30 @@ export async function markeerBetalingGecorrigeerd(
 }
 
 /**
+ * Tegenhanger van markeerBetalingGecorrigeerd — maakt een eerdere
+ * correctie ongedaan, zet de status terug naar 'betaald'. Voor als
+ * een betaling per abuis als 'gecorrigeerd' werd gemarkeerd terwijl
+ * de deelname zelf wél geldig was (bijv. omdat alleen het geld in de
+ * kas dubbel geteld werd, niet de deelname aan die week — zie
+ * docs/changelog.md voor het concrete incident waarvoor dit gebouwd is).
+ */
+export async function herstelBetalingGecorrigeerd(
+  betaling: Betaling,
+  beheerder: ActieUser
+) {
+  await updateDoc(doc(db, 'betalingen', betaling.id), {
+    status: 'betaald',
+    gecorrigeerdReden: null,
+  });
+  await logAudit(
+    'betaling_gecorrigeerd',
+    `${beheerder.naam} maakte de correctie van de betaling van ${betaling.userNaam} (€${betaling.bedrag.toFixed(2)}, ${betaling.trekkingWeek ?? 'geen week'}) ongedaan — status terug naar 'betaald'`,
+    beheerder,
+    { doelUserId: betaling.userId }
+  );
+}
+
+/**
  * Kashouder markeert een lid direct als betaald voor de huidige week,
  * op basis van eigen verificatie (bijv. gezien in de Tikkie-app) —
  * zonder te wachten tot het lid zelf op "Ik heb betaald" tikt.

@@ -14,6 +14,7 @@ import {
   stortLottoSaldo,
   corrigeerLottoSaldo,
   markeerBetalingGecorrigeerd,
+  herstelBetalingGecorrigeerd,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
@@ -217,6 +218,19 @@ function FinancieelPageContent() {
       setBetalingCorrigerenError('Opslaan mislukt, probeer opnieuw');
     } finally {
       setBetalingCorrigerenBezig(false);
+    }
+  };
+
+  const [herstelBezigId, setHerstelBezigId] = useState<string | null>(null);
+
+  const handleHerstelBetaling = async (betaling: Betaling) => {
+    const au = actieUser();
+    if (!au) return;
+    setHerstelBezigId(betaling.id);
+    try {
+      await herstelBetalingGecorrigeerd(betaling, au);
+    } finally {
+      setHerstelBezigId(null);
     }
   };
 
@@ -525,6 +539,35 @@ function FinancieelPageContent() {
                   </div>
                 );
               })}
+
+            {betalingen.filter(b => b.status === 'gecorrigeerd').length > 0 && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', margin: '18px 0 10px' }}>Recent gecorrigeerd</div>
+                {betalingen
+                  .filter(b => b.status === 'gecorrigeerd')
+                  .sort((a, b) => (b.aangemaakt?.toMillis() ?? 0) - (a.aangemaakt?.toMillis() ?? 0))
+                  .slice(0, 10)
+                  .map(b => (
+                    <div key={b.id} className="card" style={{ padding: '12px 14px', marginBottom: 8, opacity: 0.75 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 500 }}>{b.userNaam}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                            €{b.bedrag.toFixed(2)} · {b.trekkingWeek ?? '—'} · {b.gecorrigeerdReden ?? 'geen reden opgegeven'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleHerstelBetaling(b)}
+                          disabled={herstelBezigId === b.id}
+                          style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: 'var(--accent)', flexShrink: 0, opacity: herstelBezigId === b.id ? 0.6 : 1 }}
+                        >
+                          {herstelBezigId === b.id ? 'Bezig…' : '↺ Herstel'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
           </div>
         )}
       </div>
