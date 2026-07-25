@@ -58,27 +58,7 @@ function BetalenPageContent() {
   const week = huidigTrekkingWeek();
   const huidigeBetaling = betalingen.find(b => b.trekkingWeek === week);
 
-  if (huidigeBetaling?.status === 'betaald') {
-    return (
-      <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
-        <div style={{ fontSize: 72, marginBottom: 20, animation: 'popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }}>✅</div>
-        <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -0.8, marginBottom: 8 }}>Betaling bevestigd!</div>
-        <div style={{ fontSize: 15, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.6 }}>Je doet mee aan de<br />trekking van deze week.</div>
-        <div style={{ width: '100%', maxWidth: 380, background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 18, padding: 20, marginBottom: 32, textAlign: 'left' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Bedrag</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>€{huidigeBetaling.bedrag.toFixed(2)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Status</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>✓ Bevestigd</span>
-          </div>
-        </div>
-        <button onClick={() => router.push('/dashboard')} style={{ width: '100%', maxWidth: 380, background: 'linear-gradient(135deg,var(--success),#1a8a50)', color: 'white', border: 'none', borderRadius: 16, padding: 18, fontSize: 16, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>← Terug naar dashboard</button>
-      </div>
-    );
-  }
-
+  const heeftBetaaldDezeWeek = huidigeBetaling?.status === 'betaald';
   const lottoSaldo = profile?.lottoSaldo ?? 0;
   const heeftIntroGezien = introGezien || profile?.lottoSaldoIntroSeen;
   const wekenTegoed = Math.floor(lottoSaldo / standaardInleg);
@@ -100,6 +80,17 @@ function BetalenPageContent() {
           <button onClick={() => router.push('/dashboard')} style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer', color: 'var(--white)', flexShrink: 0 }}>←</button>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.3 }}>Betalen</div>
         </div>
+
+        {/* Betaalstatus deze week — klein label, blokkeert nooit het storten */}
+        {heeftBetaaldDezeWeek && (
+          <div style={{ margin: '0 20px 12px', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 14, padding: '12px 14px' }}>
+            <span style={{ fontSize: 20 }}>✅</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>Deze week al betaald</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Je doet mee aan de trekking — hieronder kun je ook alvast bijstorten voor latere weken</div>
+            </div>
+          </div>
+        )}
 
         {/* Eenmalige uitleg */}
         {!heeftIntroGezien && (
