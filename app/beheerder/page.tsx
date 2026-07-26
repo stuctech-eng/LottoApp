@@ -105,7 +105,8 @@ function BeheerderPageContent() {
               <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1, marginBottom: 4 }}>
                 {prijzenpot === null ? '…' : `€${prijzenpot.toFixed(0)}`}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Als speler doe je hier zelf ook aan mee</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>Als speler doe je hier zelf ook aan mee</div>
+              <Link href="/betalen" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', color: 'white', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>💳 Mijn inleg betalen</Link>
             </div>
           </div>
         )}
@@ -139,28 +140,6 @@ function BeheerderPageContent() {
                 ))
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Snelle acties */}
-        <div style={{ padding: '0 20px', marginBottom: 16 }}>
-          <div className="section-title">Snelle acties</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {[
-              { icon: '🎱', label: 'Trekking invoeren', href: '/trekkingen', bg: 'var(--accent-soft)' },
-              { icon: '👥', label: 'Leden beheren', href: '/leden', bg: 'var(--gold-soft)' },
-              { icon: '💰', label: 'Kas', href: '/kas', bg: 'var(--success-soft)' },
-              { icon: '💸', label: 'Financieel beheer', href: '/kashouder/financieel', bg: 'rgba(52,201,122,0.06)' },
-              { icon: '💳', label: 'Mijn inleg betalen', href: '/betalen', bg: 'rgba(74,158,255,0.06)' },
-              { icon: '⚙️', label: 'Instellingen', href: '/beheerder/admin', bg: 'var(--purple-soft)' },
-            ].map(a => (
-              <Link key={a.label} href={a.href} style={{ textDecoration: 'none' }}>
-                <div style={{ background: a.bg, border: '1px solid var(--border)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>{a.icon}</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)' }}>{a.label}</span>
-                </div>
-              </Link>
-            ))}
           </div>
         </div>
 
