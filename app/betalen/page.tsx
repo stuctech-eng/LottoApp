@@ -122,7 +122,7 @@ function BetalenPageContent() {
             <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
             <div style={{ fontSize: 40, marginBottom: 10 }}>💰</div>
             <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>LottoSaldo</div>
-            {(() => {
+            {!heeftBetaaldDezeWeek && (() => {
               const datumTekst = weekStringNaarDatum(week);
               const weekNr = week.split('-W')[1];
               return (
@@ -130,22 +130,41 @@ function BetalenPageContent() {
               );
             })()}
 
-            {lottoSaldo <= 0 ? (
-              <>
-                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 6 }}>Je hebt nog geen saldo</div>
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.5 }}>Stort via Tikkie om mee te doen.</div>
-              </>
-            ) : lottoSaldo < standaardInleg ? (
-              <>
-                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, marginBottom: 4 }}>€{lottoSaldo.toFixed(2)}</div>
-                <div style={{ fontSize: 13, color: 'var(--warning)', marginBottom: 20, fontWeight: 600 }}>Nog €{(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week</div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, marginBottom: 4 }}>€{lottoSaldo.toFixed(2)}</div>
-                <div style={{ fontSize: 13, color: 'var(--success)', marginBottom: 20 }}>Nog {wekenTegoed} {wekenTegoed === 1 ? 'week' : 'weken'} speelplezier</div>
-              </>
-            )}
+            {(() => {
+              if (lottoSaldo <= 0 && !heeftBetaaldDezeWeek) {
+                return (
+                  <>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 6 }}>Je hebt nog geen saldo</div>
+                    <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.5 }}>Stort via Tikkie om mee te doen.</div>
+                  </>
+                );
+              }
+              if (lottoSaldo < standaardInleg && !heeftBetaaldDezeWeek) {
+                return (
+                  <>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, marginBottom: 4 }}>€{lottoSaldo.toFixed(2)}</div>
+                    <div style={{ fontSize: 13, color: 'var(--warning)', marginBottom: 20, fontWeight: 600 }}>Nog €{(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week</div>
+                  </>
+                );
+              }
+              // Vanaf hier: heeftBetaaldDezeWeek is waar, en/of er is
+              // genoeg resterend saldo. totaalGedekt telt beide
+              // correct bij elkaar op (zie definitie hierboven).
+              let tekst: string;
+              if (heeftBetaaldDezeWeek && wekenTegoed > 0) {
+                tekst = `Deze trekking + nog ${wekenTegoed} ${wekenTegoed === 1 ? 'week' : 'weken'} extra`;
+              } else if (heeftBetaaldDezeWeek) {
+                tekst = 'Deze trekking gedekt — daarna nog geen saldo';
+              } else {
+                tekst = `Nog ${wekenTegoed} ${wekenTegoed === 1 ? 'week' : 'weken'} speelplezier`;
+              }
+              return (
+                <>
+                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, marginBottom: 4 }}>€{lottoSaldo.toFixed(2)}</div>
+                  <div style={{ fontSize: 13, color: 'var(--success)', marginBottom: 20 }}>{tekst}</div>
+                </>
+              );
+            })()}
 
             {tikkieLink ? (
               <a

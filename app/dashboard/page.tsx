@@ -361,13 +361,29 @@ function DashboardPageContent() {
           {(() => {
             const lottoSaldo = profile?.lottoSaldo ?? 0;
             const wekenTegoed = Math.floor(lottoSaldo / standaardInleg);
-            const status = lottoSaldo <= 0
-              ? { kleur: 'var(--muted)', bg: 'var(--surface)', bericht: 'Nog geen saldo — stort om automatisch mee te blijven doen' }
-              : lottoSaldo < standaardInleg
-              ? { kleur: 'var(--error)', bg: 'var(--error-soft)', bericht: `Nog €${(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week` }
-              : wekenTegoed <= 1
-              ? { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: 'Bijna op — denk aan bijstorten' }
-              : { kleur: 'var(--success)', bg: 'var(--success-soft)', bericht: `Nog ${wekenTegoed} weken automatisch gedekt` };
+            // heeftBetaald (hierboven al bepaald) geeft aan of de
+            // meest recente/relevante week al bevestigd is. Die telt
+            // niet meer mee in het resterende saldo (al afgeschreven),
+            // maar moet wel meetellen in wat er in totaal "gedekt" is
+            // — anders lijkt het net alsof er bijna niks meer over is,
+            // terwijl deze week + het restsaldo samen verder vooruit
+            // reiken dan het kale saldo-getal laat zien.
+            let status: { kleur: string; bg: string; bericht: string };
+            if (lottoSaldo <= 0 && !heeftBetaald) {
+              status = { kleur: 'var(--muted)', bg: 'var(--surface)', bericht: 'Nog geen saldo — stort om automatisch mee te blijven doen' };
+            } else if (lottoSaldo < standaardInleg && !heeftBetaald) {
+              status = { kleur: 'var(--error)', bg: 'var(--error-soft)', bericht: `Nog €${(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week` };
+            } else if (heeftBetaald && wekenTegoed > 0) {
+              status = wekenTegoed <= 1
+                ? { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: `Deze trekking + nog ${wekenTegoed} ${wekenTegoed === 1 ? 'week' : 'weken'} extra` }
+                : { kleur: 'var(--success)', bg: 'var(--success-soft)', bericht: `Deze trekking + nog ${wekenTegoed} weken extra` };
+            } else if (heeftBetaald) {
+              status = { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: 'Deze trekking gedekt — daarna nog geen saldo' };
+            } else if (wekenTegoed <= 1) {
+              status = { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: 'Bijna op — denk aan bijstorten' };
+            } else {
+              status = { kleur: 'var(--success)', bg: 'var(--success-soft)', bericht: `Nog ${wekenTegoed} weken automatisch gedekt` };
+            }
             return (
               <div className="card" style={{ padding: 16, background: status.bg, border: `1px solid ${status.kleur}33` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
