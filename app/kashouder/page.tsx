@@ -51,7 +51,12 @@ function KashouderPageContent() {
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
 
   const saldo = berekenKasSaldo(mutaties);
-  const actieveLeden = leden.filter(l => l.actief);
+  // Alleen leden die daadwerkelijk een ticket hebben tellen mee als
+  // "moet betalen" — een account zonder ticket (bijv. een kashouder-
+  // account dat bewust niet meespeelt) heeft niets om voor te
+  // betalen en hoort dus nooit in de betaalvoortgang of Openstaand-
+  // lijst te verschijnen, ongeacht of het account verder 'actief' is.
+  const actieveLeden = leden.filter(l => l.actief && l.tickets && l.tickets.length > 0);
   const tikkieLink = paymentConfig.tikkieLink || undefined;
 
   // Filter op huidige week — alleen betalingen van deze week tellen mee

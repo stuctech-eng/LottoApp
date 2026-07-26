@@ -13,6 +13,7 @@ import {
   corrigeerLottoSaldo,
   markeerBetalingGecorrigeerd,
   herstelBetalingGecorrigeerd,
+  relevanteTrekkingWeek,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
@@ -110,7 +111,35 @@ function FinancieelPageContent() {
 
   const tikkieLink = paymentConfig.tikkieLink || undefined;
 
+  // Openstaand-overzicht — zelfde logica als /kashouder/page.tsx, nu
+  // ook bereikbaar voor de beheerder (die geen route naar /kashouder
+  // zelf heeft in zijn navigatie). Alleen leden met daadwerkelijk een
+  // ticket tellen mee — een account zonder ticket (bijv. een
+  // kashouder-account dat bewust niet meespeelt) heeft niets om voor
+  // te betalen en hoort hier nooit te verschijnen.
+  const spelendeLeden = leden.filter(l => l.actief && l.tickets && l.tickets.length > 0);
+  const huidigeWeek = relevanteTrekkingWeek(betalingen);
+  const betalingenDezeWeek = betalingen.filter(b => b.trekkingWeek === huidigeWeek);
+  const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
+  const openBetalingen = spelendeLeden.filter(l => !betaaldeLeden.has(l.id));
+
+  const [markeerFout, setMarkeerFout] = useState<string | null>(null);
+
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
+
+  const handleMarkeerBetaald = async (lid: User) => {
+    const au = actieUser();
+    if (!au) return;
+    const bevestigd = window.confirm(`€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
+    if (!bevestigd) return;
+    setMarkeerFout(null);
+    try {
+      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, au);
+    } catch (e) {
+      setMarkeerFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
+      setTimeout(() => setMarkeerFout(null), 5000);
+    }
+  };
 
   const handleUitbetaling = async () => {
     const au = actieUser();
@@ -233,6 +262,51 @@ function FinancieelPageContent() {
           </div>
           <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
         </div>
+
+        {/* Openstaand — zelfde functionaliteit als /kashouder/page.tsx,
+            hier ook bereikbaar voor de beheerder */}
+        {openBetalingen.length > 0 && (
+          <div style={{ padding: '0 20px', marginBottom: 20 }}>
+            <div className="section-title">Openstaand ({huidigeWeek})</div>
+            {markeerFout && (
+              <div style={{ background: 'var(--error-soft)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontSize: 12, color: 'var(--error)' }}>
+                ⚠️ {markeerFout}
+              </div>
+            )}
+            {openBetalingen.map(lid => {
+              const bestaandDocument = betalingenDezeWeek.find(b => b.userId === lid.id && b.status === 'open');
+              const bedrag = bestaandDocument?.bedrag ?? standaardInleg;
+              const omschrijving = bestaandDocument?.omschrijving ?? STANDAARD_OMSCHRIJVING;
+              return (
+                <div key={lid.id} style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👤</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€{bedrag.toFixed(2)} · {omschrijving}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button
+                      onClick={() => handleMarkeerBetaald(lid)}
+                      style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
+                    >
+                      💰 Storten
+                    </button>
+                    {lid.telefoon && (
+                      <a
+                        href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, standaardInleg, STANDAARD_OMSCHRIJVING, tikkieLink))}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+                      >
+                        💬 Herinner
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Kas-uitsplitsing */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
