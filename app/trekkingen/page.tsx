@@ -62,12 +62,6 @@ function TrekkingInvoerModal({
   spelConfig: SpelConfig;
 }) {
   const { user, profile } = useAuth();
-  const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
-    : profile?.rol === 'kashouder' ? NAV_KASHOUDER
-    : NAV_LID;
-  const dashboardHref = profile?.rol === 'beheerder' ? '/beheerder'
-    : profile?.rol === 'kashouder' ? '/kashouder'
-    : '/dashboard';
   const [nummers, setNummers] = useState<string[]>(Array(spelConfig.aantalGetallen).fill(''));
   const [bonusBal, setBonusBal] = useState('');
   const [bezig, setBezig] = useState(false);
@@ -263,6 +257,12 @@ function TrekkingInvoerModal({
 
 function TrekkingPageContent() {
   const { profile } = useAuth();
+  const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
+    : profile?.rol === 'kashouder' ? NAV_KASHOUDER
+    : NAV_LID;
+  const dashboardHref = profile?.rol === 'beheerder' ? '/beheerder'
+    : profile?.rol === 'kashouder' ? '/kashouder'
+    : '/dashboard';
   const [trekkingen, setTrekkingen] = useState<Trekking[]>([]);
   const [seizoen, setSeizoen] = useState<Seizoen | null>(null);
   const [spelConfig, setSpelConfig] = useState<SpelConfig>(DEFAULT_SPELCONFIG);
