@@ -2,8 +2,10 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo, relevanteTrekkingWeek } from '@/lib/firestore-payments';
+import { berekenActuelePrijzenpot } from '@/lib/firestore-prijzenpot';
 import { subscribeSeizoen, subscribeAlleSeizoenen } from '@/lib/firestore-seizoenen';
 import { User, Kasmutatie, Betaling, Seizoen } from '@/lib/types';
 
@@ -17,12 +19,22 @@ const NAV = [
 ];
 
 function BeheerderPageContent() {
+  const { profile } = useAuth();
+  const speeltMee = (profile?.tickets?.length ?? 0) > 0;
+  const [prijzenpot, setPrijzenpot] = useState<number | null>(null);
   const [leden, setLeden] = useState<User[]>([]);
   const [mutaties, setMutaties] = useState<Kasmutatie[]>([]);
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [actiefsSeizoen, setActiefSeizoen] = useState<Seizoen | null>(null);
   const [seizoenen, setSeizoenen] = useState<Seizoen[]>([]);
   const [laden, setLaden] = useState(true);
+
+  useEffect(() => {
+    if (!speeltMee) return;
+    let actief = true;
+    berekenActuelePrijzenpot().then(p => { if (actief) setPrijzenpot(p); });
+    return () => { actief = false; };
+  }, [speeltMee, betalingen]);
 
   useEffect(() => {
     let geladen = 0;
@@ -85,6 +97,18 @@ function BeheerderPageContent() {
           </div>
           <Link href="/profiel" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface)', border: '1.5px solid var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', flexShrink: 0 }}>👤</Link>
         </div>
+
+        {speeltMee && (
+          <div style={{ margin: '0 20px 16px' }}>
+            <div style={{ background: 'linear-gradient(135deg,#1a3a5c,#0f2438)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>🏆 Te winnen deze speelreeks</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1, marginBottom: 4 }}>
+                {prijzenpot === null ? '…' : `€${prijzenpot.toFixed(0)}`}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>Als speler doe je hier zelf ook aan mee</div>
+            </div>
+          </div>
+        )}
 
         {/* Systeem overzicht */}
         <div style={{ margin: '0 20px 16px' }}>
