@@ -68,6 +68,33 @@ export function relevanteTrekkingWeek(alleBetalingen: Betaling[]): string {
   return weken[weken.length - 1] ?? huidigTrekkingWeek();
 }
 
+/**
+ * Zet een ISO-weeknotatie ("2026-W31") om naar de zaterdag-datum van
+ * die week, netjes geformatteerd in het Nederlands.
+ *
+ * Gebruikt overal waar een lid moet kunnen zien VOOR WELKE TREKKING
+ * een betaling/status geldt — bijv. een betaling die vanavond (25
+ * juli) automatisch is bevestigd voor de trekking van 1 augustus.
+ * De bevestigingsdatum van een betaling (`bevestigd`-veld) is NIET
+ * hetzelfde als de trekkingsdatum waarvoor die betaling geldt, en
+ * het tonen van alleen de bevestigingsdatum bleek verwarrend zodra
+ * er meerdere dagen tussen die twee momenten zitten.
+ */
+export function weekStringNaarDatum(weekString: string): string {
+  const [jaarStr, weekStr] = weekString.split('-W');
+  const jaar = parseInt(jaarStr, 10);
+  const weekNr = parseInt(weekStr, 10);
+  // ISO-8601: 4 januari valt altijd in week 1. Vind de maandag van
+  // week 1, tel er (weekNr - 1) weken bij op, dan +5 dagen voor zaterdag.
+  const vierJan = new Date(Date.UTC(jaar, 0, 4));
+  const dayNumVierJan = vierJan.getUTCDay() || 7;
+  const maandagWeek1 = new Date(vierJan);
+  maandagWeek1.setUTCDate(vierJan.getUTCDate() - dayNumVierJan + 1);
+  const zaterdag = new Date(maandagWeek1);
+  zaterdag.setUTCDate(maandagWeek1.getUTCDate() + (weekNr - 1) * 7 + 5);
+  return zaterdag.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
 // ───────────────────────── Kasmutaties ─────────────────────────
 
 export function subscribeKasmutaties(callback: (mutaties: Kasmutatie[]) => void) {

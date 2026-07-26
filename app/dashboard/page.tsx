@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen, huidigTrekkingWeek, relevanteTrekkingWeek } from '@/lib/firestore-payments';
+import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen, relevanteTrekkingWeek, weekStringNaarDatum } from '@/lib/firestore-payments';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
@@ -410,18 +410,23 @@ function DashboardPageContent() {
               <span className="badge badge-warning">⏳ Wachten</span>
             </div>
           )}
-          {heeftBetaald && (
-            <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✅</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{mijnLaatsteBetaling.omschrijving} — €{mijnLaatsteBetaling.bedrag.toFixed(2)}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Betaald · {mijnLaatsteBetaling.bevestigd ? mijnLaatsteBetaling.bevestigd.toDate().toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+          {heeftBetaald && (() => {
+            const trekkingDatum = mijnLaatsteBetaling.trekkingWeek
+              ? weekStringNaarDatum(mijnLaatsteBetaling.trekkingWeek)
+              : null;
+            return (
+              <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✅</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{mijnLaatsteBetaling.omschrijving} — €{mijnLaatsteBetaling.bedrag.toFixed(2)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {trekkingDatum ? `Trekking ${trekkingDatum}` : 'Betaald'}
+                  </div>
                 </div>
+                <span className="badge badge-green">Betaald</span>
               </div>
-              <span className="badge badge-green">Betaald</span>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Stats */}

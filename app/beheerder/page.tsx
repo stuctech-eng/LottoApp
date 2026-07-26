@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { subscribeAllUsers } from '@/lib/firestore-users';
-import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo, huidigTrekkingWeek, relevanteTrekkingWeek } from '@/lib/firestore-payments';
+import { subscribeKasmutaties, subscribeBetalingen, berekenKasSaldo, relevanteTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribeSeizoen, subscribeAlleSeizoenen } from '@/lib/firestore-seizoenen';
 import { User, Kasmutatie, Betaling, Seizoen } from '@/lib/types';
 

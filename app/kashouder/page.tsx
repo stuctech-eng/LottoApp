@@ -7,7 +7,6 @@ import {
   subscribeKasmutaties,
   subscribeBetalingen,
   berekenKasSaldo,
-  huidigTrekkingWeek,
   relevanteTrekkingWeek,
   stortLottoSaldo,
 } from '@/lib/firestore-payments';

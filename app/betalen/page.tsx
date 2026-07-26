@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeUserBetalingen, relevanteTrekkingWeek, markeerLottoSaldoIntroGezien } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, relevanteTrekkingWeek, weekStringNaarDatum, markeerLottoSaldoIntroGezien } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { Betaling, PaymentConfig } from '@/lib/types';
@@ -16,34 +16,6 @@ import { Betaling, PaymentConfig } from '@/lib/types';
  * Storting registreren). Geen "ik heb gestort"-stap, geen
  * verificatie-wachtrij meer voor leden. Zie docs/changelog.md.
  */
-
-/**
- * Zet een ISO-weeknotatie ("2026-W31") om naar de zaterdag-datum van
- * die week, netjes geformatteerd in het Nederlands.
- *
- * BEWUST gebaseerd op de weekstring zelf, niet op "vandaag + dagen
- * tot zaterdag" — die laatste aanpak gaf op zaterdagavond, ná de
- * trekking van de huidige week, de datum van de zojuist-afgelopen
- * trekking in plaats van de eerstvolgende (`huidigTrekkingWeek()`
- * blijft immers gewoon de kalenderweek van vandaag teruggeven, ook
- * na 22:00 op zaterdag). Door uit te gaan van de daadwerkelijke
- * `trekkingWeek`-waarde van de relevante betaling blijft de datum
- * altijd consistent met wat er al als "betaald" wordt getoond.
- */
-function weekStringNaarDatum(weekString: string): string {
-  const [jaarStr, weekStr] = weekString.split('-W');
-  const jaar = parseInt(jaarStr, 10);
-  const weekNr = parseInt(weekStr, 10);
-  // ISO-8601: 4 januari valt altijd in week 1. Vind de maandag van
-  // week 1, tel er (weekNr - 1) weken bij op, dan +5 dagen voor zaterdag.
-  const vierJan = new Date(Date.UTC(jaar, 0, 4));
-  const dayNumVierJan = vierJan.getUTCDay() || 7;
-  const maandagWeek1 = new Date(vierJan);
-  maandagWeek1.setUTCDate(vierJan.getUTCDate() - dayNumVierJan + 1);
-  const zaterdag = new Date(maandagWeek1);
-  zaterdag.setUTCDate(maandagWeek1.getUTCDate() + (weekNr - 1) * 7 + 5);
-  return zaterdag.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
-}
 
 function BetalenPageContent() {
   const router = useRouter();
