@@ -19,8 +19,8 @@ const NAV = [
   { href: '/leden', icon: '👥', label: 'Leden' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer', active: true },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'audit';
@@ -231,10 +231,13 @@ function AdminPageContent() {
     <>
       <div className="bg-grid" />
       <div className="page">
-        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px' }}>
-          <div style={{ fontSize: 12, color: 'var(--gold)', fontWeight: 600, marginBottom: 2 }}>👑 Beheerder</div>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 6 }}>Admin</div>
-          <span className="badge badge-gold">⚙️ Systeembeheer</span>
+        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--gold)', fontWeight: 600, marginBottom: 2 }}>👑 Beheerder</div>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5, marginBottom: 6 }}>Admin</div>
+            <span className="badge badge-gold">⚙️ Systeembeheer</span>
+          </div>
+          <Link href="/beheerder" style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
         </div>
 
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px', overflowX: 'auto', marginBottom: 20 }}>

@@ -7,11 +7,20 @@ import { logAudit } from '@/lib/firestore-audit';
 import { useAuth } from '@/lib/auth-context';
 import { User, Rol } from '@/lib/types';
 
-const NAV = [
+const NAV_KASHOUDER = [
+  { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
+  { href: '/leden', icon: '👥', label: 'Leden', active: true },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
+];
+
+const NAV_BEHEERDER = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
   { href: '/leden', icon: '👥', label: 'Leden', active: true },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
 ];
 
@@ -28,6 +37,8 @@ function LedenPageContent() {
   const [waarschuwing, setWaarschuwing] = useState<string | null>(null);
 
   const isBeheerder = profile?.rol === 'beheerder';
+  const NAV = isBeheerder ? NAV_BEHEERDER : NAV_KASHOUDER;
+  const dashboardHref = isBeheerder ? '/beheerder' : '/kashouder';
   const aantalBeheerders = leden.filter(l => l.rol === 'beheerder').length;
 
   const handleRolChange = async (lid: User, nieuweRol: Rol) => {
@@ -77,6 +88,7 @@ function LedenPageContent() {
       <div className="page">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 14px' }}>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Leden</div>
+          <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
         </div>
 
         <div style={{ padding: '0 20px', marginBottom: 12 }}>

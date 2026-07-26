@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { subscribeRanglijst, RanglijstEntry } from '@/lib/firestore-ranglijst';
 
-const NAV = [
+const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/ranglijst', icon: '📈', label: 'Ranglijst', active: true },
@@ -13,11 +13,34 @@ const NAV = [
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
+const NAV_KASHOUDER = [
+  { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
+  { href: '/kas', icon: '📒', label: 'Kasboek' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+];
+
+const NAV_BEHEERDER = [
+  { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
+  { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
+  { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
+];
+
 const posColor = ['var(--gold)', '#c0c8d0', '#c08050'];
 const podiumH = ['64px', '48px', '36px'];
 
 function RanglijstPageContent() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
+    : profile?.rol === 'kashouder' ? NAV_KASHOUDER
+    : NAV_LID;
+  const dashboardHref = profile?.rol === 'beheerder' ? '/beheerder'
+    : profile?.rol === 'kashouder' ? '/kashouder'
+    : '/dashboard';
   const [entries, setEntries] = useState<RanglijstEntry[]>([]);
   const [laden, setLaden] = useState(true);
 
@@ -38,9 +61,12 @@ function RanglijstPageContent() {
       <div className="page">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 12px' }}>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Ranglijst</div>
-          <Link href="/hall-of-fame">
-            <button style={{ height: 38, padding: '0 14px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid rgba(240,192,96,0.25)', color: 'var(--gold)', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>🏆 Hall of Fame</button>
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link href="/hall-of-fame">
+              <button style={{ height: 38, padding: '0 14px', borderRadius: 13, background: 'var(--gold-soft)', border: '1px solid rgba(240,192,96,0.25)', color: 'var(--gold)', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>🏆 Hall of Fame</button>
+            </Link>
+            <Link href={dashboardHref} style={{ width: 38, height: 38, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
+          </div>
         </div>
 
         {laden && (

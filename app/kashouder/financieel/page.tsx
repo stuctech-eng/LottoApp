@@ -31,7 +31,6 @@ const NAV_KASHOUDER = [
   { href: '/kashouder/financieel', icon: '💸', label: 'Financieel', active: true },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 const NAV_BEHEERDER = [
@@ -39,8 +38,8 @@ const NAV_BEHEERDER = [
   { href: '/leden', icon: '👥', label: 'Leden' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel', active: true },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 function FinancieelPageContent() {

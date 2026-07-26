@@ -10,12 +10,29 @@ import { Trekking, Seizoen, SpelConfig } from '@/lib/types';
 
 const LOTTO_UITSLAG_URL = 'https://lotto.nederlandseloterij.nl/trekkingsuitslag';
 
-const NAV = [
+const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen', active: true },
   { href: '/ranglijst', icon: '📈', label: 'Ranglijst' },
   { href: '/kas', icon: '💰', label: 'Kas' },
   { href: '/profiel', icon: '👤', label: 'Profiel' },
+];
+
+const NAV_KASHOUDER = [
+  { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
+  { href: '/kas', icon: '📒', label: 'Kasboek' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen', active: true },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+];
+
+const NAV_BEHEERDER = [
+  { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
+  { href: '/leden', icon: '👥', label: 'Leden' },
+  { href: '/trekkingen', icon: '🎱', label: 'Trekkingen', active: true },
+  { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
+  { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
 ];
 
 function formatDatum(ts: Trekking['datum']): string {
@@ -45,6 +62,12 @@ function TrekkingInvoerModal({
   spelConfig: SpelConfig;
 }) {
   const { user, profile } = useAuth();
+  const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
+    : profile?.rol === 'kashouder' ? NAV_KASHOUDER
+    : NAV_LID;
+  const dashboardHref = profile?.rol === 'beheerder' ? '/beheerder'
+    : profile?.rol === 'kashouder' ? '/kashouder'
+    : '/dashboard';
   const [nummers, setNummers] = useState<string[]>(Array(spelConfig.aantalGetallen).fill(''));
   const [bonusBal, setBonusBal] = useState('');
   const [bezig, setBezig] = useState(false);
@@ -261,11 +284,14 @@ function TrekkingPageContent() {
       <div className="page">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 16px' }}>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Trekkingen</div>
-          {kanInvoeren && (
-            <button onClick={() => setModalOpen(true)} style={{ height: 40, padding: '0 16px', borderRadius: 13, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', border: 'none', color: 'white', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', boxShadow: '0 4px 14px rgba(74,158,255,0.3)' }}>
-              + Invoeren
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {kanInvoeren && (
+              <button onClick={() => setModalOpen(true)} style={{ height: 40, padding: '0 16px', borderRadius: 13, background: 'linear-gradient(135deg,#4a9eff,#2070cc)', border: 'none', color: 'white', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', boxShadow: '0 4px 14px rgba(74,158,255,0.3)' }}>
+                + Invoeren
+              </button>
+            )}
+            <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
+          </div>
         </div>
 
         {seizoen && (

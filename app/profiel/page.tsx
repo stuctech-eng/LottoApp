@@ -24,10 +24,9 @@ const NAV_LID = [
 const NAV_KASHOUDER = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
   { href: '/kas', icon: '📒', label: 'Kasboek' },
-  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
-  { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
 ];
 
 const NAV_BEHEERDER = [
@@ -35,8 +34,8 @@ const NAV_BEHEERDER = [
   { href: '/leden', icon: '👥', label: 'Leden' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
-  { href: '/profiel', icon: '👤', label: 'Profiel', active: true },
 ];
 
 // Route van het eigen dashboard per rol — gebruikt voor de terugknop

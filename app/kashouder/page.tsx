@@ -21,10 +21,9 @@ import { Betaling, Kasmutatie, User, Seizoen, PaymentConfig } from '@/lib/types'
 const NAV = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard', active: true },
   { href: '/kas', icon: '📒', label: 'Kas' },
-  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 function KashouderPageContent() {
@@ -97,10 +96,13 @@ function KashouderPageContent() {
     <>
       <div className="bg-grid" />
       <div className="page">
-        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px' }}>
-          <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 2 }}>⚡ Kashouder</div>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, marginBottom: 6 }}>Dashboard</div>
-          <span className="badge badge-green">💳 Kas beheer</span>
+        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 24px 16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, letterSpacing: '0.5px', marginBottom: 2 }}>⚡ Kashouder</div>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 32, letterSpacing: -1, marginBottom: 6 }}>Dashboard</div>
+            <span className="badge badge-green">💳 Kas beheer</span>
+          </div>
+          <Link href="/profiel" style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface)', border: '1.5px solid var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', flexShrink: 0 }}>👤</Link>
         </div>
 
         {/* Kas hero */}

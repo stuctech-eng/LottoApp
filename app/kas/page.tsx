@@ -17,10 +17,9 @@ const NAV_LID = [
 const NAV_KASHOUDER = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
   { href: '/kas', icon: '📒', label: 'Kasboek', active: true },
-  { href: '/kashouder/financieel', icon: '💰', label: 'Financieel' },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/leden', icon: '👥', label: 'Leden' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 const NAV_BEHEERDER = [
@@ -28,8 +27,8 @@ const NAV_BEHEERDER = [
   { href: '/leden', icon: '👥', label: 'Leden' },
   { href: '/trekkingen', icon: '🎱', label: 'Trekkingen' },
   { href: '/kas', icon: '💰', label: 'Kas', active: true },
+  { href: '/kashouder/financieel', icon: '💸', label: 'Financieel' },
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
-  { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
 const typeIcon: Record<string,string> = { inleg:'💳', uitbetaling:'🏆', correctie:'⚖️' };
@@ -65,6 +64,9 @@ function KasPageContent() {
   const NAV = profile?.rol === 'beheerder' ? NAV_BEHEERDER
     : profile?.rol === 'kashouder' ? NAV_KASHOUDER
     : NAV_LID;
+  const dashboardHref = profile?.rol === 'beheerder' ? '/beheerder'
+    : profile?.rol === 'kashouder' ? '/kashouder'
+    : '/dashboard';
 
   const saldo = berekenKasSaldo(mutaties);
 
@@ -94,6 +96,7 @@ function KasPageContent() {
       <div className="page">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 16px' }}>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Kas & Kasboek</div>
+          <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
         </div>
 
         {/* Pot card */}
