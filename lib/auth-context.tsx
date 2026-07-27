@@ -132,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             actief: data.actief ?? true,
             lottoSaldo: data.lottoSaldo ?? 0,
             lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
+            onboardingCompleted: data.onboardingCompleted,
           });
         } else {
           setProfile(null);

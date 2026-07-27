@@ -39,6 +39,7 @@ export function subscribeAllUsers(
           actief: data.actief ?? true,
           lottoSaldo: data.lottoSaldo ?? 0,
           lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
+          onboardingCompleted: data.onboardingCompleted,
         };
       });
       // Sorteer client-side op naam
