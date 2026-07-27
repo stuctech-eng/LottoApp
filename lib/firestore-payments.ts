@@ -267,17 +267,24 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
   const omschrijvingDefault = STANDAARD_OMSCHRIJVING;
   if (lottoSaldo < standaardInleg) return;
 
-  const week = huidigTrekkingWeek();
-  const bestaandSnap = await getDocs(query(
+  // BEWUST geen huidigTrekkingWeek() (pure kalenderdatum) — op
+  // zaterdagavond, tussen de trekking en maandag, zou dat een
+  // storting kunnen laten verrekenen met de allang-afgelopen week in
+  // plaats van de nieuwe, eerstvolgende. relevanteTrekkingWeek()
+  // bepaalt de week op basis van dit lid se eigen, daadwerkelijke
+  // betaalhistorie — hetzelfde patroon dat elders in de app (dashboard,
+  // kashouder, beheerder) al hetzelfde soort probleem oploste.
+  const alleBetalingenSnap = await getDocs(query(
     collection(db, 'betalingen'),
-    where('userId', '==', userId),
-    where('trekkingWeek', '==', week)
+    where('userId', '==', userId)
   ));
+  const alleBetalingen = alleBetalingenSnap.docs.map(d => d.data() as Betaling);
+  const week = relevanteTrekkingWeek(alleBetalingen);
 
   // Al een 'betaald'-document voor deze week? Niets te doen.
-  if (bestaandSnap.docs.some(d => d.data().status === 'betaald')) return;
+  if (alleBetalingenSnap.docs.some(d => d.data().trekkingWeek === week && d.data().status === 'betaald')) return;
 
-  const openDoc = bestaandSnap.docs.find(d => d.data().status === 'open');
+  const openDoc = alleBetalingenSnap.docs.find(d => d.data().trekkingWeek === week && d.data().status === 'open');
 
   if (openDoc) {
     await updateDoc(openDoc.ref, {

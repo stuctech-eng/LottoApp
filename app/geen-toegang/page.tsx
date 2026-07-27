@@ -24,10 +24,10 @@ export default function GeenToegangPage() {
       <div style={{ fontSize: 64, marginBottom: 20 }}>🔒</div>
       <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, letterSpacing: -0.5, marginBottom: 12 }}>Geen toegang</div>
       <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 8, maxWidth: 340 }}>
-        Deze uitnodiging is verlopen of ongeldig.
+        Je hebt op dit moment geen toegang tot LottoClub — je uitnodiging is verlopen of ongeldig, of je bent uit de club verwijderd.
       </div>
       <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.7, marginBottom: 32, maxWidth: 340 }}>
-        Vraag de beheerder om een nieuwe uitnodiging.
+        Neem contact op met de beheerder.
       </div>
       <button
         onClick={handleUitloggen}

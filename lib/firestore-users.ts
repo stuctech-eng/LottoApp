@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { User, Ticket, Rol } from './types';
+import { logAudit } from './firestore-audit';
 
 export function normaliseerRol(raw: unknown): Rol {
   const waarde = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -60,6 +61,51 @@ export async function updateUserTelefoon(uid: string, telefoon: string) {
 
 export async function updateUserRol(uid: string, rol: import('./types').Rol) {
   await updateDoc(doc(db, 'users', uid), { rol });
+}
+
+/**
+ * "Verwijderen" is bewust een soft-delete: het account en alle
+ * historische data (betalingen, trekkingen, resultaten, auditlog)
+ * blijven volledig bestaan — alleen actief wordt false. Overal in de
+ * app waar al gefilterd wordt op actieve leden (betaalvoortgang,
+ * Openstaand-lijst, prijzenpot-relevante berekeningen) verdwijnt dit
+ * lid daardoor vanzelf uit het dagelijkse zicht, zonder ooit data te
+ * verliezen. Alleen de beheerder mag dit — de rol-check gebeurt op de
+ * aanroepende pagina, niet hier (net als bij de andere functies in
+ * dit bestand).
+ */
+export async function verwijderLid(
+  lid: { id: string; naam: string },
+  beheerder: { uid: string; naam: string }
+) {
+  await updateDoc(doc(db, 'users', lid.id), { actief: false });
+  await logAudit(
+    'lid_verwijderd',
+    `${beheerder.naam} verwijderde ${lid.naam} uit de club — account en historie blijven bewaard`,
+    beheerder,
+    { doelUserId: lid.id }
+  );
+}
+
+/**
+ * Tegenhanger van verwijderLid — zet een eerder verwijderd lid direct
+ * weer actief. Vervangt bewust de "nieuwe uitnodiging"-route uit het
+ * oorspronkelijke ontwerp: omdat het profiel van een verwijderd lid
+ * blijft bestaan, zou een nieuwe uitnodiging altijd worden geweigerd
+ * door verzilverUitnodiging (die expliciet weigert als er al een
+ * profiel bestaat) — heractiveren is dus de enige werkende weg terug.
+ */
+export async function heractiveerLid(
+  lid: { id: string; naam: string },
+  beheerder: { uid: string; naam: string }
+) {
+  await updateDoc(doc(db, 'users', lid.id), { actief: true });
+  await logAudit(
+    'lid_heractiveerd',
+    `${beheerder.naam} heractiveerde ${lid.naam}`,
+    beheerder,
+    { doelUserId: lid.id }
+  );
 }
 
 export function formatLidSinds(ts: Timestamp | null | undefined): string {

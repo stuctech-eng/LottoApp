@@ -31,10 +31,11 @@ export default function LoginPage() {
   // Redirect als al ingelogd. Wacht expliciet op profileLoading —
   // sinds het uitnodigingssysteem is een user zonder profile een
   // geldige, mogelijke staat (nooit een uitnodiging verzilverd), dus
-  // niet zomaar naar /dashboard sturen zonder dat te checken.
+  // niet zomaar naar /dashboard sturen zonder dat te checken. Sinds
+  // "leden verwijderen" geldt hetzelfde voor een inactief profiel.
   useEffect(() => {
     if (loading || !user || profileLoading) return;
-    if (!profile) {
+    if (!profile || profile.actief === false) {
       router.push('/geen-toegang');
       return;
     }

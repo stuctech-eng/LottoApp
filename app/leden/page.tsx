@@ -2,7 +2,7 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { subscribeAllUsers, formatLidSinds, updateUserRol } from '@/lib/firestore-users';
+import { subscribeAllUsers, formatLidSinds, updateUserRol, verwijderLid, heractiveerLid } from '@/lib/firestore-users';
 import { maakUitnodiging } from '@/lib/firestore-invites';
 import { logAudit } from '@/lib/firestore-audit';
 import { useAuth } from '@/lib/auth-context';
@@ -60,6 +60,31 @@ function LedenPageContent() {
       setUitnodigingFout('Aanmaken van de uitnodiging is mislukt, probeer opnieuw.');
     } finally {
       setUitnodigingBezig(false);
+    }
+  };
+
+  // Verwijderen/heractiveren — alleen beheerder, net als rol-wijzigen.
+  const [verwijderBezigId, setVerwijderBezigId] = useState<string | null>(null);
+
+  const handleVerwijderen = async (lid: User) => {
+    if (!user || !profile || !isBeheerder) return;
+    const bevestigd = window.confirm(`${lid.naam} verwijderen uit de club? Het account en alle historische data blijven bewaard — je kunt dit altijd ongedaan maken via 'Heractiveren'.`);
+    if (!bevestigd) return;
+    setVerwijderBezigId(lid.id);
+    try {
+      await verwijderLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+    } finally {
+      setVerwijderBezigId(null);
+    }
+  };
+
+  const handleHeractiveren = async (lid: User) => {
+    if (!user || !profile || !isBeheerder) return;
+    setVerwijderBezigId(lid.id);
+    try {
+      await heractiveerLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+    } finally {
+      setVerwijderBezigId(null);
     }
   };
 
@@ -234,6 +259,25 @@ function LedenPageContent() {
                   <span className={`badge ${rolColors[lid.rol]}`}>{lid.rol}</span>
                 )}
                 {!lid.actief && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>inactief</span>}
+                {isBeheerder && lid.id !== user?.uid && (
+                  lid.actief ? (
+                    <button
+                      onClick={() => handleVerwijderen(lid)}
+                      disabled={verwijderBezigId === lid.id}
+                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--error)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
+                    >
+                      {verwijderBezigId === lid.id ? '…' : 'Verwijderen'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleHeractiveren(lid)}
+                      disabled={verwijderBezigId === lid.id}
+                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
+                    >
+                      {verwijderBezigId === lid.id ? '…' : 'Heractiveren'}
+                    </button>
+                  )
+                )}
               </div>
             </div>
           ))}
