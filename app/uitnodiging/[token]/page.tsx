@@ -109,7 +109,10 @@ export default function UitnodigingPage() {
       setVerzilverBezig(false);
       if (resultaat.succes) {
         window.sessionStorage.removeItem('pendingInviteToken');
-        router.push('/dashboard');
+        // Nieuw lid: eerst de eenmalige onboarding, niet direct naar
+        // het dashboard. /welkom zelf stuurt door naar /dashboard
+        // zodra de introductie is afgerond.
+        router.push('/welkom');
       } else {
         setVerzilverFout(resultaat.foutmelding ?? 'Verzilveren van de uitnodiging is mislukt.');
       }

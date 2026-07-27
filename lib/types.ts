@@ -21,6 +21,11 @@ export interface User {
    *  opgeslagen (niet localStorage) zodat het blijft werken na een
    *  herinstallatie of op een ander apparaat. */
   lottoSaldoIntroSeen?: boolean;
+  /** Ontbrekend veld = behandel als true (bestaand lid, nooit
+   *  onboarding nodig). Alleen expliciet false bij nieuwe leden via
+   *  een uitnodiging toont de onboarding — zie app/welkom/page.tsx
+   *  en functions/src/index.ts's verzilverUitnodiging. */
+  onboardingCompleted?: boolean;
 }
 
 export interface Ticket {

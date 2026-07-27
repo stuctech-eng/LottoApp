@@ -836,6 +836,7 @@ export const verzilverUitnodiging = functions.https.onCall(async (request) => {
       actief: true,
       lottoSaldo: 0,
       lottoSaldoIntroSeen: false,
+      onboardingCompleted: false,
     });
 
     tx.update(inviteRef, {
