@@ -163,6 +163,7 @@ export type AuditAction =
   | 'uitnodiging_verzilverd'
   | 'lid_verwijderd'
   | 'lid_heractiveerd'
+  | 'lid_definitief_verwijderd'
   | 'trekking_ingevoerd'
   | 'trekking_gewijzigd'
   | 'seizoen_gestart'

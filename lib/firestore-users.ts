@@ -4,6 +4,7 @@ import {
   onSnapshot,
   query,
   updateDoc,
+  deleteDoc,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -106,6 +107,38 @@ export async function heractiveerLid(
     beheerder,
     { doelUserId: lid.id }
   );
+}
+
+/**
+ * ECHTE verwijdering — anders dan verwijderLid (soft-delete via
+ * actief:false), haalt dit het Firestore /users/{uid}-document
+ * volledig weg. Onomkeerbaar. Bewust alleen bedoeld voor test-
+ * accounts of andere gevallen waar geen historie hoeft te blijven
+ * bestaan — voor een lid dat écht heeft meegespeeld, gebruik
+ * verwijderLid (soft-delete), nooit dit.
+ *
+ * Raakt bewust NIET de Firebase Auth-account zelf (dat vereist de
+ * Admin SDK / een Cloud Function, niet beschikbaar vanaf de client) —
+ * dat account blijft technisch bestaan maar zonder profiel, en is
+ * onschadelijk: mocht hetzelfde e-mailadres ooit opnieuw een
+ * uitnodiging verzilveren, wordt gewoon een vers profiel aangemaakt.
+ *
+ * Betalingen/resultaten/kasmutaties die ooit aan dit account
+ * gekoppeld waren blijven staan (die worden nooit verwijderd, ook
+ * niet hier) — voor een test-account zonder financiële geschiedenis
+ * heeft dat in de praktijk geen effect.
+ */
+export async function verwijderLidDefinitief(
+  lid: { id: string; naam: string },
+  beheerder: { uid: string; naam: string }
+) {
+  await logAudit(
+    'lid_definitief_verwijderd',
+    `${beheerder.naam} verwijderde ${lid.naam} DEFINITIEF — profiel bestaat niet meer, alleen historische betalingen/resultaten (indien aanwezig) blijven bewaard`,
+    beheerder,
+    { doelUserId: lid.id }
+  );
+  await deleteDoc(doc(db, 'users', lid.id));
 }
 
 export function formatLidSinds(ts: Timestamp | null | undefined): string {

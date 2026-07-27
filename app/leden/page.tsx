@@ -2,7 +2,7 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { subscribeAllUsers, formatLidSinds, updateUserRol, verwijderLid, heractiveerLid } from '@/lib/firestore-users';
+import { subscribeAllUsers, formatLidSinds, updateUserRol, verwijderLid, heractiveerLid, verwijderLidDefinitief } from '@/lib/firestore-users';
 import { maakUitnodiging } from '@/lib/firestore-invites';
 import { logAudit } from '@/lib/firestore-audit';
 import { useAuth } from '@/lib/auth-context';
@@ -25,13 +25,12 @@ const NAV_BEHEERDER = [
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
 ];
 
-const emojis = ['👩‍🦱','👩','👨','👩‍🦰','🧔','👦','👴','👵','🧑'];
 const rolColors: Record<string,string> = { lid:'badge-blue', kashouder:'badge-green', beheerder:'badge-gold' };
 
 function LedenPageContent() {
   const { user, profile } = useAuth();
   const [zoek, setZoek] = useState('');
-  const [filter, setFilter] = useState('Alle');
+  const [filter, setFilter] = useState('Actief');
   const [leden, setLeden] = useState<User[]>([]);
   const [laden, setLaden] = useState(true);
   const [bezigId, setBezigId] = useState<string | null>(null);
@@ -83,6 +82,18 @@ function LedenPageContent() {
     setVerwijderBezigId(lid.id);
     try {
       await heractiveerLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+    } finally {
+      setVerwijderBezigId(null);
+    }
+  };
+
+  const handleDefinitiefVerwijderen = async (lid: User) => {
+    if (!user || !profile || !isBeheerder) return;
+    const bevestigd = window.confirm(`${lid.naam} DEFINITIEF verwijderen? Dit kan niet ongedaan worden gemaakt — het profiel is daarna volledig weg. Gebruik dit alleen voor test-accounts, nooit voor een lid dat echt heeft meegespeeld.`);
+    if (!bevestigd) return;
+    setVerwijderBezigId(lid.id);
+    try {
+      await verwijderLidDefinitief({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
     } finally {
       setVerwijderBezigId(null);
     }
@@ -226,7 +237,7 @@ function LedenPageContent() {
           {gefilterd.map((lid, i) => (
             <div key={lid.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 12, opacity: lid.actief ? 1 : 0.5 }}>
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{emojis[i % emojis.length]}</div>
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: 'var(--muted)' }}>{lid.naam.charAt(0).toUpperCase()}</div>
                 <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: '50%', background: lid.actief ? 'var(--success)' : 'var(--muted)', border: '2px solid var(--navy)' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -270,13 +281,23 @@ function LedenPageContent() {
                       {verwijderBezigId === lid.id ? '…' : '❌'}
                     </button>
                   ) : (
-                    <button
-                      onClick={() => handleHeractiveren(lid)}
-                      disabled={verwijderBezigId === lid.id}
-                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
-                    >
-                      {verwijderBezigId === lid.id ? '…' : 'Heractiveren'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        onClick={() => handleHeractiveren(lid)}
+                        disabled={verwijderBezigId === lid.id}
+                        style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
+                      >
+                        {verwijderBezigId === lid.id ? '…' : 'Heractiveren'}
+                      </button>
+                      <button
+                        onClick={() => handleDefinitiefVerwijderen(lid)}
+                        disabled={verwijderBezigId === lid.id}
+                        title="Definitief verwijderen — kan niet ongedaan worden gemaakt"
+                        style={{ fontSize: 13, color: 'var(--error)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   )
                 )}
               </div>
