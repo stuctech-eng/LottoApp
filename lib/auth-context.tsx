@@ -71,7 +71,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<User | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
+  // Sinds de race-condition-fix (26 juli 2026): profileLoading is GEEN
+  // eigen useState meer. Het probleem daarvoor: user en profileLoading
+  // werden in twee losse renders bijgewerkt — vlak na het inloggen kon
+  // er daardoor kort een render bestaan met een NIEUWE user maar nog
+  // de OUDE (stale) profileLoading-waarde (false), wat ProtectedRoute
+  // deed concluderen "geen profiel, dus geen toegang" — ook voor
+  // bestaande leden, willekeurig, afhankelijk van timing. Door
+  // profileLoading elke render opnieuw AF TE LEIDEN (is het laatst
+  // opgehaalde profiel echt van déze user?) kan die inconsistente
+  // tussenstand nooit meer voorkomen — er is geen aparte state meer
+  // die uit sync kan raken.
+  const [profileFetchedForUid, setProfileFetchedForUid] = useState<string | null>(null);
+  const profileLoading = !!user && profileFetchedForUid !== user.uid;
   const [googleSignInError, setGoogleSignInError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,11 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) {
       setProfile(null);
-      setProfileLoading(false);
+      setProfileFetchedForUid(null);
       return;
     }
-    setProfileLoading(true);
-    const ref = doc(db, 'users', user.uid);
+    const huidigeUid = user.uid;
+    const ref = doc(db, 'users', huidigeUid);
     const unsub = onSnapshot(
       ref,
       (snap) => {
@@ -124,11 +136,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
         }
-        setProfileLoading(false);
+        setProfileFetchedForUid(huidigeUid);
       },
       (err) => {
         console.error('Profile listener error:', err);
-        setProfileLoading(false);
+        // Ook bij een fout: markeer als "klaar" voor deze uid, anders
+        // blijft profileLoading voor altijd true hangen en komt de
+        // gebruiker nooit voorbij het laadscherm.
+        setProfileFetchedForUid(huidigeUid);
       }
     );
     return unsub;
