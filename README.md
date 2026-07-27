@@ -27,17 +27,47 @@ Voor de volledige wijzigingsgeschiedenis: zie [`docs/changelog.md`](docs/changel
 | Ing | — | Lid | ✅ Ja |
 | Ellen Veerman | — | Lid | ✅ Ja |
 
+Plus incidentele testaccounts (`+alias`-adressen op stuctech@gmail.com) uit de uitnodigingssysteem-test — die zijn na testen weer verwijderd of blijven als inactief lid staan, zie Ledenbeheer hieronder.
+
 ---
 
 ## Rollen
 
 | Rol | Wat |
 |---|---|
-| **Beheerder** | Alles — trekkingen, kas, leden, instellingen, meespelen |
-| **Kashouder** | Kas beheren + meespelen |
+| **Beheerder** | Alles — trekkingen, kas, leden, instellingen, meespelen, leden uitnodigen/verwijderen |
+| **Kashouder** | Kas beheren + meespelen + leden uitnodigen |
 | **Lid** | Alleen meespelen |
 
 Navigatie (bottom nav + terugknoppen) is overal **rol-afhankelijk**. `Naam vereniging`, `Standaard inleg` en `Kashouder` (Beheer → Instellingen) zijn echt bewerkbaar/afgeleid.
+
+---
+
+## Ledenbeheer & Authenticatie (nieuw, 26-27 juli 2026)
+
+**Open registratie bestaat niet meer.** Tot 26 juli kon letterlijk iedereen die de site bezocht zichzelf lid maken (via Google, e-mail/wachtwoord, of magic-link — alle drie maakten automatisch een `'lid'`-profiel aan bij een eerste succesvolle login, zonder enige controle). Dat gat is dicht: nieuwe leden kunnen **uitsluitend** via een geldige, eenmalige uitnodiging toetreden.
+
+### Hoe een lid wordt uitgenodigd
+1. **Leden → "➕ Nieuw lid uitnodigen"** (kashouder of beheerder) → maakt een uniek token aan in `/invites/{token}`, 7 dagen geldig
+2. Kant-en-klare **WhatsApp-deelknop** met vooraf ingevuld bericht en de link `.../uitnodiging/{token}`
+3. Nieuw lid opent de link → `/uitnodiging/[token]/page.tsx` → kiest zelf een inlogmethode (Google, e-mail/wachtwoord, magic-link — de uitnodiging bepaalt **of** iemand mag, niet **hoe** ze inloggen)
+4. **Pas ná succesvol inloggen** wordt het token gecontroleerd en het profiel aangemaakt — nooit automatisch, nooit vooraf
+5. Bij succes: eenmalige **5-stappen-onboarding** (`/welkom`) vóór het echte dashboard — Welkom, Spelregels, Betalen, Schermen, Installatie
+6. Token wordt direct als gebruikt gemarkeerd — een tweede poging met dezelfde link wordt geweigerd
+
+### De Cloud Function `verzilverUitnodiging` — waarom server-side
+Het valideren + verzilveren gebeurt in **één Firestore-transactie**, server-side (Admin SDK), nooit client-side: controleert bestaan/vervaldatum/al-gebruikt, maakt het `/users/{uid}`-document aan, markeert de uitnodiging als gebruikt, logt naar het auditlog. Garandeert dat een token nooit twee keer kan slagen, ook niet bij een race condition (dezelfde link twee keer snel geopend).
+
+### Zonder geldige uitnodiging: `/geen-toegang`
+Iemand die wél technisch inlogt (Firebase Auth-account bestaat) maar **geen** geldig profiel heeft — nooit een uitnodiging verzilverd, of verwijderd uit de club (zie hieronder) — komt op een aparte pagina terecht, nooit op het dashboard. `ProtectedRoute` en de root-inlogpagina checken dit allebei, apart van elkaar (zie architectuurregel 10).
+
+### Leden verwijderen (27 juli 2026)
+**Altijd een soft-delete.** Leden → ❌ naast een actief lid (beheerder-only, niet bij jezelf mogelijk — voorkomt een lock-out) → zet `actief: false`. Account en **alle** historische data (betalingen, trekkingen, resultaten, auditlog) blijven volledig bewaard. Een verwijderd lid verliest direct alle toegang (zelfde `/geen-toegang`-pad als hierboven).
+
+**Bewuste afwijking van het oorspronkelijke ontwerp:** "terugkeren kan alleen via een nieuwe uitnodiging" bleek technisch onmogelijk — `verzilverUitnodiging` weigert altijd als er al een profiel bestaat voor die uid (bewust, voorkomt overschrijven van bestaande leden). Terugkeren gaat daarom via een directe **"Heractiveren"**-knop bij het inactieve lid, beheerder-only, zonder nieuwe uitnodigingscyclus.
+
+### Startinfo & Speluitleg — één bron, geen dubbele documentatie
+`/spelregels` en `/help` zijn beide simpele redirects geworden naar **`/startinfo`** — de enige, officiële informatiepagina (8 tabs: Welkom, Spelregels, Betalen, Schermen, Installatie, Rollen, FAQ, Contact). Ontstaan nadat bleek dat de twee oude, losse pagina's elkaar tegenspraken (één beschreef nog de allang-vervangen niet-cumulatieve spelregel, de ander had nog complete instructies voor "Account aanmaken" die niet meer bestaat).
 
 ---
 
@@ -79,14 +109,18 @@ Trekking 3:    18 - 23 - 31 - 40 - 42 - 45  →  3 nieuw   → totaal 6/6 → WI
 5. **Pushmeldingen bij laag saldo** — automatisch, naar het lid zelf, via FCM (niet WhatsApp): 🟡 bij nog 2 weken tegoed, 🔴 bij nog 1 week.
 6. **Vrijdagavond 20:00**: kashouder/beheerder krijgt zelf een pushmelding om Tikkie te checken (`onTikkieCheckHerinnering`) — compenseert het ontbreken van een meld-signaal vanuit leden.
 
+### `verrekenLottoSaldoMetOpenstaandeWeek` gebruikt de échte, relevante week (27 juli 2026)
+Gebruikte tot 27 juli `huidigTrekkingWeek()` — pure kalenderdatum. Op zaterdagavond, tussen de trekking en maandag, kon een storting daardoor verrekend worden met de **allang-afgelopen** week in plaats van de nieuwe, eerstvolgende — het lid bleef dan ten onrechte "niet betaald" tonen ondanks een verse storting. Gefixt met `relevanteTrekkingWeek()` (dezelfde functie die dit soort probleem al eerder oploste op dashboard/kashouder/beheerder-schermen), nu gebaseerd op de eigen betaalhistorie van dat specifieke lid.
+
 ### Wat er niet meer bestaat, en waarom
 | Verwijderd | Reden |
 |---|---|
 | `meldBetaling`, `meldLottoSaldoStorting` (lid meldt zelf) | Leden vergaten het structureel — de knop werd simpelweg niet gebruikt |
 | `bevestigBetaling`, `wijsBetalingAf` (verificatie bevestigen/afwijzen) | Overbodig zodra er niets meer bestaat dat een `'verificatie'`-status document aanmaakt |
-| `markeerBetaaldDoorKashouder` ("✓ Betaald"-knop met eigen 4-stappenlogica) | Viel samen met `stortLottoSaldo` — twee routes die elkaar niet kenden was precies de bron van de dubbeltellings-bugs (zie changelog, 23-25 juli) |
+| `markeerBetaaldDoorKashouder` ("✓ Betaald"-knop met eigen 4-stappenlogica) | Viel samen met `stortLottoSaldo` — twee routes die elkaar niet kenden was precies de bron van de dubbeltellings-bugs |
 | Minimumbedrag bij storten (was: standaard inleg) | Kashouder registreert exact wat ze in Tikkie zien — een kunstmatig minimum paste niet bij die realiteit |
 | "Te verifiëren betalingen"-secties (Financieel + kashouder-dashboard) | Dode UI sinds er niets meer bestaat dat zo'n document aanmaakt |
+| Open registratie (`registerWithEmail`'s automatische profiel, Google/magic-link auto-profiel) | Vervangen door het uitnodigingensysteem — zie hierboven |
 
 ### Belangrijkste boekhoudregel
 > Een storting telt **direct** mee in de kas. De wekelijkse afboeking daarna raakt **nooit** de kas opnieuw aan — alleen het `lottoSaldo`-veld. Andersom een kasmutatie aanmaken bij zowel storting als afboeking zou het bedrag dubbel tellen.
@@ -102,13 +136,16 @@ Eigen "Mijn LottoSaldo"-kaart, met vier statussen (geen saldo / te weinig voor d
 
 Het "Betaling bevestigd"-scherm op `/betalen` is **niet langer blokkerend** — een klein groen label bovenaan toont de status, maar de saldo-kaart en de Tikkie-storten-knop blijven altijd bereikbaar eronder (je kunt dus tegelijk zien dat je betaald hebt én meteen bijstorten).
 
+### Prijzenpot ≠ kassaldo
+Dashboard toont "🏆 Te winnen deze speelreeks" (`berekenActuelePrijzenpot()` in `lib/firestore-prijzenpot.ts`) — telt alleen bevestigde wekelijkse inleg binnen de huidige speelreeks, sluit LottoSaldo-stortingen zelf expliciet uit (nog niet-verbruikt geld telt niet als prijzengeld). Dat is iets anders dan het kassaldo (all-time, cumulatief), wat apart en kleiner wordt getoond eronder.
+
 ---
 
 ## Vereniging-instellingen
 
 Beheer → Instellingen → "Vereniging": **Naam vereniging** en **Standaard inleg** zijn echt bewerkbaar. Opgeslagen in `/verenigingConfig/main`, met `lib/firestore-vereniging.ts` als toegangslaag (`subscribeVerenigingConfig` voor componenten, `haalVerenigingConfigOp` voor eenmalige lezingen in actiefuncties).
 
-**Standaard inleg is overal dynamisch** — betaalpagina, kashouder-dashboard, financieel, profiel, dashboard-knop, spelregels, help-pagina, én de Cloud Function (`getStandaardInleg`).
+**Standaard inleg is overal dynamisch** — betaalpagina, kashouder-dashboard, financieel, profiel, dashboard-knop, startinfo, én de Cloud Function (`getStandaardInleg`).
 
 **Kashouder** wordt automatisch afgeleid uit de rol-toewijzing op de Leden-pagina — geen aparte instelling.
 
@@ -144,10 +181,10 @@ const q = query(collection(db, 'betalingen'), orderBy('aangemaakt', 'desc'));
 const q = query(collection(db, 'betalingen'));
 betalingen.sort((a, b) => (b.aangemaakt?.toMillis() ?? 0) - (a.aangemaakt?.toMillis() ?? 0));
 ```
-Meerdere `==`-filters op verschillende velden zijn wél veilig zonder composite index — maar **let op combinaties met `in`**: `where('actief','==',true).where('rol','in',[...])` kán ook een composite index vereisen. Bij twijfel: twee losse simpele queries en de resultaten samenvoegen in JS, in plaats van te gokken (zie `onTikkieCheckHerinnering` in `functions/src/index.ts` als voorbeeld).
+Meerdere `==`-filters op verschillende velden zijn wél veilig zonder composite index — maar **let op combinaties met `in`**: kán ook een composite index vereisen. Bij twijfel: twee losse simpele queries en de resultaten samenvoegen in JS.
 
-### 2. ISO-8601 weekberekening
-Maandag t/m zondag. Identiek in `lib/firestore-payments.ts` (`huidigTrekkingWeek`) en `functions/src/index.ts` (`getTrekkingWeek`).
+### 2. ISO-8601 weekberekening — en het verschil tussen "kalenderweek" en "relevante week"
+Maandag t/m zondag. `huidigTrekkingWeek()` (client) en `getTrekkingWeek()` (Cloud Function) berekenen de **kalenderweek van nu** — dat is NIET altijd hetzelfde als de week die relevant is voor weergave/verrekening. Op zaterdagavond, ná de trekking maar vóór maandag, is de kalenderweek nog steeds de zojuist-afgelopen week, terwijl de nieuwe, eerstvolgende week al volop actief is (automatische afschrijving is al geweest). **Gebruik voor weergave en verrekening altijd `relevanteTrekkingWeek(betalingen)`** — bepaalt de relevante week op basis van de hoogste `trekkingWeek` die daadwerkelijk in de data voorkomt, niet op basis van de kalender. Toegepast op: dashboard, kashouder-dashboard, beheerder-dashboard, betaalpagina, én (sinds 27 juli) `verrekenLottoSaldoMetOpenstaandeWeek`.
 
 ### 3. Data-only FCM payload
 Nooit top-level `notification` veld.
@@ -160,20 +197,27 @@ Altijd `berekenKasSaldo(kasmutaties)`.
 
 ### 6. Cumulatieve matching + handmatige veldmappings
 - `nummersGoed` = nieuw deze trekking · `matchedNumbers` = cumulatief · `aantalGoed` = `matchedNumbers.length` · `punten` op basis van `nummersGoed.length`, nooit cumulatief.
-- **Handmatige Firestore-veldmappings zijn een terugkerende bronfout** — meerdere velden (`matchedNumbers`, `lottoSaldo`, `lottoSaldoIntroSeen`) zijn ooit vergeten in een manuele mapping (`lib/auth-context.tsx`, `lib/firestore-users.ts`, `lib/firestore-ranglijst.ts`, `lib/firestore-trekkingen.ts`). **Check bij elk nieuw veld op `User`/`Resultaat` of het overal waar dat type handmatig gemapt wordt, ook echt is toegevoegd.**
+- **Handmatige Firestore-veldmappings zijn dé terugkerende bronfout van dit project** — inmiddels meerdere keren misgegaan: `matchedNumbers`, `lottoSaldo`, `lottoSaldoIntroSeen`, en op 27 juli opnieuw `onboardingCompleted` (vergeten in `lib/auth-context.tsx`, `lib/firestore-users.ts`, `lib/firestore-ranglijst.ts` tegelijk — met als concreet gevolg dat de onboarding voor elk nieuw lid werd overgeslagen, ontdekt via een testronde). **Check bij elk nieuw veld op `User`/`Resultaat`, zonder uitzondering, alle plekken waar dat type handmatig gemapt wordt**: `lib/auth-context.tsx`, `lib/firestore-users.ts`, `lib/firestore-ranglijst.ts`, `lib/firestore-trekkingen.ts`.
 
 ### 7. Herberekenen in plaats van migratiescripts
-`herberekenSpeelreeks` (Beheer → Prijzen): herberekent alleen de huidige speelreeks, `ranglijstPunten` altijd hard herberekend als som (nooit delta), filtert correct op betalers per specifieke week.
+`herberekenSpeelreeks` (Beheer → Prijzen): herberekent alleen de huidige speelreeks, `ranglijstPunten` altijd hard herberekend als som (nooit delta), filtert correct op betalers per specifieke week. Zelfde principe toegepast op `onboardingCompleted`: geen migratie voor bestaande leden, een ontbrekend veld wordt overal expliciet als `true` behandeld.
 
 ### 8. Geen alternatieve spelmodi
 `PrijsConfig` bewust volledig verwijderd.
 
 ### 9. Firestore rules: repo en productie kunnen driften — controleer altijd de live regels
-De `firestore.rules` in de repo kan afwijken van wat er daadwerkelijk in Firebase actief staat (ooit gebeurd na handmatige Console-wijzigingen). Sinds 23 juli deployt `.github/workflows/deploy-firestore-rules.yml` de repo-versie automatisch bij elke push die `firestore.rules` raakt. De service-account heeft hiervoor de IAM-rol **Firebase Rules Admin** (`roles/firebaserules.admin`) nodig.
+De `firestore.rules` in de repo kan afwijken van wat er daadwerkelijk in Firebase actief staat. Sinds 23 juli deployt `.github/workflows/deploy-firestore-rules.yml` de repo-versie automatisch bij elke push die `firestore.rules` raakt. De service-account heeft hiervoor de IAM-rol **Firebase Rules Admin** (`roles/firebaserules.admin`) nodig.
 
-**Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alleen wíe de data betreft.** Concreet voorbeeld (gevonden en gefixt 25 juli): `/betalingen`'s `create`-regel eiste `request.resource.data.userId == request.auth.uid` — bedoeld voor "lid meldt voor zichzelf". Maar `stortLottoSaldo` (kashouder-actie) kan óók een nieuw document aanmaken **namens een ander lid** wanneer die nog geen betaaldocument voor de week heeft. `request.auth.uid` (de kashouder) en `request.resource.data.userId` (het lid) zijn dan verschillend — de regel zou dit stil hebben geblokkeerd. Fix: `allow create` staat nu ook `isKashouderOfBeheerder()` toe, los van wiens `userId` het betreft. **Bij elke wijziging aan wie-doet-wat in de applicatielaag: nagaan of de Firestore-regels nog kloppen met de nieuwe uitvoerder van die actie**, niet er automatisch van uitgaan dat een bestaande regel blijft passen.
+**Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alleen wíe de data betreft.** Zie het `/betalingen`-create-incident van 25 juli. `/invites/{token}` moet bewust **publiek leesbaar** zijn (`allow read: if true`) — iemand die een uitnodigingslink opent is per definitie nog niet ingelogd op het moment dat de pagina de geldigheid checkt; anders zou de catch-all regel (`allow read: if ingelogd()`) dat blokkeren.
 
-`/users/{userId}` heeft een veld-beperkte uitzondering: kashouder/beheerder mogen `lottoSaldo` van een ander lid wijzigen (`hasOnly(['lottoSaldo'])`), beheerder mag daarnaast `rol` wijzigen. Geen brede "mag alles van iedereen"-regel.
+### 10. React state die uit sync kan raken met een andere state — gebruik afgeleide waarden (nieuw, 26 juli 2026)
+**De duurste les van deze sessie.** `profileLoading` was oorspronkelijk een eigen `useState`, apart bijgewerkt in een `useEffect` die op `user` reageerde. Gevolg: vlak na inloggen kon er kort een render bestaan met een NIEUWE `user` maar nog de OUDE `profileLoading`-waarde (`false`) — `ProtectedRoute` concludeerde dan ten onrechte "geen profiel, dus geen toegang", willekeurig, afhankelijk van timing. Ontdekt via herhaald, stap-voor-stap testen (niet in de code zelf zichtbaar).
+
+**Fix**: `profileLoading` is nu een **afgeleide waarde**, geen eigen state — `!!user && profileFetchedForUid !== user.uid`, herberekend bij elke render. Kan niet meer uit sync raken, want er is geen aparte state meer die dat zou kunnen.
+
+**Een tweede, subtielere variant van hetzelfde probleem**: Firestore's `onSnapshot` vuurt **direct** één keer, ook voor een nog-niet-bestaand document (met `exists: false`) — dat gebeurt bij een gloednieuw account, ruim vóórdat de Cloud Function het profiel daadwerkelijk heeft aangemaakt. Code die dat eerste, lege signaal interpreteert als "klaar met laden" trekt een verkeerde conclusie. Fix in `app/uitnodiging/[token]/page.tsx`: navigeer nooit direct na een succesvolle server-respons — wacht tot het eigen, lokale `profile`-object ook daadwerkelijk is bijgewerkt, pas dan is de client zelf bij.
+
+**Vuistregel**: als twee stukjes state (bijv. `user` en `profile`/`profileLoading`) een oorzakelijk verband hebben maar in aparte `useEffect`s worden bijgewerkt, kan er altijd een render bestaan waarin ze niet bij elkaar horen. Bereken de afhankelijke waarde waar mogelijk als derived state in plaats van als eigen `useState`.
 
 ---
 
@@ -183,7 +227,11 @@ De `firestore.rules` in de repo kan afwijken van wat er daadwerkelijk in Firebas
 /users/{uid}
   naam, email, telefoon, foto, rol, tickets[], lidSinds,
   ranglijstPunten, actief, notificationSettings,
-  lottoSaldo, lottoSaldoIntroSeen
+  lottoSaldo, lottoSaldoIntroSeen, onboardingCompleted
+
+/invites/{token}
+  token, aangemaaktDoor, aangemaaktDoorNaam, aangemaaktOp, vervalOp,
+  gebruikt, gebruiktOp, gebruiktDoorUid, gebruiktDoorNaam
 
 /verenigingConfig/main
   naam, standaardInleg
@@ -214,12 +262,14 @@ De `firestore.rules` in de repo kan afwijken van wat er daadwerkelijk in Firebas
   bedrag, type, omschrijving, datum, userId, betalingId
 ```
 
-**Bekende, onschadelijke inconsistenties (25 juli, gevonden bij audit, bewust niet gefixt):**
-- `BetalingStatus` kent nog `'verificatie'` als mogelijke waarde, maar niets maakt die status meer aan. Laten staan voor het geval een toekomstige feature 'm weer nodig heeft — geen risico, gewoon nooit gebruikt.
-- `Betaling.isSaldoStorting` bestaat nog als veld in het type, maar `stortLottoSaldo` zet dit nooit meer (stortingen worden nu alleen als kasmutatie + saldo-verhoging vastgelegd, niet meer als los `Betaling`-document). Overal waar het nog gelezen wordt, gebeurt dat defensief (`?? '—'` / `if (x) return`) — geen crash-risico, gewoon altijd `undefined`.
-- Dashboard's `inVerificatie`-state (`mijnLaatsteBetaling?.status === 'verificatie'`) is dode code — checkt op een status die nooit meer voorkomt. Toont gewoon nooit, geen risico.
+**`onboardingCompleted` volgt hetzelfde patroon als eerder `actief` bij een nieuw veld**: ontbrekend = behandel als `true` (bestaand lid, nooit onboarding nodig). Alleen expliciet `false` (gezet door `verzilverUitnodiging` bij een nieuw lid) toont de introductie. Geen migratie voor bestaande leden nodig — zie architectuurregel 7.
 
-**Verwijderd (23 juli)**: de `rondes`-collectie en bijbehorende code — nooit afgemaakt/aangesloten, nergens gebruikt, bevatte zelf een `orderBy()`-bug.
+**Bekende, onschadelijke inconsistenties (25 juli, gevonden bij audit, bewust niet gefixt):**
+- `BetalingStatus` kent nog `'verificatie'` als mogelijke waarde, maar niets maakt die status meer aan.
+- `Betaling.isSaldoStorting` bestaat nog als veld in het type, maar `stortLottoSaldo` zet dit nooit meer. Overal defensief gelezen, geen crash-risico.
+- Dashboard's `inVerificatie`-state is dode code — checkt op een status die nooit meer voorkomt.
+
+**Verwijderd (23 juli)**: de `rondes`-collectie en bijbehorende code.
 
 **Verwijderd (eerder)**: `/prijsConfig/default` wordt niet meer gelezen/geschreven.
 
@@ -230,13 +280,14 @@ De `firestore.rules` in de repo kan afwijken van wat er daadwerkelijk in Firebas
 | Functie | Trigger | Wat |
 |---|---|---|
 | `onTrekkingVerwerkt` | Nieuwe trekking | Cumulatieve controle-engine, resultaten, punten, push |
-| `onBetalingBevestigd` | Betaling → betaald (update) | Push naar lid. **Let op**: vuurt alleen bij een *update* naar 'betaald', niet als een document al direct met status 'betaald' wordt aangemaakt (gebeurt bij de automatische wekelijkse afboeking en bij `verrekenLottoSaldoMetOpenstaandeWeek`'s "geen bestaand document"-tak) — in die gevallen mist het lid dus de losse pushmelding, ziet het resultaat wel gewoon terug in de app |
+| `onBetalingBevestigd` | Betaling → betaald (update) | Push naar lid. Vuurt alleen bij een *update*, niet bij een document dat al direct met status 'betaald' wordt aangemaakt |
 | `onBetalingsHerinnering` | Vrijdag 09:00 | Push naar wie deze week nog open staat |
 | `onTikkieCheckHerinnering` | Vrijdag 20:00 | Push naar kashouder/beheerder: Tikkie checken op nieuwe stortingen |
 | `onTrekkingHerinnering` | Zaterdag 19:30 | Push naar beheerders |
 | `onBetalingenAanmaken` | Trekking verwerkt | Nieuwe week: LottoSaldo-check per lid (automatisch afboeken of 'open' aanmaken) |
-| `onTikkieLinkVerval` | Wekelijks | Push naar beheerders als Tikkie-link 12+ dagen oud is (tijd-gebaseerde inschatting, geen echte detectie) |
+| `onTikkieLinkVerval` | Wekelijks | Push naar beheerders als Tikkie-link 12+ dagen oud is |
 | `herberekenSpeelreeks` | Callable, alleen beheerder | Herberekent de huidige speelreeks volledig opnieuw |
+| `verzilverUitnodiging` | Callable, alleen ingelogde gebruikers | Valideert + verzilvert een uitnodigingstoken in één transactie — zie Ledenbeheer hierboven |
 
 `getStandaardInleg()` en `getSpelConfig()` zijn interne helpers die de actuele instellingen live uit Firestore lezen, met fallback.
 
@@ -246,40 +297,45 @@ De `firestore.rules` in de repo kan afwijken van wat er daadwerkelijk in Firebas
 
 | Route | Rol |
 |---|---|
+| `/` | Publiek — inloggen (geen registratie-optie meer) |
+| `/uitnodiging/[token]` | Publiek (vóór inloggen) — enige plek waar een nieuw lid kan toetreden |
+| `/welkom` | Nieuw lid, eenmalig — 5-stappen-onboarding, daarna nooit meer |
+| `/geen-toegang` | Ingelogd maar geen geldig profiel (geen uitnodiging verzilverd, of verwijderd) |
 | `/dashboard` | Lid — confetti winnaar-scherm, cumulatieve bal-highlighting, "Mijn LottoSaldo"-kaart, prijzenpot van de huidige speelreeks |
-| `/betalen` | Lid — puur informatief: saldo tonen, directe Tikkie-storten-knop, **geen meld-stap** |
+| `/betalen` | Lid — puur informatief: saldo tonen, directe Tikkie-storten-knop, geen meld-stap |
 | `/trekkingen` | Lid+ — invoer modal |
 | `/trekkingen/[id]` | Lid+ — cumulatieve/nieuwe kleurcodering, niet-betaald-balk |
-| `/deelnemers`, `/spelregels`, `/help` | Lid — bereikbaar via Profiel → Informatie, bedragen dynamisch |
+| `/startinfo` | Lid — de enige, samengevoegde informatiepagina (8 tabs), bereikbaar via Profiel |
+| `/spelregels`, `/help` | Redirects naar `/startinfo` (bestaande links blijven werken) |
 | `/profiel` | Lid — eigen LottoSaldo met kleurindicator, naam, ticket, notificaties |
 | `/kas` | Alle rollen — alleen-lezen kasoverzicht |
-| `/kashouder` | Kashouder — "💰 Storten"-knop (was "✓ Betaald") registreert direct via `stortLottoSaldo` |
+| `/kashouder` | Kashouder — "💰 Storten"-knop registreert direct via `stortLottoSaldo` |
 | `/kashouder/financieel` | Kashouder + Beheerder — kas-uitsplitsing, LottoSaldo-overzicht + storten, saldo-correctie + betaling-corrigeren (beheerder-only) |
-| `/leden` | Kashouder+ — rollen beheren |
-| `/beheerder` | Beheerder — dashboard |
-| `/beheerder/admin` | Beheerder — Instellingen (Naam vereniging, Standaard inleg, Kashouder-lookup), Spel, Prijzen (herbereken-knop), Seizoen |
+| `/leden` | Kashouder+ — rollen beheren, uitnodigen, verwijderen/heractiveren (verwijderen beheerder-only) |
+| `/beheerder` | Beheerder — dashboard, eigen prijzenpot-kaart als het account zelf speelt |
+| `/beheerder/admin` | Beheerder — Instellingen, Spel, Prijzen, Seizoen |
 | `/ranglijst`, `/hall-of-fame` | Alle rollen — nieuwe-matches-per-trekking, niet cumulatief |
 | `/offline`, `/serwist/[path]` | PWA-ondersteuning, geen UI |
 
 ---
 
-## STATUS PER 25 JULI 2026
+## STATUS PER 27 JULI 2026
 
-### Volledig werkend ✅
-- **Betaalsysteem geconsolideerd tot één route** — alles is een storting, geen minimum, kashouder registreert direct na het zelf checken van Tikkie
-- LottoSaldo: automatische wekelijkse afschrijving, verrekening bij storting, lage-saldo-pushmeldingen, kas-uitsplitsing, twee correctietools (saldo + betaalstatus, met herstel-optie)
-- Nieuwe vrijdagavond-herinnering voor kashouder/beheerder
-- Firestore-rule voor `/betalingen`-create gefixt zodat kashouder ook namens een ander lid mag aanmaken
-- Vereniging-instellingen (Naam, Standaard inleg) overal dynamisch doorgevoerd
-- Firestore rules gesynchroniseerd met productie, automatische deploy-workflow werkend
-- Cumulatieve "6 goed is winnaar"-spelmodus, `herberekenSpeelreeks`, rol-afhankelijke navigatie — nog steeds werkend zoals eerder bevestigd
+### Volledig werkend ✅ (getest via een volledige, 6-stappen testronde)
+- **Ledenuitnodigingensysteem** — open registratie dicht, uitnodiging aanmaken/delen/verzilveren, token eenmalig, race conditions gefixt
+- **Onboarding** — 5-stappen-introductie voor nieuwe leden, verschijnt precies één keer
+- **Startinfo & Speluitleg** — samengevoegde, actuele informatiepagina, oude pagina's redirecten
+- **Leden verwijderen/heractiveren** — soft-delete, historie blijft, directe toegangsintrekking
+- **Betaalsysteem** — één route, geen minimum, automatische wekelijkse afschrijving, storting-verrekening nu ook tijdzone-veilig
+- LottoSaldo, kas-uitsplitsing, correctietools, vrijdagavond-herinnering, prijzenpot-berekening — nog steeds werkend zoals eerder bevestigd
+- Cumulatieve "6 goed is winnaar"-spelmodus, `herberekenSpeelreeks`, rol-afhankelijke navigatie
 
 ### Openstaand ⏳
-- Eerste **live, automatische** LottoSaldo-afboeking bij een echte trekking nog niet gezien — tot nu toe alles handmatig getest/geverifieerd
+- Storting-verrekening-fix (27 juli) nog niet live getest tegen een echte zaterdagavond-situatie — logica hergebruikt wel een al 3x beproefd patroon
+- Eerste **live, automatische** LottoSaldo-afboeking bij een echte trekking nog niet apart bevestigd sinds de laatste ronde wijzigingen
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen
-- Nog geen automatische tests
-- Drie bekende, onschadelijke inconsistenties in het datamodel (zie Firestore Structuur hierboven) — geen actie vereist, wel goed om te weten bij toekomstig werk aan `Betaling`/`BetalingStatus`
-- `firestore.rules` in de repo is nu gesynchroniseerd met productie, maar er is geen manier om toekomstige handmatige Console-wijzigingen automatisch te detecteren — bij twijfel altijd de live Console-regels checken
+- Nog geen automatische tests — alles handmatig, stap-voor-stap getest
+- Bekende, onschadelijke datamodel-inconsistenties (zie Firestore Structuur)
 
 ---
 

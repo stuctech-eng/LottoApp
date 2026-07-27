@@ -4,7 +4,83 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 26-27 juli 2026 — Navigatie, weekberekening, en het complete ledenuitnodigingensysteem
+
+Twee losse dagen, in elkaar overlopend. Begon met navigatie- en weergaveverbeteringen, groeide uit tot de grootste architecturale wijziging van het project: open registratie is vervangen door een volwaardig, server-side gevalideerd uitnodigingensysteem, inclusief onboarding en ledenbeheer.
+
+### Navigatie-consolidatie (beheerder)
+
+**Aanleiding**: beheerder gaf aan overal gemakkelijk bij te willen kunnen, zoals het hoort, en dat kas-werkzaamheden nu vaak een rolwissel vereisten. Onderzoek wees uit: `/trekkingen` en `/ranglijst` hadden **helemaal geen** rol-afhankelijke navigatie (altijd de lid-versie, ook voor een ingelogde beheerder) — bij bezoek verloor een beheerder daar al zijn andere tabs. Daarnaast had de beheerder-navigatie geen vaste link naar `/kashouder/financieel` (waar storten/corrigeren staat) — alleen als sneltoets op het eigen startscherm, nergens anders.
+
+**Gefixt**: rol-afhankelijke navigatie op alle 9 relevante pagina's, "Financieel" toegevoegd als vast item, "Profiel" verplaatst naar een klikbare avatar rechtsboven (bespaart een navigatie-slot), terugknoppen overal waar ze nog ontbraken. Bijvangst: `/leden` bleek zelf ook geen rolcheck te hebben — een kashouder die daar "Dashboard" aantikte, kwam bij het beheerder-dashboard terecht in plaats van het eigen kashouder-dashboard.
+
+**Eén bouwfout onderweg**: bij het toevoegen van de terugknop aan `/trekkingen` kwamen `NAV`/`dashboardHref` per ongeluk in de verkeerde van twee componenten in hetzelfde bestand terecht (de invoer-modal in plaats van de hoofdpagina) — TypeScript ving dit bij de build (`Cannot find name 'dashboardHref'`), in één bestand hersteld.
+
+### Prijzenpot vs. kassaldo — beheerder kreeg dezelfde kaart als leden
+
+Beheerder die zelf speelt (Dick Veerman Speler) miste de "Te winnen deze speelreeks"-kaart, die alleen op het lid-dashboard stond. Toegevoegd aan `/beheerder`, maar **alleen zichtbaar als het ingelogde account zelf een ticket heeft** — het andere beheerder-account (dat bewust niet speelt) ziet 'm terecht niet. Sneltoetsen-sectie op het beheerder-dashboard vervolgens grotendeels verwijderd (5 van de 6 knoppen waren letterlijk dubbelop met de nu-permanente navigatie-tabs); de enige unieke actie ("Mijn inleg betalen") verhuisde naar een knop binnen de prijzenpot-kaart zelf.
+
+### Weekberekening — drie rondes, telkens een laag dieper
+
+Dit werd de langste, meest iteratieve fix van de twee dagen.
+
+**Ronde 1**: op zaterdagavond, ná de trekking maar vóór maandag, toonden `/betalen` en het dashboard nog de allang-afgelopen week (bijv. "week 30, 25 juli") in plaats van de al-actieve nieuwe week (W31) — terwijl de automatische afschrijving daarvoor allang had plaatsgevonden. Oorzaak: `huidigTrekkingWeek()` berekent puur de kalenderweek van vandaag, wat op zaterdagavond nog steeds de oude week is. Eerste fix: `relevanteTrekkingWeek()` — neemt de hoogste `trekkingWeek` die daadwerkelijk in iemands betalingen voorkomt, niet de kalenderdatum.
+
+**Ronde 2**: bleek breder te spelen dan alleen `/betalen` — óók dashboard, kashouder-dashboard (bepaalt de Openstaand-lijst!) en beheerder-dashboard gebruikten dezelfde, kapotte berekening. `relevanteTrekkingWeek()` verplaatst naar de gedeelde `lib/firestore-payments.ts` en overal consistent toegepast.
+
+**Ronde 3**: "Trekking betaald"-label op zowel `/betalen` als het dashboard toonde de bevestigings**datum** (wanneer de transactie werd verwerkt) in plaats van de trekkings**datum** (waarvoor die geldt) — bij een automatische afschrijving vlak na een trekking staan die twee vaak dicht bij elkaar, maar niet altijd. Nieuwe gedeelde functie `weekStringNaarDatum()` (ISO-weekstring → leesbare Nederlandse datum, berekend vanuit de weekstring zelf, niet vanuit "vandaag") lost dit consistent op beide plekken op.
+
+**Bijvangst**: prijzenpot-kaart en het "weken speelplezier"-label telden niet correct als de huidige week al was afgeschreven — "Bijna op" in plaats van "Deze trekking + nog X weken extra". Gecorrigeerd op zowel `/betalen` als dashboard.
+
+### Het ledenuitnodigingensysteem — kern van de sessie
+
+**Aanleiding**: gebruiker vroeg of nieuwe leden bij het opstarten informatie kregen (welkomstscherm, regels, installatie-instructie). Bij het uitzoeken bleek een veel fundamenteler gat: **de app had geen enkele toegangscontrole**. Elke bezoeker kon zichzelf via Google, e-mail/wachtwoord, of magic-link gewoon lid maken — alle drie maakten automatisch een `'lid'`-profiel aan bij een eerste succesvolle login.
+
+**Overlegtraject, drie versies**: eerste voorstel was een volledig multi-tenant, multi-club platform-herontwerp (clubId op elke collectie, "club aanmaken"-flow, Owner-rol) — afgewezen als overengineering voor een productie-app met echt geld en precies één club; het risico van een gemiste `clubId`-filter (een datalek tussen clubs) paste niet bij de manier van werken (rechtstreeks naar productie, geen staging). Tweede versie: uitsluitend een uitnodigingensysteem voor de huidige club, geen multi-tenant. Derde versie (definitief): dezelfde scope, met concrete technische keuzes vastgelegd na overleg — zie hieronder.
+
+**Vastgelegde architectuur:**
+- Uitnodigingslink (`/uitnodiging/[token]`) bewaart het token, toont dan pas de gewone inlogopties (Google/e-mail/magic-link) — de uitnodiging bepaalt **of** iemand mag, nooit **hoe** ze inloggen
+- Validatie + profiel aanmaken gebeurt **server-side**, in een Cloud Function (`verzilverUitnodiging`), in één Firestore-transactie — voorkomt dubbel gebruik, ook bij een race condition
+- Geen e-mail/telefoon-koppeling aan een uitnodiging (bewust uitgesteld, MVP eerst)
+- Geen "Account aanmaken"-knop meer op de gewone inlogpagina
+- `/geen-toegang`: nette melding voor wie wél technisch inlogt maar geen geldig profiel heeft — Firebase Auth-account blijft gewoon bestaan
+
+**Gebouwd**: `lib/firestore-invites.ts` (token genereren met `crypto.getRandomValues`, geen verwarrende tekens in het alfabet), Cloud Function `verzilverUitnodiging` (transactie: token bestaat/nog geldig/nog niet gebruikt/gebruiker heeft nog geen profiel → user-document aanmaken + invite markeren als gebruikt + auditlog), `app/uitnodiging/[token]/page.tsx`, `/leden` uitgebreid met een "➕ Nieuw lid uitnodigen"-knop + kant-en-klare WhatsApp-deelknop, `firestore.rules` uitgebreid met een bewust **publiek leesbare** `/invites`-regel (nodig zodat de uitnodigingspagina de geldigheid kan checken vóórdat iemand is ingelogd — de catch-all-regel zou dat anders geblokkeerd hebben).
+
+**`registerWithEmail`, Google-login, en magic-link** in `lib/auth-context.tsx` maken sindsdien **nooit** meer automatisch een profiel aan — dat gebeurt uitsluitend via de Cloud Function. `ensureUserDoc()` (de oude, automatische aanmaak-functie) volledig verwijderd.
+
+### Twee race conditions, gevonden via herhaald, stap-voor-stap testen
+
+Geen van beide was zichtbaar in de code zelf — beide kwamen pas aan het licht door de uitnodigingsflow letterlijk meerdere keren, in exact dezelfde volgorde, te doorlopen en het resultaat elke keer te vergelijken.
+
+**Bug 1 — bestaande leden soms per ongeluk "Geen toegang".** `profileLoading` was een eigen `useState`, apart bijgewerkt in een losse `useEffect` die op `user` reageerde. Vlak na inloggen kon er daardoor kort een render bestaan met een NIEUWE `user` maar nog de OUDE `profileLoading`-waarde (`false`, van vóór het inloggen) — `ProtectedRoute` concludeerde dan heel even ten onrechte "geen profiel, dus geen toegang". Gebeurde niet elke keer (vandaar: eerste keer niet, tweede keer wel — een klassiek race-condition-symptoom), maar trof zowel nieuwe als **bestaande** leden. Fix: `profileLoading` is geen eigen state meer, maar een **afgeleide waarde** (`!!user && profileFetchedForUid !== user.uid`), herberekend bij elke render — kan niet meer uit sync raken, want er is geen aparte state meer die dat zou kunnen.
+
+**Bug 2 — nieuwe registraties belandden soms op "Geen toegang", ook in gewone Safari (dus geen browserkwestie).** Subtielere variant: Firestore's `onSnapshot` vuurt **direct** één keer, óók voor een nog-niet-bestaand document — dat gebeurt bij een gloednieuw account, ruim vóórdat de Cloud Function het profiel daadwerkelijk heeft aangemaakt. De code interpreteerde dat eerste, lege signaal als "klaar met laden" en zette `profileFetchedForUid` alvast op de nieuwe uid — terwijl het echte profiel er nog niet was. Navigeerde de uitnodigingspagina op dat moment al door naar `/welkom` (want de Cloud Function had intussen wél al succes gemeld), dan kwam die daar te vroeg aan. Fix: de uitnodigingspagina navigeert niet meer direct na een succesvolle server-respons, maar wacht via een aparte `useEffect` tot het eigen, lokale `profile`-object ook daadwerkelijk niet-null is — pas dan is de client zelf echt bij.
+
+**Bug 3 — onboarding werd voor ieder nieuw lid overgeslagen.** Na het oplossen van de twee race conditions bleek de 5-stappen-introductie helemaal niet te verschijnen — direct door naar het dashboard. Oorzaak: het nieuwe `onboardingCompleted`-veld stond wél correct in de Cloud Function en dus in Firestore, maar was **vergeten in drie separate, handmatige veldmappingen** (`lib/auth-context.tsx`, `lib/firestore-users.ts`, `lib/firestore-ranglijst.ts`) — exact hetzelfde, al meermaals eerder geconstateerde patroon in dit project (zie architectuurregel 6). `profile.onboardingCompleted` was daardoor voor iedereen altijd `undefined`, wat de "onboarding nodig?"-check (`=== false`) altijd naar "nee" liet uitvallen.
+
+**Alle drie bevestigd gefixt via een volledige, 6-stappen testronde**: bestaande leden loggen normaal in, open registratie is dicht, uitnodiging aanmaken + WhatsApp-delen werkt, verzilveren toont de onboarding en komt daarna pas op het dashboard, een token werkt maar één keer, en de onboarding verschijnt na een herhaalde login nooit meer.
+
+### Onboarding + Startinfo & Speluitleg
+
+**5-stappen-introductie** (`/welkom`): Welkom, Spelregels (cumulatief, correct beschreven — zie hieronder), Betalen (actuele, storting-only flow), Belangrijkste schermen, App op het beginscherm zetten (iPhone + Android apart uitgelegd, met de reden: pushmeldingen werken alleen zo). Verschijnt precies één keer, via `onboardingCompleted`, zonder migratie voor bestaande leden nodig — een ontbrekend veld wordt overal expliciet als `true` behandeld (architectuurregel 7, hetzelfde principe als eerder bij `actief`).
+
+**`/spelregels` en `/help` samengevoegd tot `/startinfo`.** Bij het samenvoegen bleek dat de twee oude, losse pagina's elkaar al een tijd tegenspraken: `/spelregels` beschreef nog de allang-vervangen **niet-cumulatieve** matching ("alle 6 in één trekking"), en `/help` had nog complete instructies voor "Account aanmaken" en "betaling melden in de app" — beide sinds eerdere wijzigingen niet meer bestaand. De oude routes blijven bestaan als simpele redirects, zodat bestaande bladwijzers/links blijven werken.
+
+### Leden verwijderen/heractiveren
+
+**Ontwerpconflict ontdekt tijdens het bouwen, ter plekke opgelost**: het oorspronkelijke plan zei "terugkeren kan alleen via een nieuwe uitnodiging" — maar aangezien een verwijderd lid zijn profiel behoudt (bewuste keuze: historische data blijft), zou een nieuwe uitnodiging bij hetzelfde account altijd worden geweigerd door `verzilverUitnodiging` (die expliciet weigert als er al een profiel bestaat, om te voorkomen dat een bestaand lid zijn eigen profiel per ongeluk reset). Opgelost door in plaats daarvan een directe **"Heractiveren"**-knop te bouwen — functioneel gelijkwaardig (alleen beheerder, gecontroleerd, gelogd), zonder de tegenstrijdigheid.
+
+**Gebouwd**: `verwijderLid`/`heractiveerLid` in `lib/firestore-users.ts` (soft-delete via `actief: false`/`true`, nooit data verwijderen), ❌-knop op `/leden` (beheerder-only, niet bij het eigen account — voorkomt een lock-out, consistent met de bestaande "minimaal 1 beheerder"-bescherming), `ProtectedRoute` en de root-inlogpagina uitgebreid zodat een inactief profiel exact hetzelfde wordt behandeld als "geen profiel" — directe toegangsintrekking, geen aparte code-paden.
+
+### Storting-verrekening — dezelfde weekberekening-les, nu in de Cloud-logica
+
+Bij het narekenen van alle plekken die `huidigTrekkingWeek()` gebruikten, bleef één plek nog open staan: `verrekenLottoSaldoMetOpenstaandeWeek` (de functie die bij elke storting automatisch checkt of een openstaande week gedekt kan worden). Zelfde risico als de eerdere weekberekening-bugs: op zaterdagavond zou een storting voor een lid dat de zojuist-afgelopen week nog niet had betaald, verrekend worden met die oude week in plaats van de nieuwe. Gefixt met dezelfde `relevanteTrekkingWeek()`, ditmaal gebaseerd op de betaalhistorie van dat ene, specifieke lid (vereist een aparte, kleine Firestore-query — dit is de enige plek die niet al een kant-en-klare lijst van betalingen voorhanden had).
+
+---
+
 ## 25 juli 2026 — Eén betaalsysteem, opruiming, audit
+
 
 Vervolgsessie op 23-24 juli. Kern van de dag: de twee parallelle betaalroutes (LottoSaldo-storting vs. een "gewone" wekelijkse betaling) die telkens tot dubbeltellingen leidden, zijn samengevoegd tot één route. Daarna een grondige opruiming van alles wat daardoor overbodig werd, en een audit die nog één echte bug aan het licht bracht.
 

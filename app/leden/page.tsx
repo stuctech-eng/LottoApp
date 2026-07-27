@@ -264,9 +264,10 @@ function LedenPageContent() {
                     <button
                       onClick={() => handleVerwijderen(lid)}
                       disabled={verwijderBezigId === lid.id}
-                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--error)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
+                      title="Verwijderen"
+                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--error)', background: 'var(--error-soft)', border: 'none', borderRadius: '50%', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
                     >
-                      {verwijderBezigId === lid.id ? '…' : 'Verwijderen'}
+                      {verwijderBezigId === lid.id ? '…' : '❌'}
                     </button>
                   ) : (
                     <button

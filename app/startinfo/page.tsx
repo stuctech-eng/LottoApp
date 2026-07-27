@@ -223,9 +223,10 @@ function StartinfoContent() {
                 <Tip tekst="Elke vrijdagavond 20:00 krijgt de kashouder zelf een herinnering om Tikkie te checken." />
               </Blok>
               <Blok titel="👑 Beheerder">
-                <Info tekst="Heeft alle rechten van de kashouder, plus: trekkingen invoeren, leden en rollen beheren, nieuwe leden uitnodigen, instellingen aanpassen, seizoenen beheren." />
+                <Info tekst="Heeft alle rechten van de kashouder, plus: trekkingen invoeren, leden en rollen beheren, nieuwe leden uitnodigen, leden verwijderen, instellingen aanpassen, seizoenen beheren." />
                 <Stap nr={1} tekst="Trekkingen → '+ Invoeren' na elke zaterdagse Lotto-trekking" />
                 <Stap nr={2} tekst="Leden → 'Uitnodigen' voor een nieuw lid" />
+                <Stap nr={3} tekst="Leden → ❌ naast een lid om diegene te verwijderen (account en historie blijven bewaard, terug te draaien via 'Heractiveren')" />
                 <Waarschuwing tekst="Er moet altijd minimaal 1 beheerder zijn — de app blokkeert het wegnemen van de laatste beheerder." />
               </Blok>
             </>
