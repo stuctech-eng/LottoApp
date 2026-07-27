@@ -104,6 +104,24 @@ service cloud.firestore {
       allow write: if isBeheerder();
     }
 
+    match /invites/{token} {
+      // Lezen moet PUBLIEK zijn (ook zonder inlog) — iemand die een
+      // uitnodigingslink opent is per definitie nog niet ingelogd op
+      // het moment dat de pagina checkt of de link geldig lijkt. Dit
+      // is puur een UX-check; de doorslaggevende validatie gebeurt
+      // altijd opnieuw, server-side, in de Cloud Function
+      // verzilverUitnodiging bij het daadwerkelijk verzilveren.
+      allow read: if true;
+      // Aanmaken: alleen kashouder/beheerder.
+      allow create: if isKashouderOfBeheerder();
+      // Nooit vanaf de client bijwerken of verwijderen — het
+      // markeren als 'gebruikt' gebeurt uitsluitend via de Cloud
+      // Function (Admin SDK, omzeilt deze regels toch al). Zonder
+      // deze restrictie zou een kwaadwillende de gebruikt/vervalOp-
+      // velden zelf kunnen manipuleren.
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read: if ingelogd();
       allow write: if isBeheerder();

@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, loading, loginWithEmail, registerWithEmail, loginWithGoogle, sendMagicLink, completeMagicLinkSignIn, resetPassword } = useAuth();
+  const { user, loading, profile, profileLoading, loginWithEmail, loginWithGoogle, sendMagicLink, completeMagicLinkSignIn, resetPassword } = useAuth();
 
   const [email, setEmail] = useState('');
   const [wachtwoord, setWachtwoord] = useState('');
@@ -16,8 +16,6 @@ export default function LoginPage() {
   const [toast, setToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('Beveiligde verbinding actief');
   const [toastColor, setToastColor] = useState('#34c97a');
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [naam, setNaam] = useState('');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   // Voorkomt dat de magic-link verwerking (en daarmee de
@@ -30,12 +28,18 @@ export default function LoginPage() {
   // dat de daadwerkelijke aanmelding wordt geprobeerd.
   const magicLinkHandled = useRef(false);
 
-  // Redirect als al ingelogd
+  // Redirect als al ingelogd. Wacht expliciet op profileLoading —
+  // sinds het uitnodigingssysteem is een user zonder profile een
+  // geldige, mogelijke staat (nooit een uitnodiging verzilverd), dus
+  // niet zomaar naar /dashboard sturen zonder dat te checken.
   useEffect(() => {
-    if (!loading && user) {
-      router.push('/dashboard');
+    if (loading || !user || profileLoading) return;
+    if (!profile) {
+      router.push('/geen-toegang');
+      return;
     }
-  }, [user, loading, router]);
+    router.push('/dashboard');
+  }, [user, loading, profile, profileLoading, router]);
 
   // Welkomst toast
   useEffect(() => {
@@ -90,17 +94,13 @@ export default function LoginPage() {
     let ok = true;
     if (!email || !email.includes('@')) { setEmailError(true); ok = false; } else setEmailError(false);
     if (!wachtwoord || wachtwoord.length < 6) { setPwError(true); ok = false; } else setPwError(false);
-    if (mode === 'register' && !naam.trim()) ok = false;
     if (!ok) return;
 
     setBezig(true);
     try {
-      if (mode === 'login') {
-        await loginWithEmail(email, wachtwoord);
-      } else {
-        await registerWithEmail(email, wachtwoord, naam.trim());
-      }
-      router.push('/dashboard');
+      await loginWithEmail(email, wachtwoord);
+      // Navigatie na succesvol inloggen gebeurt via de useEffect
+      // hierboven, die ook profile checkt — niet hier direct pushen.
     } catch (err: any) {
       let msg = 'Inloggen mislukt';
       if (err.code === 'auth/user-not-found') msg = 'Geen account gevonden met dit e-mailadres';
@@ -258,25 +258,6 @@ export default function LoginPage() {
           </div>
 
           <div className="form-section">
-            <div className="mode-tabs">
-              <div className={`mode-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')}>Inloggen</div>
-              <div className={`mode-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => setMode('register')}>Account aanmaken</div>
-            </div>
-
-            {mode === 'register' && (
-              <div className="form-group">
-                <label className="form-label">NAAM</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Jouw naam"
-                  value={naam}
-                  onChange={e => setNaam(e.target.value)}
-                  autoComplete="name"
-                />
-              </div>
-            )}
-
             <div className="form-group">
               <label className="form-label">E-MAILADRES</label>
               <div className="input-wrapper">
@@ -293,9 +274,7 @@ export default function LoginPage() {
             <div className="form-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label className="form-label" style={{ marginBottom: 6 }}>WACHTWOORD</label>
-                {mode === 'login' && (
-                  <span onClick={handlePasswordReset} style={{ fontSize: 12, color: '#4a9eff', fontWeight: 500, cursor: 'pointer', marginBottom: 6 }}>Vergeten?</span>
-                )}
+                <span onClick={handlePasswordReset} style={{ fontSize: 12, color: '#4a9eff', fontWeight: 500, cursor: 'pointer', marginBottom: 6 }}>Vergeten?</span>
               </div>
               <div className="input-wrapper">
                 <input
@@ -305,7 +284,7 @@ export default function LoginPage() {
                   value={wachtwoord}
                   onChange={e => { setWachtwoord(e.target.value); setPwError(false); }}
                   style={{ paddingRight: '48px' }}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  autoComplete="current-password"
                 />
                 <button className="input-icon" onClick={() => setToonWachtwoord(!toonWachtwoord)} type="button">
                   {toonWachtwoord ? '🙈' : '👁'}
@@ -314,7 +293,7 @@ export default function LoginPage() {
             </div>
 
             <button className="btn-primary" onClick={handleEmailAuth} disabled={bezig}>
-              {bezig ? 'Even geduld…' : mode === 'login' ? 'Inloggen' : 'Account aanmaken'}
+              {bezig ? 'Even geduld…' : 'Inloggen'}
               {!bezig && <span style={{ fontSize: 18 }}>→</span>}
             </button>
 
@@ -328,11 +307,9 @@ export default function LoginPage() {
               {magicLinkSent ? '✅  Magic link verstuurd' : <>✉️&nbsp; Inloggen via e-mail link</>}
             </button>
 
-            {mode === 'login' && (
-              <div className="footer-note">
-                Nog geen account? <a onClick={() => setMode('register')}>Account aanmaken</a>
-              </div>
-            )}
+            <div className="footer-note">
+              Nieuw lid? Vraag de beheerder om een uitnodigingslink.
+            </div>
           </div>
 
         </div>

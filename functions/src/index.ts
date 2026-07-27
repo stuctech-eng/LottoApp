@@ -761,3 +761,102 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
     winnaars: alleWinnaarNamen,
   };
 });
+
+// ─────────────────────── verzilverUitnodiging ───────────────────────
+
+/**
+ * Verzilvert een ledenuitnodiging NA succesvol inloggen (Google,
+ * e-mail/wachtwoord, of magic-link — de auth zelf is al gebeurd
+ * vóórdat deze functie wordt aangeroepen; request.auth bevestigt dat).
+ *
+ * Alles gebeurt in één Firestore-transactie zodat een token nooit
+ * twee keer kan worden verzilverd, ook niet bij een race condition
+ * (bijv. dezelfde link twee keer snel achter elkaar geopend).
+ *
+ * Sinds de invoering van dit uitnodigingssysteem wordt er NERGENS
+ * anders meer automatisch een /users/{uid}-document aangemaakt bij
+ * een eerste login — dat gebeurt voortaan uitsluitend hier.
+ */
+export const verzilverUitnodiging = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const uid = request.auth.uid;
+  const token = request.data?.token as string | undefined;
+  if (!token || typeof token !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Geen geldig uitnodigingstoken meegegeven.');
+  }
+  // Optioneel: bij e-mail/wachtwoord-registratie heeft Firebase Auth
+  // geen displayName, dus laat het formulier op de uitnodigingspagina
+  // zelf een naam vragen en hier meegeven. Bij Google/magic-link is
+  // dit veld leeg en valt de functie terug op het Auth-token.
+  const ingevoerdeNaam = (request.data?.naam as string | undefined)?.trim();
+
+  const authNaam = ingevoerdeNaam
+    || (request.auth.token.name as string | undefined)
+    || (request.auth.token.email as string | undefined)?.split('@')[0]
+    || 'Nieuw lid';
+  const authEmail = (request.auth.token.email as string | undefined) ?? null;
+  const authFoto = (request.auth.token.picture as string | undefined) ?? null;
+
+  const inviteRef = db.doc(`invites/${token}`);
+  const userRef = db.doc(`users/${uid}`);
+
+  await db.runTransaction(async (tx) => {
+    const [inviteSnap, userSnap] = await Promise.all([tx.get(inviteRef), tx.get(userRef)]);
+
+    if (!inviteSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Deze uitnodiging bestaat niet (meer).');
+    }
+    const invite = inviteSnap.data()!;
+
+    if (invite.gebruikt === true) {
+      throw new functions.https.HttpsError('failed-precondition', 'Deze uitnodiging is al gebruikt.');
+    }
+    const vervalOp = invite.vervalOp?.toDate?.() as Date | undefined;
+    if (!vervalOp || vervalOp.getTime() < Date.now()) {
+      throw new functions.https.HttpsError('failed-precondition', 'Deze uitnodiging is verlopen.');
+    }
+
+    if (userSnap.exists) {
+      // Dit account heeft al een profiel — nooit overschrijven. Dit
+      // voorkomt dat een bestaand lid per ongeluk (of moedwillig) zijn
+      // eigen profiel reset door een uitnodigingslink te openen.
+      throw new functions.https.HttpsError('already-exists', 'Dit account heeft al een clublidmaatschap.');
+    }
+
+    tx.set(userRef, {
+      naam: authNaam,
+      email: authEmail,
+      foto: authFoto,
+      rol: 'lid',
+      tickets: [],
+      lidSinds: admin.firestore.FieldValue.serverTimestamp(),
+      ranglijstPunten: 0,
+      actief: true,
+      lottoSaldo: 0,
+      lottoSaldoIntroSeen: false,
+    });
+
+    tx.update(inviteRef, {
+      gebruikt: true,
+      gebruiktOp: admin.firestore.FieldValue.serverTimestamp(),
+      gebruiktDoorUid: uid,
+      gebruiktDoorNaam: authNaam,
+    });
+  });
+
+  // Audit-log-entry na de transactie — gebruikt de bestaande
+  // logAudit-helper (zelfde veldnamen als de rest van het auditlog),
+  // niet in de transactie zelf omdat die een andere schrijfmethode
+  // gebruikt (add() i.p.v. tx.set()).
+  await logAudit(
+    'uitnodiging_verzilverd',
+    `${authNaam} verzilverde een uitnodiging en werd lid`,
+    uid,
+    authNaam
+  );
+
+  functions.logger.info(`Uitnodiging ${token} verzilverd door ${authNaam} (${uid}).`);
+  return { succes: true };
+});

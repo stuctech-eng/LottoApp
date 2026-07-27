@@ -3,6 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { subscribeAllUsers, formatLidSinds, updateUserRol } from '@/lib/firestore-users';
+import { maakUitnodiging } from '@/lib/firestore-invites';
 import { logAudit } from '@/lib/firestore-audit';
 import { useAuth } from '@/lib/auth-context';
 import { User, Rol } from '@/lib/types';
@@ -40,6 +41,27 @@ function LedenPageContent() {
   const NAV = isBeheerder ? NAV_BEHEERDER : NAV_KASHOUDER;
   const dashboardHref = isBeheerder ? '/beheerder' : '/kashouder';
   const aantalBeheerders = leden.filter(l => l.rol === 'beheerder').length;
+
+  // Uitnodigen — zowel kashouder als beheerder mogen dit; deze pagina
+  // zelf is al beperkt tot die twee rollen via ProtectedRoute.
+  const [uitnodigingBezig, setUitnodigingBezig] = useState(false);
+  const [uitnodigingLink, setUitnodigingLink] = useState<string | null>(null);
+  const [uitnodigingFout, setUitnodigingFout] = useState<string | null>(null);
+
+  const handleUitnodigen = async () => {
+    if (!user || !profile) return;
+    setUitnodigingBezig(true);
+    setUitnodigingFout(null);
+    setUitnodigingLink(null);
+    try {
+      const token = await maakUitnodiging({ uid: user.uid, naam: profile.naam });
+      setUitnodigingLink(`${window.location.origin}/uitnodiging/${token}`);
+    } catch {
+      setUitnodigingFout('Aanmaken van de uitnodiging is mislukt, probeer opnieuw.');
+    } finally {
+      setUitnodigingBezig(false);
+    }
+  };
 
   const handleRolChange = async (lid: User, nieuweRol: Rol) => {
     if (!user || !profile || nieuweRol === lid.rol) return;
@@ -89,6 +111,52 @@ function LedenPageContent() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 14px' }}>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Leden</div>
           <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
+        </div>
+
+        {/* Uitnodigen */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div className="card" style={{ padding: 16 }}>
+            {!uitnodigingLink ? (
+              <>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+                  Nieuw lid? Maak een eenmalige uitnodigingslink — 7 dagen geldig, wordt automatisch ongeldig na gebruik.
+                </div>
+                {uitnodigingFout && (
+                  <div style={{ fontSize: 12, color: 'var(--error)', marginBottom: 10 }}>⚠️ {uitnodigingFout}</div>
+                )}
+                <button
+                  onClick={handleUitnodigen}
+                  disabled={uitnodigingBezig}
+                  style={{ width: '100%', background: 'linear-gradient(135deg,var(--accent),#2070cc)', color: 'white', border: 'none', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: uitnodigingBezig ? 0.6 : 1 }}
+                >
+                  {uitnodigingBezig ? 'Bezig…' : '➕ Nieuw lid uitnodigen'}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 10 }}>✅ Uitnodiging aangemaakt</div>
+                <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'var(--muted)', wordBreak: 'break-all', marginBottom: 12 }}>
+                  {uitnodigingLink}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(`🎱 Je bent uitgenodigd voor onze LottoClub.\n\nGebruik onderstaande link om lid te worden:\n${uitnodigingLink}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ flex: 1, textAlign: 'center', background: 'var(--success)', color: 'var(--navy)', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, textDecoration: 'none' }}
+                  >
+                    💬 Via WhatsApp
+                  </a>
+                  <button
+                    onClick={() => setUitnodigingLink(null)}
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
+                  >
+                    Sluiten
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div style={{ padding: '0 20px', marginBottom: 12 }}>

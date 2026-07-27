@@ -15,10 +15,9 @@ import {
   signInWithEmailLink,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { User } from './types';
-import { logAudit } from './firestore-audit';
 import { normaliseerRol } from './firestore-users';
 
 interface AuthContextType {
@@ -27,7 +26,7 @@ interface AuthContextType {
   profile: User | null;
   profileLoading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
-  registerWithEmail: (email: string, password: string, naam: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   googleSignInError: string | null;
   clearGoogleSignInError: () => void;
@@ -61,27 +60,12 @@ function isStandalonePwa(): boolean {
   return iosStandalone || !!displayModeStandalone;
 }
 
-// Zorgt dat er een gebruikersdocument in Firestore bestaat
-async function ensureUserDoc(user: FirebaseUser) {
-  const ref = doc(db, 'users', user.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    const naam = user.displayName || user.email?.split('@')[0] || 'Nieuw lid';
-    await setDoc(ref, {
-      naam,
-      email: user.email,
-      foto: user.photoURL || null,
-      rol: 'lid',
-      tickets: [],
-      lidSinds: serverTimestamp(),
-      ranglijstPunten: 0,
-      actief: true,
-      lottoSaldo: 0,
-      lottoSaldoIntroSeen: false,
-    });
-    await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: user.uid, naam }, { doelUserId: user.uid });
-  }
-}
+// ensureUserDoc is verwijderd (26 juli 2026) — sinds de invoering van
+// het ledenuitnodigingssysteem wordt er nooit meer automatisch een
+// /users/{uid}-document aangemaakt bij een eerste login. Dat gebeurt
+// voortaan uitsluitend via de Cloud Function verzilverUitnodiging,
+// aangeroepen vanuit app/uitnodiging/[token]/page.tsx, en alleen als
+// er een geldig, niet-verlopen uitnodigingstoken bij hoort.
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -96,13 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // Verwerk Google redirect resultaat (gewone mobiele Safari, niet-PWA)
+    // Verwerk Google redirect resultaat (gewone mobiele Safari, niet-PWA).
+    // Maakt sinds het uitnodigingssysteem GEEN automatisch profiel meer
+    // aan — dat gebeurt uitsluitend via verzilverUitnodiging() na een
+    // geldige uitnodigingslink. Zie app/uitnodiging/[token]/page.tsx.
     getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          ensureUserDoc(result.user);
-        }
-      })
       .catch((err) => {
         console.error('Google redirect error:', err);
         setGoogleSignInError('Inloggen met Google is niet gelukt. Probeer het opnieuw.');
@@ -156,21 +138,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const registerWithEmail = async (email: string, password: string, naam: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await setDoc(doc(db, 'users', cred.user.uid), {
-      naam,
-      email,
-      foto: null,
-      rol: 'lid',
-      tickets: [],
-      lidSinds: serverTimestamp(),
-      ranglijstPunten: 0,
-      actief: true,
-      lottoSaldo: 0,
-      lottoSaldoIntroSeen: false,
-    });
-    await logAudit('gebruiker_aangemaakt', `${naam} heeft een account aangemaakt`, { uid: cred.user.uid, naam }, { doelUserId: cred.user.uid });
+  // registerWithEmail maakt sinds het uitnodigingssysteem alleen nog
+  // het Firebase Auth-account zelf aan — GEEN Firestore /users/{uid}
+  // meer. Dat gebeurt uitsluitend via verzilverUitnodiging() op de
+  // uitnodigingspagina, na een geldig token (die functie accepteert
+  // daar zelf een optioneel 'naam'-veld voor precies dit scenario).
+  const registerWithEmail = async (email: string, password: string) => {
+    await createUserWithEmailAndPassword(auth, email, password);
   };
 
   /**
@@ -183,8 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (isStandalonePwa()) {
       try {
-        const result = await signInWithPopup(auth, provider);
-        await ensureUserDoc(result.user);
+        await signInWithPopup(auth, provider);
       } catch (err) {
         console.error('Google popup sign-in error:', err);
         setGoogleSignInError('Inloggen met Google is niet gelukt. Probeer het opnieuw.');
@@ -200,8 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearGoogleSignInError = () => setGoogleSignInError(null);
 
   const sendMagicLink = async (email: string) => {
+    // Terugkeer-URL is de HUIDIGE pagina, niet altijd de root — nodig
+    // zodat een magic-link vanaf de uitnodigingspagina ook weer daar
+    // uitkomt, anders raakt het uitnodigingstoken onderweg kwijt.
     const actionCodeSettings = {
-      url: `${window.location.origin}/`,
+      url: window.location.href,
       handleCodeInApp: true,
     };
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);
@@ -210,8 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const completeMagicLinkSignIn = async (email: string, link: string) => {
     if (isSignInWithEmailLink(auth, link)) {
-      const result = await signInWithEmailLink(auth, email, link);
-      await ensureUserDoc(result.user);
+      await signInWithEmailLink(auth, email, link);
       window.localStorage.removeItem('emailForSignIn');
     }
   };

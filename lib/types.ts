@@ -154,6 +154,8 @@ export type AuditAction =
   | 'uitbetaling_geregistreerd'
   | 'kascorrectie'
   | 'betaling_gecorrigeerd'
+  | 'uitnodiging_aangemaakt'
+  | 'uitnodiging_verzilverd'
   | 'trekking_ingevoerd'
   | 'trekking_gewijzigd'
   | 'seizoen_gestart'
