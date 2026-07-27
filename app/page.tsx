@@ -241,20 +241,6 @@ export default function LoginPage() {
             <div className="hero-eyebrow">Vereniging</div>
             <div className="hero-title">Welkom<br />terug<em>.</em></div>
             <div className="hero-subtitle">Beheer je nummers, volg de trekkingen en blijf op de hoogte.</div>
-            <div className="stats-row">
-              <div className="stat-pill">
-                <div className="stat-value" style={{ color: '#f0c060' }}>€1.247</div>
-                <div className="stat-label">Huidige pot</div>
-              </div>
-              <div className="stat-pill">
-                <div className="stat-value">17</div>
-                <div className="stat-label">Deelnemers</div>
-              </div>
-              <div className="stat-pill">
-                <div className="stat-value" style={{ color: '#34c97a' }}>Za 31 mei</div>
-                <div className="stat-label">Volgende trekking</div>
-              </div>
-            </div>
           </div>
 
           <div className="form-section">
