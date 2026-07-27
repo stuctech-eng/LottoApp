@@ -104,7 +104,11 @@ export default function LoginPage() {
     } catch (err: any) {
       let msg = 'Inloggen mislukt';
       if (err.code === 'auth/user-not-found') msg = 'Geen account gevonden met dit e-mailadres';
-      else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Onjuist wachtwoord';
+      // Moderne Firebase Auth geeft voor "wachtwoord fout" én "account
+      // bestaat niet" bewust dezelfde foutcode terug (voorkomt dat
+      // buitenstaanders kunnen achterhalen welke e-mailadressen een
+      // account hebben) — de melding mag dus geen van beide aannemen.
+      else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Inloggen niet gelukt — controleer je e-mailadres en wachtwoord, of vraag de beheerder om een uitnodiging als je nog geen lid bent';
       else if (err.code === 'auth/email-already-in-use') msg = 'Dit e-mailadres is al in gebruik';
       else if (err.code === 'auth/weak-password') msg = 'Wachtwoord moet minimaal 6 tekens zijn';
       else if (err.code === 'auth/invalid-email') msg = 'Ongeldig e-mailadres';
