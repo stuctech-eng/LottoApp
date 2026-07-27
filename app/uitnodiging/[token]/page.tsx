@@ -40,6 +40,7 @@ export default function UitnodigingPage() {
 
   const [verzilverBezig, setVerzilverBezig] = useState(false);
   const [verzilverFout, setVerzilverFout] = useState<string | null>(null);
+  const [verzilverSucces, setVerzilverSucces] = useState(false);
   const verzilverGestart = useRef(false);
   const magicLinkHandled = useRef(false);
 
@@ -109,15 +110,30 @@ export default function UitnodigingPage() {
       setVerzilverBezig(false);
       if (resultaat.succes) {
         window.sessionStorage.removeItem('pendingInviteToken');
-        // Nieuw lid: eerst de eenmalige onboarding, niet direct naar
-        // het dashboard. /welkom zelf stuurt door naar /dashboard
-        // zodra de introductie is afgerond.
-        router.push('/welkom');
+        setVerzilverSucces(true);
+        // GEEN router.push hier — zie de aparte useEffect hieronder.
+        // De Cloud Function heeft het profiel op dat moment al
+        // daadwerkelijk in Firestore aangemaakt, maar de EIGEN
+        // realtime-listener van deze pagina (via useAuth's profile)
+        // kan daar nog een fractie van een seconde achteraan lopen.
+        // Direct doorsturen zou /welkom kunnen laten aankomen vóórdat
+        // profile lokaal is bijgewerkt — met "Geen toegang" tot
+        // gevolg, ook al is de registratie allang gelukt. Vandaar:
+        // pas navigeren zodra profile hier zelf ook echt niet-null is.
       } else {
         setVerzilverFout(resultaat.foutmelding ?? 'Verzilveren van de uitnodiging is mislukt.');
       }
     });
   }, [user, profile, loading, profileLoading, token, naam, router]);
+
+  // Navigeer pas ECHT zodra het eigen profiel is bijgewerkt — dat is
+  // het bewijs dat de realtime-listener de nieuwe data heeft
+  // opgepikt, niet alleen dat de server-kant klaar is.
+  useEffect(() => {
+    if (verzilverSucces && profile) {
+      router.push('/welkom');
+    }
+  }, [verzilverSucces, profile, router]);
 
   const handleEmailAuth = async () => {
     let ok = true;
