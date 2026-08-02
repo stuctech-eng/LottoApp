@@ -176,6 +176,22 @@ function WelkomPageContent() {
                   <li>Bevestig met <strong>"Installeren"</strong></li>
                 </ol>
               </div>
+
+              {profile?.wachtOpNieuweSpeelreeks ? (
+                <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: 16, marginTop: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--warning)', marginBottom: 6 }}>⏳ Nog even geduld</div>
+                  <div style={{ fontSize: 13, color: 'var(--white)', lineHeight: 1.6 }}>
+                    Je bent aangemeld terwijl de huidige speelreeks al bezig is — andere spelers hebben dan al een voorsprong. Je kunt nu vast je ticket instellen en storten, maar je speelt pas volledig mee zodra de huidige speelreeks eindigt (er valt een winnaar) en een nieuwe, eerlijke reeks begint. Je ziet dit ook op je dashboard.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: 'var(--success-soft)', border: '1px solid rgba(52,201,122,0.2)', borderRadius: 16, padding: 16, marginTop: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--success)', marginBottom: 6 }}>✅ Je doet vanaf nu volledig mee!</div>
+                  <div style={{ fontSize: 13, color: 'var(--white)', lineHeight: 1.6 }}>
+                    Stel je ticket in en stort je inleg — je speelt gewoon mee vanaf de eerstvolgende trekking.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
