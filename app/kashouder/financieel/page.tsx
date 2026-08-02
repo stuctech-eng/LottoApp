@@ -123,6 +123,14 @@ function FinancieelPageContent() {
   const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
   const openBetalingen = spelendeLeden.filter(l => !betaaldeLeden.has(l.id));
 
+  // "Tikkie laatst gecontroleerd" — puur afgeleid, geen aparte knop of
+  // veld nodig: een storting registreren kan alleen als je daadwerkelijk
+  // in Tikkie hebt gekeken, dus het tijdstip van de laatst geregistreerde
+  // storting IS het bewijs dat alles daarvóór al is meegenomen.
+  const laatsteStorting = mutaties
+    .filter(m => m.type === 'inleg' && m.datum)
+    .sort((a, b) => (b.datum?.toMillis() ?? 0) - (a.datum?.toMillis() ?? 0))[0];
+
   const [markeerFout, setMarkeerFout] = useState<string | null>(null);
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
@@ -261,6 +269,21 @@ function FinancieelPageContent() {
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 28, letterSpacing: -0.5 }}>Financieel</div>
           </div>
           <Link href={dashboardHref} style={{ width: 40, height: 40, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)' }}>←</Link>
+        </div>
+
+        {/* Tikkie laatst gecontroleerd */}
+        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16 }}>💳</span>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              Tikkie laatst gecontroleerd:{' '}
+              <strong style={{ color: 'var(--white)' }}>
+                {laatsteStorting?.datum
+                  ? laatsteStorting.datum.toDate().toLocaleString('nl-NL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+                  : 'nog nooit'}
+              </strong>
+            </div>
+          </div>
         </div>
 
         {/* Openstaand — zelfde functionaliteit als /kashouder/page.tsx,
