@@ -133,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lottoSaldo: data.lottoSaldo ?? 0,
             lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
             onboardingCompleted: data.onboardingCompleted,
+            wachtOpNieuweSpeelreeks: data.wachtOpNieuweSpeelreeks,
           });
         } else {
           setProfile(null);

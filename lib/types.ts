@@ -26,6 +26,14 @@ export interface User {
    *  een uitnodiging toont de onboarding — zie app/welkom/page.tsx
    *  en functions/src/index.ts's verzilverUitnodiging. */
   onboardingCompleted?: boolean;
+  /** True voor een nieuw lid dat toetrad tijdens een al-lopende
+   *  speelreeks (dus met andere spelers die al voorsprong hebben) —
+   *  ontbrekend/false = doet gewoon mee. Wordt gezet door
+   *  verzilverUitnodiging, en automatisch weer op false gezet door
+   *  onTrekkingVerwerkt zodra er een winnaar valt en een nieuwe,
+   *  eerlijke speelreeks begint. Ticket instellen mag altijd, alleen
+   *  de wekelijkse deelname/afschrijving wacht. */
+  wachtOpNieuweSpeelreeks?: boolean;
 }
 
 export interface Ticket {

@@ -320,6 +320,33 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       }, { path: '/betalen' });
     }
 
+    // Nieuwe speelreeks begonnen (er is een winnaar) → leden die
+    // wachtten op precies dit moment mogen nu meedoen. Los van de
+    // trekking-batch hierboven, want dit raakt een andere set
+    // gebruikers dan de deelnemers/niet-betalers van deze trekking.
+    if (output.winnaars.length > 0) {
+      const wachtendeSnap = await db.collection('users')
+        .where('wachtOpNieuweSpeelreeks', '==', true)
+        .get();
+      if (!wachtendeSnap.empty) {
+        const vrijgaveBatch = db.batch();
+        for (const wachtendDoc of wachtendeSnap.docs) {
+          vrijgaveBatch.update(wachtendDoc.ref, { wachtOpNieuweSpeelreeks: false });
+        }
+        await vrijgaveBatch.commit();
+
+        for (const wachtendDoc of wachtendeSnap.docs) {
+          const tokens = await getFcmTokens(wachtendDoc.id, 'trekkingResultaten');
+          if (tokens.length === 0) continue;
+          await sendToTokens(tokens, {
+            title: '🎉 Er is een winnaar!',
+            body: `${winnaarNamen} won de pot — de nieuwe speelreeks is begonnen en jij doet vanaf nu mee!`,
+          }, { path: '/dashboard' });
+        }
+        functions.logger.info(`${wachtendeSnap.size} wachtend(e) lid/leden vrijgegeven voor de nieuwe speelreeks.`);
+      }
+    }
+
     functions.logger.info(`Trekking ${trekkingId} succesvol verwerkt. ${output.winnaars.length} winnaar(s). ${nietBetalers.length} leden uitgesloten wegens niet-betaling.`);
   }
 );
@@ -537,6 +564,12 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
       const userData = userDoc.data();
       const tickets = (userData.tickets ?? []) as { id: string; nummers: number[] }[];
       if (tickets.length === 0) continue;
+      // Nieuw lid dat toetrad tijdens een al-lopende speelreeks: mag
+      // pas meedoen zodra de huidige reeks eindigt (winnaar valt) en
+      // een nieuwe, eerlijke reeks begint — geen betaaldocument, geen
+      // afschrijving, hun eerder gestorte saldo blijft gewoon
+      // onaangeroerd staan tot dat moment (zie onTrekkingVerwerkt).
+      if (userData.wachtOpNieuweSpeelreeks === true) continue;
 
       const lottoSaldo = (userData.lottoSaldo as number | undefined) ?? 0;
 
@@ -777,6 +810,40 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
  * anders meer automatisch een /users/{uid}-document aangemaakt bij
  * een eerste login — dat gebeurt voortaan uitsluitend hier.
  */
+
+/**
+ * Bepaalt of de huidige speelreeks al minstens 1 trekking heeft gehad
+ * (dus of andere spelers al voorsprong hebben opgebouwd) — gebruikt om
+ * te beslissen of een NIEUW lid moet wachten tot de volgende
+ * speelreeks (eerlijkheid: niemand mag instappen als anderen al
+ * cumulatief nummers hebben verzameld). Zelfde speelreeks-grens-logica
+ * als lib/firestore-prijzenpot.ts (client), hier server-side herhaald
+ * omdat een Cloud Function geen client-code kan importeren.
+ */
+async function heeftHuidigeSpeelreeksAlTrekkingen(): Promise<boolean> {
+  const winnendeResultatenSnap = await db.collection('resultaten').where('isWinnaar', '==', true).get();
+
+  let vanafDatum: Date | null = null;
+  if (!winnendeResultatenSnap.empty) {
+    const trekkingIds = [...new Set(winnendeResultatenSnap.docs.map(d => d.data().trekkingId as string))];
+    let laatsteWinDatum: Date | null = null;
+    for (const trekkingId of trekkingIds) {
+      const trekkingSnap = await db.doc(`trekkingen/${trekkingId}`).get();
+      const datum = trekkingSnap.exists ? (trekkingSnap.data()?.datum?.toDate?.() as Date | undefined) : undefined;
+      if (datum && (!laatsteWinDatum || datum > laatsteWinDatum)) laatsteWinDatum = datum;
+    }
+    vanafDatum = laatsteWinDatum;
+  }
+
+  const trekkingenSnap = await db.collection('trekkingen').where('verwerkt', '==', true).get();
+  const trekkingenInHuidigeSpeelreeks = trekkingenSnap.docs.filter(d => {
+    const datum = d.data().datum?.toDate?.() as Date | undefined;
+    if (!datum) return false;
+    return !vanafDatum || datum > vanafDatum;
+  });
+  return trekkingenInHuidigeSpeelreeks.length > 0;
+}
+
 export const verzilverUitnodiging = functions.https.onCall(async (request) => {
   if (!request.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
@@ -801,6 +868,13 @@ export const verzilverUitnodiging = functions.https.onCall(async (request) => {
 
   const inviteRef = db.doc(`invites/${token}`);
   const userRef = db.doc(`users/${uid}`);
+
+  // Vóór de transactie bepaald (niet erin — dit doet eigen, losse
+  // lezingen die niet via tx.get() gaan). Een kleine kans op een
+  // net-verouderd resultaat als er EXACT op dit moment een trekking
+  // wordt verwerkt is acceptabel: wordt vanzelf rechtgezet zodra de
+  // eerstvolgende winnaar valt.
+  const moetWachten = await heeftHuidigeSpeelreeksAlTrekkingen();
 
   await db.runTransaction(async (tx) => {
     const [inviteSnap, userSnap] = await Promise.all([tx.get(inviteRef), tx.get(userRef)]);
@@ -837,6 +911,7 @@ export const verzilverUitnodiging = functions.https.onCall(async (request) => {
       lottoSaldo: 0,
       lottoSaldoIntroSeen: false,
       onboardingCompleted: false,
+      wachtOpNieuweSpeelreeks: moetWachten,
     });
 
     tx.update(inviteRef, {

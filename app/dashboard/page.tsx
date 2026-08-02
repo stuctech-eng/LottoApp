@@ -336,6 +336,16 @@ function DashboardPageContent() {
           </div>
         </div>
 
+        {/* Wacht op nieuwe speelreeks */}
+        {profile?.wachtOpNieuweSpeelreeks && (
+          <div style={{ margin: '0 20px 16px', background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning)', marginBottom: 6 }}>⏳ Je wacht op de nieuwe speelreeks</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+              Je bent lid geworden terwijl de huidige speelreeks al bezig was — andere spelers hebben dan al een voorsprong. Zodra er een winnaar is en een nieuwe, eerlijke speelreeks begint, doe jij automatisch mee. Je gestorte saldo blijft gewoon staan tot dat moment. Je ticket-nummers kun je nu al instellen.
+            </div>
+          </div>
+        )}
+
         {/* Pot hero */}
         <div style={{ margin: '0 20px 16px' }}>
           <div style={{ background: 'linear-gradient(135deg,#1a3a5c 0%,#0f2438 100%)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 20, position: 'relative', overflow: 'hidden' }}>

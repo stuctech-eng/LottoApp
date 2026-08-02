@@ -50,6 +50,7 @@ export function subscribeRanglijst(callback: (entries: RanglijstEntry[]) => void
           lottoSaldo: data.lottoSaldo ?? 0,
           lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
           onboardingCompleted: data.onboardingCompleted,
+          wachtOpNieuweSpeelreeks: data.wachtOpNieuweSpeelreeks,
         } as User;
       });
 
