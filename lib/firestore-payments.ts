@@ -262,6 +262,14 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
   const userSnap = await getDoc(doc(db, 'users', userId));
   if (!userSnap.exists()) return;
   const userData = userSnap.data();
+  // Lid wacht op de nieuwe speelreeks (nieuw lid, toegetreden tijdens
+  // een al-lopende reeks) — mag nog niet meedoen, dus een storting
+  // mag NOOIT alvast automatisch een 'betaald'-document voor de
+  // huidige week aanmaken. Saldo blijft gewoon staan tot de vrijgave
+  // bij de eerstvolgende winnaar (zie onTrekkingVerwerkt). Zonder
+  // deze check werd hier alsnog €4 afgeschreven — precies het gat dat
+  // onBetalingenAanmaken (de wekelijkse cyclus) al wél had.
+  if (userData.wachtOpNieuweSpeelreeks === true) return;
   const lottoSaldo = (userData.lottoSaldo as number | undefined) ?? 0;
   const { standaardInleg, } = await haalVerenigingConfigOp();
   const omschrijvingDefault = STANDAARD_OMSCHRIJVING;
