@@ -91,8 +91,18 @@ export default function UitnodigingPage() {
   // Randgeval: een bestaand lid opent per ongeluk (of nieuwsgierig)
   // een uitnodigingslink — gewoon doorsturen naar het dashboard in
   // plaats van het inlogformulier te tonen, dat zou verwarrend zijn.
+  //
+  // KRITIEK: verzilverGestart.current moet hier expliciet worden
+  // uitgesloten. Zonder die check triggerde dit OOK voor een
+  // GLOEDNIEUW lid — zodra hun profiel via de Cloud Function is
+  // aangemaakt en de listener dat oppikt, is de combinatie
+  // "user + profile bestaan beide" identiek aan een bestaand lid, en
+  // won deze navigatie de race van de eigenlijke welkom-navigatie
+  // hieronder. Gevolg: nieuwe leden kwamen rechtstreeks op het
+  // dashboard terecht, zonder ooit de onboarding te zien — gevonden
+  // via een echte test met een gloednieuw account.
   useEffect(() => {
-    if (!loading && !profileLoading && user && profile) {
+    if (!loading && !profileLoading && user && profile && !verzilverGestart.current) {
       router.push('/dashboard');
     }
   }, [user, profile, loading, profileLoading, router]);
