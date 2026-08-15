@@ -53,6 +53,30 @@ function DebugFcmContent() {
     }
   };
 
+  // TIJDELIJK, alleen voor diagnose (15 augustus 2026) — stuurt met
+  // een notification-veld erbij, om te isoleren of het "server meldt
+  // succes maar niets komt aan"-probleem in de data-only-aanpak zit.
+  const [test2Bezig, setTest2Bezig] = useState(false);
+  const [test2Resultaat, setTest2Resultaat] = useState<string | null>(null);
+
+  const stuurTest2 = async () => {
+    setTest2Bezig(true);
+    setTest2Resultaat(null);
+    try {
+      const fn = httpsCallable<Record<string, never>, { succes: boolean; foutmelding?: string; aantalTokens?: number }>(functionsInstance, 'stuurTestNotificatieMetNotificationVeld');
+      const result = await fn({});
+      if (result.data.succes) {
+        setTest2Resultaat(`✅ Verstuurd naar ${result.data.aantalTokens} token(s) — MET notification-veld.`);
+      } else {
+        setTest2Resultaat(`⚠️ ${result.data.foutmelding}`);
+      }
+    } catch (e: unknown) {
+      setTest2Resultaat(`❌ Mislukt: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTest2Bezig(false);
+    }
+  };
+
   // Zaterdag-saldo-herinnering: statusverslag ophalen + handmatig kunnen triggeren
   const [zaterdagStatus, setZaterdagStatus] = useState<ZaterdagStatus | null>(null);
   const [zaterdagLaden, setZaterdagLaden] = useState(false);
@@ -154,6 +178,15 @@ function DebugFcmContent() {
       {testResultaat && (
         <div style={{ background: '#132233', borderRadius: 12, padding: 12, marginBottom: 16, fontSize: 13, color: testResultaat.startsWith('✅') ? '#34c97a' : '#ff5a5a', lineHeight: 1.5 }}>
           {testResultaat}
+        </div>
+      )}
+
+      <button onClick={stuurTest2} disabled={test2Bezig} style={{ width: '100%', padding: 14, background: '#a855f7', color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, marginBottom: 16, opacity: test2Bezig ? 0.6 : 1 }}>
+        {test2Bezig ? '⏳ Bezig...' : '🔔 Test (MET notification-veld)'}
+      </button>
+      {test2Resultaat && (
+        <div style={{ background: '#132233', borderRadius: 12, padding: 12, marginBottom: 16, fontSize: 13, color: test2Resultaat.startsWith('✅') ? '#34c97a' : '#ff5a5a', lineHeight: 1.5 }}>
+          {test2Resultaat}
         </div>
       )}
 

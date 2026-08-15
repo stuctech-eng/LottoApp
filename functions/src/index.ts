@@ -1005,6 +1005,45 @@ export const stuurTestNotificatie = functions.https.onCall(async (request) => {
   }
 });
 
+/**
+ * TIJDELIJKE DIAGNOSE-FUNCTIE (15 augustus 2026) — raakt bewust NIET
+ * sendToTokens of de echte, productie-meldingen. Stuurt, in
+ * tegenstelling tot de rest van de app, WEL een top-level
+ * `notification`-veld mee naast `data` — puur om te testen of het
+ * probleem "server meldt succes, maar er komt niets aan" zit in de
+ * data-only-aanpak (service worker moet de melding zelf tonen) of
+ * dieper (bijv. een token dat FCM als geldig beschouwt, maar dat in
+ * werkelijkheid niet aflevert). Als DEZE testmelding wél aankomt,
+ * weten we zeker waar het probleem zit. Kan na de diagnose weer
+ * verwijderd worden.
+ */
+export const stuurTestNotificatieMetNotificationVeld = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const uid = request.auth.uid;
+  try {
+    const tokens = await getFcmTokens(uid, 'herinneringen');
+    if (tokens.length === 0) {
+      return { succes: false, foutmelding: 'Geen (geldig) token gevonden.' };
+    }
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      notification: {
+        title: '🔔 Testmelding (met notification-veld)',
+        body: 'Als je DEZE ziet maar de andere niet, ligt het aan de data-only-aanpak.',
+      },
+      data: { path: '/profiel' },
+    });
+    functions.logger.info(`Diagnose-testmelding (met notification-veld) verstuurd naar ${uid}: ${JSON.stringify(response)}`);
+    return { succes: true, aantalTokens: tokens.length, response: JSON.stringify(response.responses) };
+  } catch (err: unknown) {
+    const details = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    functions.logger.error(`stuurTestNotificatieMetNotificationVeld fout voor ${uid}:`, err);
+    return { succes: false, foutmelding: `Interne fout: ${details}` };
+  }
+});
+
 // ─────────────────────── onZaterdagSaldoHerinnering ───────────────────────
 
 /**
