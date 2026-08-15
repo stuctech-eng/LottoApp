@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { getMessaging, getToken } from 'firebase/messaging';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functionsInstance } from '@/lib/firebase';
 import app from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -16,6 +17,27 @@ export default function DebugFcmPage() {
   const log = (msg: string) => {
     console.log(msg);
     setLogs(prev => [...prev, `${new Date().toISOString().slice(11,19)} ${msg}`]);
+  };
+
+  const [testBezig, setTestBezig] = useState(false);
+  const [testResultaat, setTestResultaat] = useState<string | null>(null);
+
+  const stuurTest = async () => {
+    setTestBezig(true);
+    setTestResultaat(null);
+    try {
+      const fn = httpsCallable<Record<string, never>, { succes: boolean; foutmelding?: string; aantalTokens?: number }>(functionsInstance, 'stuurTestNotificatie');
+      const result = await fn({});
+      if (result.data.succes) {
+        setTestResultaat(`✅ Verstuurd naar ${result.data.aantalTokens} token(s). Kijk of de melding binnenkomt (kan enkele seconden duren).`);
+      } else {
+        setTestResultaat(`⚠️ ${result.data.foutmelding}`);
+      }
+    } catch (e: unknown) {
+      setTestResultaat(`❌ Mislukt: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setTestBezig(false);
+    }
   };
 
   const runDiagnostiek = async () => {
@@ -74,9 +96,19 @@ export default function DebugFcmPage() {
   return (
     <div style={{ background: '#0d1b2a', minHeight: '100dvh', padding: '20px', paddingTop: 'max(20px, env(safe-area-inset-top, 20px))', fontFamily: 'monospace' }}>
       <div style={{ color: '#4a9eff', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>🔍 FCM Diagnostiek</div>
-      <button onClick={runDiagnostiek} disabled={bezig} style={{ width: '100%', padding: 14, background: '#4a9eff', color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, marginBottom: 16, opacity: bezig ? 0.6 : 1 }}>
+      <button onClick={runDiagnostiek} disabled={bezig} style={{ width: '100%', padding: 14, background: '#4a9eff', color: 'white', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, marginBottom: 12, opacity: bezig ? 0.6 : 1 }}>
         {bezig ? '⏳ Bezig...' : '▶ Start diagnostiek'}
       </button>
+
+      <button onClick={stuurTest} disabled={testBezig} style={{ width: '100%', padding: 14, background: '#34c97a', color: '#0d1b2a', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, marginBottom: 16, opacity: testBezig ? 0.6 : 1 }}>
+        {testBezig ? '⏳ Bezig...' : '🔔 Stuur mij een testmelding'}
+      </button>
+      {testResultaat && (
+        <div style={{ background: '#132233', borderRadius: 12, padding: 12, marginBottom: 16, fontSize: 13, color: testResultaat.startsWith('✅') ? '#34c97a' : '#ff5a5a', lineHeight: 1.5 }}>
+          {testResultaat}
+        </div>
+      )}
+
       <div style={{ background: '#132233', borderRadius: 12, padding: 14, minHeight: 300 }}>
         {logs.length === 0 && <div style={{ color: '#7a9ab8', fontSize: 13 }}>Druk op Start om te beginnen...</div>}
         {logs.map((l, i) => (

@@ -957,3 +957,38 @@ export const verzilverUitnodiging = functions.https.onCall(async (request) => {
   functions.logger.info(`Uitnodiging ${token} verzilverd door ${authNaam} (${uid}).`);
   return { succes: true };
 });
+
+// ─────────────────────── stuurTestNotificatie ───────────────────────
+
+/**
+ * Callable functie, alleen voor de ingelogde gebruiker zelf — stuurt
+ * direct een testmelding naar de eigen opgeslagen tokens, zonder op
+ * een geplande functie te hoeven wachten (bijv. de zaterdag-19:30-
+ * trekkingsherinnering). Gebouwd 15 augustus 2026 om de fix van
+ * sendToTokens' token-opschoning direct te kunnen verifiëren, in
+ * plaats van tot de volgende geplande melding te moeten wachten.
+ *
+ * Gebruikt bewust dezelfde sendToTokens-functie als alle echte
+ * meldingen — een geslaagde testmelding bewijst dus dat de hele
+ * keten (tokens ophalen, versturen, ongeldige opschonen) werkt,
+ * niet een aparte, losse implementatie die iets anders zou testen.
+ */
+export const stuurTestNotificatie = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const uid = request.auth.uid;
+
+  const tokens = await getFcmTokens(uid, 'herinneringen');
+  if (tokens.length === 0) {
+    return { succes: false, foutmelding: 'Geen (geldig) token gevonden voor jouw account. Open eerst Profiel → FCM Diagnostiek om er een aan te maken.' };
+  }
+
+  await sendToTokens(uid, tokens, {
+    title: '🔔 Testmelding',
+    body: 'Als je dit ziet, werkt je notificatie-instelling correct!',
+  }, { path: '/profiel' });
+
+  functions.logger.info(`Testmelding verstuurd naar ${uid} (${tokens.length} token(s) geprobeerd).`);
+  return { succes: true, aantalTokens: tokens.length };
+});
