@@ -979,16 +979,28 @@ export const stuurTestNotificatie = functions.https.onCall(async (request) => {
   }
   const uid = request.auth.uid;
 
-  const tokens = await getFcmTokens(uid, 'herinneringen');
-  if (tokens.length === 0) {
-    return { succes: false, foutmelding: 'Geen (geldig) token gevonden voor jouw account. Open eerst Profiel → FCM Diagnostiek om er een aan te maken.' };
+  // Alles binnen een try/catch — Firebase verbergt normaal elke
+  // onverwachte fout achter het generieke 'internal', zonder details
+  // naar de client te sturen (bewuste beveiliging). Voor dit
+  // diagnose-doeleinde is dat onhandig: we willen de ECHTE
+  // foutmelding juist wél zien, rechtstreeks in de app, in plaats van
+  // een aparte omweg via Cloud Logging nodig te hebben.
+  try {
+    const tokens = await getFcmTokens(uid, 'herinneringen');
+    if (tokens.length === 0) {
+      return { succes: false, foutmelding: 'Geen (geldig) token gevonden voor jouw account. Open eerst Profiel → FCM Diagnostiek om er een aan te maken.' };
+    }
+
+    await sendToTokens(uid, tokens, {
+      title: '🔔 Testmelding',
+      body: 'Als je dit ziet, werkt je notificatie-instelling correct!',
+    }, { path: '/profiel' });
+
+    functions.logger.info(`Testmelding verstuurd naar ${uid} (${tokens.length} token(s) geprobeerd).`);
+    return { succes: true, aantalTokens: tokens.length };
+  } catch (err: unknown) {
+    const details = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    functions.logger.error(`stuurTestNotificatie fout voor ${uid}:`, err);
+    return { succes: false, foutmelding: `Interne fout: ${details}` };
   }
-
-  await sendToTokens(uid, tokens, {
-    title: '🔔 Testmelding',
-    body: 'Als je dit ziet, werkt je notificatie-instelling correct!',
-  }, { path: '/profiel' });
-
-  functions.logger.info(`Testmelding verstuurd naar ${uid} (${tokens.length} token(s) geprobeerd).`);
-  return { succes: true, aantalTokens: tokens.length };
 });
