@@ -4,7 +4,62 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 2, 7 en 15 augustus 2026 — Wachtrij voor nieuwe leden, leden definitief verwijderen, en een lange notificatie-speurtocht
+
+Meerdere sessies, samengevoegd tot één overzicht per onderwerp. De grootste, meest tijdrovende sessie was 15 augustus: een grondig regressieonderzoek naar "notificaties werkten eerder wel" dat drie losse, onafhankelijke bugs blootlegde.
+
+### Leden-lijst opgeschoond
+
+Emoji-avatars (willekeurige gezichtjes) vervangen door een net initiaal-avatar. Standaardfilter op `/leden` staat nu op "Actief" in plaats van "Alle" bij het openen van de pagina.
+
+### Leden definitief verwijderen — een tweede niveau bovenop de bestaande soft-delete
+
+Na een testronde stonden er meerdere test-leden als "inactief" te wachten. Nieuwe, bewust destructieve functie `verwijderLidDefinitief()`: een echte `deleteDoc()` op het Firestore-profiel, alleen bereikbaar via een 🗑️-knop bij **al-inactieve** leden (nooit direct bij een actief lid — eerst ❌ soft-delete, dan pas definitief kunnen wissen, een ingebouwde extra veiligheidsstap). Raakt bewust niet het Firebase Auth-account (geen serverrechten vanaf de client) — dat blijft onschadelijk bestaan; een latere uitnodiging op hetzelfde adres maakt gewoon een vers profiel aan.
+
+### Wachtrij voor nieuwe leden
+
+**Aanleiding**: nieuwe leden zouden pas mogen meedoen zodra de huidige, al-lopende speelreeks eindigt — instappen halverwege zou oneerlijk zijn tegenover spelers die al cumulatief nummers hebben verzameld.
+
+**Ontwerp, na overleg**: geen aparte "bevries geld"-functie nodig — zolang een lid simpelweg buiten de wekelijkse deelnamecyclus wordt gehouden, blijft hun gestorte saldo vanzelf onaangeroerd. Nieuw veld `wachtOpNieuweSpeelreeks` op `User`, gezet door een nieuwe helper `heeftHuidigeSpeelreeksAlTrekkingen()` in de Cloud Function (checkt of er al minstens 1 trekking is geweest sinds de laatste winnaar, of sinds het begin als er nog nooit een winnaar was). `onBetalingenAanmaken` slaat wachtende leden over; `onTrekkingVerwerkt` geeft ze bij een winnaar in dezelfde stap vrij én stuurt een pushmelding. Dashboard toont een duidelijke banner; de laatste onboarding-stap toont een aangepaste bevestiging (geen pushmelding op dat moment — er bestaat op dat vroege punt nog geen FCM-token).
+
+**Getest met een geïsoleerde, mock-Firestore logica-test** (9 scenario's: verse club, lopend seizoen zonder winnaar, net een winnaar gehad, tweede reeks alweer onderweg, meerdere winnaars ooit met de juiste — laatste — als referentie, en de vrijgave-/skip-logica zelf) — allemaal geslaagd zonder op een echte winnaar te hoeven wachten.
+
+**Het Neeltje-incident**: een écht nieuw lid (geen testaccount) kreeg ondanks de wachtrij-vlag toch €4 afgeschreven bij een storting. Bleek: `verrekenLottoSaldoMetOpenstaandeWeek` (aangeroepen bij elke storting) checkte de vlag niet — alleen `onBetalingenAanmaken` deed dat. Twee plekken die hetzelfde principe moesten afdwingen, en de tweede werd bij het bouwen vergeten. Handmatig gecorrigeerd (saldo terug, betaling ongedaan via de bestaande correctietools — geen kascorrectie nodig, de storting zelf klopte) en de ontbrekende check alsnog toegevoegd.
+
+### Tikkie laatst gecontroleerd
+
+Kort, functioneel verzoek: een manier om te zien tot welk moment de kashouder Tikkie al had gecontroleerd. In plaats van een handmatige "ik heb gecheckt"-knop (die vergeten kan worden, of zonder echt te checken ingedrukt kan worden) — een storting registreren is zelf al het bewijs dat er is gekeken. Regel op Financieel, puur afgeleid uit de meest recente `'inleg'`-kasmutatie, geen nieuwe knop of veld nodig.
+
+### Zaterdag-saldo-herinnering
+
+Nieuwe, persoonlijke melding elke zaterdag 12:00 — 6 uur vóór de 18:00-stortingsdeadline, zodat wie te weinig saldo heeft nog op tijd kan bijstorten. Alleen naar spelende (niet-wachtende) leden. Gebruikt dezelfde `sendToTokens`-infrastructuur als de rest.
+
+### De notificatie-speurtocht — drie losse bugs, na elkaar ontdekt
+
+Dit werd de langste sessie van het project tot nu toe. Aanleiding: een geplande melding kwam niet aan, ondanks dat eerdere meldingen (zoals de zaterdag-19:30-trekkingsherinnering) eerder wél hadden gewerkt. Op expliciet verzoek: **geen nieuw systeem bouwen, uitzoeken waarom het bestaande stopte.**
+
+**Voorbereiding — twee losse test-hulpmiddelen gebouwd, vóór de eigenlijke oorzaak gevonden was:**
+- Een testmelding-knop (`stuurTestNotificatie`) die dezelfde verstuurfunctie gebruikt als echte meldingen — zodat elke fix direct, zonder op een geplande tijd te wachten, te verifiëren was
+- Toen deze knop een cryptische "internal"-fout gaf: de Cloud Function aangepast zodat de **echte** foutmelding (die Firebase normaal om beveiligingsredenen verbergt) rechtstreeks in de app te zien is, in plaats van via een omweg naar Cloud Logging
+
+**Bug 1 — dode tokens werden nooit echt verwijderd.** Cloud Logging toonde: de functie draaide foutloos, probeerde te versturen, maar alle geprobeerde tokens waren ongeldig. In de code bleek `sendToTokens()` alleen te *loggen* dat ongeldige tokens "worden opgeschoond" — een daadwerkelijke `deleteDoc()`-aanroep ontbrak volledig. Elke PWA-herinstallatie of cache-wis liet een nieuw, dood token achter zonder ooit het oude op te ruimen. Gefixt: echte verwijdering toegevoegd, `sendToTokens` kreeg een verplichte `userId`-parameter (nodig om te weten uit welke subcollectie te verwijderen) — bijgewerkt op alle 9 aanroepplekken in het bestand.
+
+**Bug 2 — het token werd nooit automatisch ververst.** Na de eerste fix bleek het probleem terug te komen zodra er even niet was ingelogd. Oorzaak: de notificatie-toggle op Profiel (`notifActief`) begon **altijd** op `false` bij elke page-load — het token werd dus alleen ververst op het exacte moment dat iemand de toggle handmatig omzette, wat in de praktijk zelden opnieuw gebeurde. Gefixt met een structurele wijziging in `lib/auth-context.tsx`: een nieuwe `useEffect` ververst het token voortaan automatisch bij elke ingelogde sessie, gebaseerd op de echte browsertoestemming (niet op React-state) — werkt nu voor de hele app, ongeacht welke pagina iemand bezoekt.
+
+**Bug 3 — twee service workers streden om de controle (de uiteindelijke hoofdoorzaak).** Zelfs na beide voorgaande fixes bleef het patroon: server meldt succes, er komt niets aan, en het zojuist-gebruikte token blijkt bij een volgende poging alweer verdwenen (door de inmiddels-werkende opschoning uit bug 1, die het steeds als "ongeldig" wegschoonde). Systematisch alle overige schakels uitgesloten — VAPID-sleutel (klopte, vergeleken met Firebase Console), iOS-notificatie-instellingen (allemaal correct aan), en zelfs het berichtformaat zelf: een aparte testfunctie gebouwd die bewust wél een top-level `notification`-veld meestuurde (in plaats van de gebruikelijke data-only aanpak) — als dát wél zou aankomen, zou de service worker-code de schuldige zijn; kwam het ook niet aan, dan zat het dieper. **Kwam ook niet aan.** Dat wees uiteindelijk naar de service worker-registratie zelf: Firebase Messaging draaide in een **apart** bestand (`public/firebase-messaging-sw.js`) naast de Serwist PWA-caching-worker, die zelf `skipWaiting: true` + `clientsClaim: true` gebruikt om altijd de nieuwste cache-versie te forceren. Twee actieve service workers op hetzelfde origin kunnen elkaar als "controller" verdringen — de caching-worker nam bij elke page-load de controle over, waardoor er niemand meer was om een binnenkomende melding daadwerkelijk te tonen, ook al kwam die er echt aan.
+
+**Fix, volgens Firebase's eigen aanbeveling voor precies dit scenario**: alles samengevoegd in **één** service worker. Firebase Messaging zit nu ín `app/sw.ts`, via de moderne `firebase/messaging/sw`-module-API (in plaats van de oudere `importScripts()`-compat-variant die niet in een module-gebaseerde worker past). `lib/firebase-messaging.ts` registreert niet langer een eigen, tweede worker — wacht simpelweg op de al-actieve, samengevoegde worker. Het oude, aparte bestand is leeggemaakt met een duidelijke uitleg, met het verzoek het handmatig uit de repo te verwijderen (niet iets wat via een geleverde zip zelf kan gebeuren).
+
+**Status aan het einde van de sessie**: deze laatste fix is de sterkst onderbouwde, meest waarschijnlijke verklaring — maar nog niet bevestigd met een geslaagde testmelding ná specifiek déze wijziging. Expliciet zo vastgelegd in plaats van voortijdig "opgelost" te melden, na een paar eerdere momenten deze sessie waarin een fix voorbarig als werkend werd aangenomen.
+
+### Notificaties, alles bij elkaar: nieuwe pagina `/profiel/notificaties`
+
+Los verzoek, na de hele speurtocht: alle notificatie-gerelateerde functionaliteit (instellingen, per-categorie voorkeuren, en de verspreide testschermen) samenvoegen tot één plek, met een apart tabblad voor test-functionaliteit. Nieuw client-kant `NotificationSettings`-type (bestond al server-kant, nu ook toegevoegd aan `lib/types.ts` en — dit keer zorgvuldig, met een geautomatiseerd script dat per bestand de exacte, bestaande inspringing overnam — aan alle drie de handmatige veldmappingen tegelijk). Twee tabbladen: **Instellingen** (hoofdschakelaar + 5 losse categorieën: trekkingsuitslagen, betaling bevestigd, herinneringen, winnaars, ranglijst-updates) en **Test** (diagnostiek, testmelding — voor iedereen, test alleen het eigen account — en de handmatige zaterdag-herinnering-trigger, beheerder-only binnen die tab want die stuurt naar alle spelende leden tegelijk). De oude, losse `/debug-fcm`-pagina en de toggle op `/profiel` zijn beide vervangen door een verwijzing naar deze ene, nieuwe plek.
+
+---
+
 ## 26-27 juli 2026 — Navigatie, weekberekening, en het complete ledenuitnodigingensysteem
+
 
 Twee losse dagen, in elkaar overlopend. Begon met navigatie- en weergaveverbeteringen, groeide uit tot de grootste architecturale wijziging van het project: open registratie is vervangen door een volwaardig, server-side gevalideerd uitnodigingensysteem, inclusief onboarding en ledenbeheer.
 
