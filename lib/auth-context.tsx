@@ -135,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
             onboardingCompleted: data.onboardingCompleted,
             wachtOpNieuweSpeelreeks: data.wachtOpNieuweSpeelreeks,
+            notificationSettings: data.notificationSettings,
           });
         } else {
           setProfile(null);

@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { updateUserTickets, updateUserTelefoon, formatLidSinds } from '@/lib/firestore-users';
 import { logAudit } from '@/lib/firestore-audit';
-import { activeerNotificaties, deactiveerNotificaties, notificatiesIngeschakeld } from '@/lib/firebase-messaging';
+import { deactiveerNotificaties } from '@/lib/firebase-messaging';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
@@ -75,10 +75,6 @@ function ProfielPageContent() {
   // op het moment dat iemand 'm handmatig weer aanzette. Nu meteen de
   // ECHTE status (browsertoestemming), consistent met de nieuwe
   // automatische verversing in lib/auth-context.tsx.
-  const [notifActief, setNotifActief] = useState(() => notificatiesIngeschakeld());
-  const [notifBezig, setNotifBezig] = useState(false);
-  const [notifToast, setNotifToast] = useState<string | null>(null);
-
   const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
 
   useEffect(() => {
@@ -89,16 +85,7 @@ function ProfielPageContent() {
   useEffect(() => {
     if (profile?.naam) setNaam(profile.naam);
     if (profile?.telefoon) setTelefoon(profile.telefoon);
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setNotifActief(Notification.permission === 'granted');
-    }
   }, [profile?.naam, profile?.telefoon]);
-
-  useEffect(() => {
-    if (notifActief && user) {
-      activeerNotificaties(user.uid).catch(console.error);
-    }
-  }, [notifActief, user]);
 
   const handleSaveNaam = async () => {
     if (!user || !profile || !naam.trim() || naam.trim() === profile.naam) return;
@@ -115,36 +102,6 @@ function ProfielPageContent() {
       setTimeout(() => setNaamOk(false), 2000);
     } finally {
       setNaamBezig(false);
-    }
-  };
-
-  const handleNotificaties = async () => {
-    if (!user) return;
-    setNotifBezig(true);
-    try {
-      if (notifActief) {
-        await deactiveerNotificaties(user.uid);
-        setNotifActief(false);
-        setNotifToast('Notificaties uitgeschakeld');
-      } else {
-        const vapid = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
-        if (!vapid || vapid === 'https://api.example.com') {
-          setNotifToast(`❌ VAPID key ontbreekt of is placeholder: "${vapid.slice(0,30)}"`);
-          return;
-        }
-        setNotifToast(`🔑 VAPID: ${vapid.slice(0,15)}... Toestemming vragen...`);
-        const token = await activeerNotificaties(user.uid);
-        if (token) {
-          setNotifActief(true);
-          setNotifToast(`✅ Token: ${token.slice(0,20)}...`);
-        } else {
-          const perm = typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unknown';
-          setNotifToast(`❌ Geen token. Toestemming: ${perm}`);
-        }
-      }
-      setTimeout(() => setNotifToast(null), 8000);
-    } finally {
-      setNotifBezig(false);
     }
   };
 
@@ -350,36 +307,20 @@ function ProfielPageContent() {
           </div>
         </div>
 
-        {/* Notificaties */}
+        {/* Notificaties — verplaatst naar een eigen pagina (15 augustus
+            2026): instellingen, per-categorie voorkeuren, én de
+            testfunctionaliteit horen nu allemaal bij elkaar op één
+            plek, in plaats van verspreid over Profiel en een aparte,
+            beheerder-only debugpagina. */}
         <div style={{ padding: '0 20px', marginBottom: 20 }}>
-          <div className="section-title">Push notificaties</div>
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>
-                  {notifActief ? '🔔 Notificaties aan' : '🔕 Notificaties uit'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {notifActief ? 'Je ontvangt meldingen van trekkingen en betalingen' : 'Schakel in voor meldingen van trekkingen en betalingen'}
-                </div>
-              </div>
-              <button
-                onClick={handleNotificaties}
-                disabled={notifBezig}
-                style={{ width: 44, height: 26, borderRadius: 13, border: 'none', position: 'relative', cursor: 'pointer', background: notifActief ? 'var(--success)' : 'var(--navy-mid)', transition: 'background 0.2s', flexShrink: 0, opacity: notifBezig ? 0.6 : 1 }}
-              >
-                <span style={{ position: 'absolute', top: 3, left: 3, width: 20, height: 20, borderRadius: '50%', background: 'white', transition: 'transform 0.2s', transform: notifActief ? 'translateX(18px)' : 'translateX(0)' }} />
-              </button>
+          <Link href="/profiel/notificaties" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px', textDecoration: 'none' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🔔</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--white)', marginBottom: 1 }}>Notificaties</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Instellingen, per soort melding, en testen</div>
             </div>
-            {notifToast && (
-              <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>{notifToast}</div>
-            )}
-            {typeof window !== 'undefined' && !('Notification' in window) && (
-              <div style={{ fontSize: 12, color: 'var(--warning)', marginTop: 4 }}>
-                ⚠️ Push notificaties worden niet ondersteund door deze browser. Voeg de app toe aan je beginscherm voor de beste ervaring.
-              </div>
-            )}
-          </div>
+            <span style={{ fontSize: 16, color: 'var(--muted)' }}>›</span>
+          </Link>
         </div>
 
         {/* Info-links: Help, Spelregels, Deelnemers */}
@@ -405,13 +346,6 @@ function ProfielPageContent() {
             </Link>
           </div>
         </div>
-
-        {/* Debug link — alleen zichtbaar voor beheerder */}
-        {profile?.rol === 'beheerder' && (
-          <div style={{ padding: '0 20px', marginBottom: 20 }}>
-            <a href="/debug-fcm" style={{ display: 'block', textAlign: 'center', fontSize: 12, color: 'var(--muted)', textDecoration: 'none' }}>🔍 FCM Diagnostiek</a>
-          </div>
-        )}
 
         {/* Uitloggen */}
         <div style={{ padding: '0 20px', marginBottom: 8 }}>

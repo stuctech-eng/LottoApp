@@ -43,6 +43,7 @@ export function subscribeAllUsers(
           lottoSaldoIntroSeen: data.lottoSaldoIntroSeen ?? false,
           onboardingCompleted: data.onboardingCompleted,
           wachtOpNieuweSpeelreeks: data.wachtOpNieuweSpeelreeks,
+          notificationSettings: data.notificationSettings,
         };
       });
       // Sorteer client-side op naam
@@ -59,6 +60,24 @@ export async function updateUserTickets(uid: string, tickets: Ticket[]) {
 
 export async function updateUserTelefoon(uid: string, telefoon: string) {
   await updateDoc(doc(db, 'users', uid), { telefoon });
+}
+
+/**
+ * Werkt één of meerdere meldingscategorieën bij, zonder de andere
+ * (niet-meegegeven) categorieën aan te raken — vandaar het
+ * dot-notatie-schrijven per veld i.p.v. het hele object te
+ * overschrijven, wat een race condition zou geven als twee
+ * categorieën vlak na elkaar worden aangepast.
+ */
+export async function updateNotificationSettings(
+  uid: string,
+  wijzigingen: Partial<import('./types').NotificationSettings>
+) {
+  const updates: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(wijzigingen)) {
+    if (typeof value === 'boolean') updates[`notificationSettings.${key}`] = value;
+  }
+  await updateDoc(doc(db, 'users', uid), updates);
 }
 
 export async function updateUserRol(uid: string, rol: import('./types').Rol) {

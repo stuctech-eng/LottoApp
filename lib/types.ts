@@ -34,7 +34,30 @@ export interface User {
    *  eerlijke speelreeks begint. Ticket instellen mag altijd, alleen
    *  de wekelijkse deelname/afschrijving wacht. */
   wachtOpNieuweSpeelreeks?: boolean;
+  /** Per-categorie meldingsvoorkeuren — ontbrekend veld/categorie
+   *  wordt overal (client én Cloud Function) behandeld als de
+   *  waarden in DEFAULT_NOTIFICATION_SETTINGS hieronder. */
+  notificationSettings?: NotificationSettings;
 }
+
+/** Moet altijd exact gelijk blijven aan functions/src/lib/types.ts —
+ *  dit is bewust een aparte kopie (Cloud Functions kunnen geen
+ *  client-code importeren), net als bij controle-engine.ts. */
+export interface NotificationSettings {
+  trekkingResultaten: boolean;
+  betalingBevestigd: boolean;
+  herinneringen: boolean;
+  winnaars: boolean;
+  ranglijstUpdates: boolean;
+}
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  trekkingResultaten: true,
+  betalingBevestigd: true,
+  herinneringen: true,
+  winnaars: true,
+  ranglijstUpdates: false,
+};
 
 export interface Ticket {
   id: string;
