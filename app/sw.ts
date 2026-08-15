@@ -3,6 +3,8 @@
 import { defaultCache } from "@serwist/turbopack/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { NetworkOnly, Serwist } from "serwist";
+import { initializeApp } from "firebase/app";
+import { getMessaging, onBackgroundMessage } from "firebase/messaging/sw";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -11,6 +13,64 @@ declare global {
 }
 
 declare const self: ServiceWorkerGlobalScope;
+
+// ─────────────────────── Firebase Cloud Messaging ───────────────────────
+//
+// BUGFIX (15 augustus 2026): stond eerder in een APART bestand
+// (public/firebase-messaging-sw.js), met een eigen registratie los van
+// deze Serwist-caching-worker. Twee actieve service workers op
+// hetzelfde origin streden om de controle over de scope — met
+// `skipWaiting: true` + `clientsClaim: true` hieronder verdrong deze
+// caching-worker bij elke page-load de messaging-worker als actieve
+// controller, waardoor pushberichten wel bij Apple/Firebase aankwamen
+// (server meldde "succes"), maar nooit daadwerkelijk werden getoond —
+// niemand was er nog om showNotification() aan te roepen. Firebase
+// zelf raadt voor precies dit scenario aan: alles in ÉÉN service
+// worker. Vandaar deze samenvoeging.
+const firebaseApp = initializeApp({
+  apiKey: "AIzaSyDGz1nAbH5fxYY5halcrd0Dsu3PaM2j9bU",
+  authDomain: "lottoclub.firebaseapp.com",
+  projectId: "lottoclub",
+  storageBucket: "lottoclub.firebasestorage.app",
+  messagingSenderId: "455488693325",
+  appId: "1:455488693325:web:25798f2fc9901ec3c4a804",
+});
+const messaging = getMessaging(firebaseApp);
+
+// Data-only payload — zie functions/src/index.ts's sendToTokens voor
+// de reden (voorkomt dubbele meldingen die zouden ontstaan als zowel
+// een top-level `notification`-veld als deze handmatige
+// showNotification()-aanroep de melding allebei zouden tonen).
+onBackgroundMessage(messaging, (payload) => {
+  const { title, body, icon, path } = payload.data ?? {};
+  const link = path ?? "/";
+
+  self.registration.showNotification(title ?? "LottoClub", {
+    body: body ?? "",
+    icon: icon ?? "/icons/icon-192x192.png",
+    badge: "/icons/badge-72x72.png",
+    data: { link },
+  });
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = (event.notification.data as { link?: string } | undefined)?.link ?? "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) {
+          client.focus();
+          (client as WindowClient).navigate(link);
+          return;
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(link);
+    })
+  );
+});
+
+// ─────────────────────── PWA-caching (bestaand, ongewijzigd) ───────────────────────
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,

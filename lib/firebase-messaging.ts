@@ -20,8 +20,16 @@ export async function activeerNotificaties(userId: string): Promise<string | nul
   if (toestemming !== 'granted') return null;
 
   try {
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    await navigator.serviceWorker.ready;
+    // BUGFIX (15 augustus 2026): registreerde eerder een EIGEN, TWEEDE
+    // service worker (/firebase-messaging-sw.js) naast de al-actieve
+    // Serwist-caching-worker (/serwist/sw.js) — twee workers op
+    // hetzelfde origin verdrongen elkaar als "controller", waardoor
+    // pushberichten wel aankwamen bij Firebase/Apple maar nooit
+    // daadwerkelijk werden getoond. Firebase-messaging zit nu SAMEN
+    // met de caching-logica in diezelfde ene Serwist-worker (zie
+    // app/sw.ts) — dus hier simpelweg wachten tot díe klaar is, in
+    // plaats van een nieuwe, aparte registratie te forceren.
+    const registration = await navigator.serviceWorker.ready;
     console.log('6. SW ready:', registration.scope);
     console.log('7. PushManager op SW:', !!registration.pushManager);
 
@@ -63,9 +71,7 @@ export async function deactiveerNotificaties(userId: string): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
     const messaging = getMessaging(app);
-    const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
-    if (!registration) return;
-
+    const registration = await navigator.serviceWorker.ready;
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: registration,
