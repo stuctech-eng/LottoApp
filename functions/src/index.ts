@@ -1168,3 +1168,164 @@ export const stuurZaterdagSaldoHerinneringNu = functions.https.onCall(async (req
   functions.logger.info(`Zaterdag-saldo-herinnering handmatig getriggerd door ${request.auth.uid}.`);
   return await voerZaterdagSaldoHerinneringUit();
 });
+
+// ─────────────────────── Geplande notificaties (Beheer → Notificaties) ───────────────────────
+//
+// Beheerder maakt vanuit de app zelf meldingen aan (eenmalig of
+// wekelijks), zonder dat daar ooit een nieuwe Cloud Function-deploy
+// voor nodig is. Kernprincipe: ÉÉN vaste, generieke achtergrondfunctie
+// die elke 5 minuten checkt wat er nu verstuurd moet worden — nooit
+// een aparte scheduler per notificatie (kan Firebase Cloud Functions
+// sowieso niet dynamisch, schedules liggen vast bij deploy-tijd).
+//
+// De kernlogica hieronder (isAanDeBeurt, berekenBeoogdTijdstipDezeWeek)
+// is vooraf geïsoleerd getest met 9 scenario's — inclusief het meest
+// kritieke: twee "gelijktijdige" claim-pogingen op dezelfde
+// notificatie+periode, waarvan er precies één mag slagen. Die
+// bescherming leunt op Firestore's create() die vanzelf faalt als het
+// document al bestaat — geen handmatige transactie-logica nodig.
+
+function berekenBeoogdTijdstipDezeWeek(geplandOp: Date, nu: Date): Date {
+  const dagVanWeek = geplandOp.getDay();
+  const uur = geplandOp.getHours();
+  const minuut = geplandOp.getMinutes();
+  const nuDag = nu.getDay();
+  const verschilInDagen = dagVanWeek - nuDag;
+  const resultaat = new Date(nu);
+  resultaat.setDate(nu.getDate() + verschilInDagen);
+  resultaat.setHours(uur, minuut, 0, 0);
+  return resultaat;
+}
+
+function isAanDeBeurt(
+  notif: { herhaling: string; actief: boolean; geplandOp: Date; laatstVerstuurdVoorPeriode: string | null },
+  nu: Date
+): { periode: string; due: boolean } {
+  if (notif.herhaling === 'eenmalig') {
+    return {
+      periode: 'eenmalig',
+      due: notif.geplandOp <= nu && notif.actief === true,
+    };
+  }
+  const huidigePeriode = getTrekkingWeek(nu); // hergebruikt dezelfde ISO-weekberekening als de rest van de app
+  const beoogdeTijd = berekenBeoogdTijdstipDezeWeek(notif.geplandOp, nu);
+  return {
+    periode: huidigePeriode,
+    due: nu >= beoogdeTijd && notif.laatstVerstuurdVoorPeriode !== huidigePeriode && notif.actief === true,
+  };
+}
+
+async function bepaalDoelgroep(doelgroep: string): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  const usersSnap = await db.collection('users').where('actief', '==', true).get();
+  return usersSnap.docs.filter((d) => {
+    const data = d.data();
+    if (doelgroep === 'alleLeden') return true;
+    if (doelgroep === 'spelendeLeden') {
+      const tickets = data.tickets ?? [];
+      return tickets.length > 0 && data.wachtOpNieuweSpeelreeks !== true;
+    }
+    if (doelgroep === 'beheerderKashouder') {
+      return data.rol === 'beheerder' || data.rol === 'kashouder';
+    }
+    return false;
+  });
+}
+
+async function verwerkGeplandeNotificatiesCore() {
+  const nu = new Date();
+  // Geen orderBy() — filteren/sorteren gebeurt hieronder in JS.
+  const notificatiesSnap = await db.collection('geplandeNotificaties').where('actief', '==', true).get();
+
+  let verwerkt = 0;
+  for (const notifDoc of notificatiesSnap.docs) {
+    const data = notifDoc.data();
+    const geplandOp = data.geplandOp?.toDate?.() as Date | undefined;
+    if (!geplandOp) continue;
+
+    const { periode, due } = isAanDeBeurt(
+      {
+        herhaling: data.herhaling,
+        actief: data.actief,
+        geplandOp,
+        laatstVerstuurdVoorPeriode: data.laatstVerstuurdVoorPeriode ?? null,
+      },
+      nu
+    );
+    if (!due) continue;
+
+    // Atomaire claim: create() faalt vanzelf (ALREADY_EXISTS) als een
+    // andere run dit al claimde — dat IS de dubbel-verzending-bescherming.
+    const verzendingRef = db.doc(`notificatieVerzendingen/${notifDoc.id}_${periode}`);
+    try {
+      await verzendingRef.create({
+        notificatieId: notifDoc.id,
+        periode,
+        verstuurdOp: admin.firestore.FieldValue.serverTimestamp(),
+        aantalDoelgroep: 0,
+        aantalMetToken: 0,
+        aantalVerstuurd: 0,
+      });
+    } catch (err: unknown) {
+      // Code 6 / 'already-exists' = normaal, gewoon al geclaimd door een andere run.
+      const alBestaand = (err as { code?: number | string })?.code === 6 || (err as { code?: string })?.code === 'already-exists';
+      if (!alBestaand) functions.logger.error(`Claim mislukt voor ${notifDoc.id}_${periode}:`, err);
+      continue;
+    }
+
+    // Claim gelukt — nu pas daadwerkelijk versturen.
+    const doelLeden = await bepaalDoelgroep(data.doelgroep);
+    let aantalMetToken = 0;
+    let aantalVerstuurd = 0;
+    for (const lidDoc of doelLeden) {
+      const tokens = await getFcmTokens(lidDoc.id, 'herinneringen');
+      if (tokens.length === 0) continue;
+      aantalMetToken++;
+      await sendToTokens(lidDoc.id, tokens, { title: data.titel, body: data.bericht });
+      aantalVerstuurd++;
+    }
+
+    await verzendingRef.update({ aantalDoelgroep: doelLeden.length, aantalMetToken, aantalVerstuurd });
+
+    const notifUpdate: Record<string, unknown> = { laatstVerstuurdOp: admin.firestore.FieldValue.serverTimestamp() };
+    if (data.herhaling === 'eenmalig') {
+      notifUpdate.actief = false; // ontbrekend/false actief = niet meer tonen, consistent met de rest van de app
+    } else {
+      notifUpdate.laatstVerstuurdVoorPeriode = periode;
+    }
+    await notifDoc.ref.update(notifUpdate);
+
+    functions.logger.info(`Geplande notificatie "${data.titel}" verstuurd (${aantalVerstuurd}/${doelLeden.length}), periode ${periode}.`);
+    verwerkt++;
+  }
+  return { verwerkt };
+}
+
+export const verwerkGeplandeNotificaties = functions.scheduler.onSchedule(
+  { schedule: '*/5 * * * *', timeZone: 'Europe/Amsterdam' },
+  async () => {
+    await verwerkGeplandeNotificatiesCore();
+  }
+);
+
+/**
+ * Handmatige trigger, alleen voor beheerder — voert exact dezelfde
+ * kernlogica uit, zodat een nieuw aangemaakte notificatie meteen te
+ * testen is zonder tot de eerstvolgende 5-minuten-tik te wachten.
+ */
+export const testVerwerkGeplandeNotificatiesNu = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const callerSnap = await db.doc(`users/${request.auth.uid}`).get();
+  if (callerSnap.data()?.rol !== 'beheerder') {
+    throw new functions.https.HttpsError('permission-denied', 'Alleen beheerder mag dit handmatig triggeren.');
+  }
+  try {
+    const resultaat = await verwerkGeplandeNotificatiesCore();
+    return { succes: true, ...resultaat };
+  } catch (err: unknown) {
+    const details = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    functions.logger.error('testVerwerkGeplandeNotificatiesNu fout:', err);
+    return { succes: false, foutmelding: `Interne fout: ${details}` };
+  }
+});

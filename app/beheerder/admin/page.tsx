@@ -12,7 +12,11 @@ import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
 import { herberekenHuidigeSpeelreeks } from '@/lib/firestore-herberekening';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
-import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User } from '@/lib/types';
+import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User, GeplandeNotificatie, NotificatieDoelgroep, NotificatieHerhaling } from '@/lib/types';
+import { subscribeGeplandeNotificaties, maakGeplandeNotificatie, updateGeplandeNotificatie, verwijderGeplandeNotificatie } from '@/lib/firestore-geplande-notificaties';
+import { httpsCallable } from 'firebase/functions';
+import { functionsInstance } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
   { href: '/beheerder', icon: '🏠', label: 'Dashboard' },
@@ -23,12 +27,28 @@ const NAV = [
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer', active: true },
 ];
 
-type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'audit';
+type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'notificaties'|'audit';
 
 function AdminPageContent() {
+  const { user, profile } = useAuth();
   const [tab, setTab] = useState<Tab>('instellingen');
   const [toggles, setToggles] = useState({ bewijs:true, notif:true, herinner:true, winnaar:true });
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+
+  // Geplande notificaties
+  const [geplandeNotificaties, setGeplandeNotificaties] = useState<GeplandeNotificatie[]>([]);
+  const [notifFormOpen, setNotifFormOpen] = useState(false);
+  const [notifBewerkId, setNotifBewerkId] = useState<string | null>(null);
+  const [notifTitel, setNotifTitel] = useState('');
+  const [notifBericht, setNotifBericht] = useState('');
+  const [notifDoelgroep, setNotifDoelgroep] = useState<NotificatieDoelgroep>('alleLeden');
+  const [notifHerhaling, setNotifHerhaling] = useState<NotificatieHerhaling>('eenmalig');
+  const [notifDatum, setNotifDatum] = useState('');
+  const [notifTijd, setNotifTijd] = useState('12:00');
+  const [notifOpslaanBezig, setNotifOpslaanBezig] = useState(false);
+  const [notifTestBezig, setNotifTestBezig] = useState<string | null>(null);
+  const [notifTestResultaat, setNotifTestResultaat] = useState<string | null>(null);
+
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>(DEFAULT_PAYMENT_CONFIG);
   const [spelConfig, setSpelConfig] = useState<SpelConfig>(DEFAULT_SPELCONFIG);
   const [seizoenen, setSeizoenen] = useState<Seizoen[]>([]);
@@ -75,7 +95,8 @@ function AdminPageContent() {
       setStandaardInleg(config.standaardInleg);
     });
     const u8 = subscribeAllUsers(setLeden);
-    return () => { u1(); u2(); u3(); u5(); u6(); u7(); u8(); };
+    const u9 = subscribeGeplandeNotificaties(setGeplandeNotificaties);
+    return () => { u1(); u2(); u3(); u5(); u6(); u7(); u8(); u9(); };
   }, []);
 
   const handleSpelConfigSave = async () => {
@@ -225,7 +246,98 @@ function AdminPageContent() {
     </button>
   );
 
-  const tabs: {id:Tab,label:string}[] = [{id:'instellingen',label:'⚙️ Instellingen'},{id:'spel',label:'🎱 Spel'},{id:'prijzen',label:'💰 Prijzen'},{id:'seizoen',label:'🏆 Seizoen'},{id:'audit',label:'📋 Audit log'}];
+  const tabs: {id:Tab,label:string}[] = [{id:'instellingen',label:'⚙️ Instellingen'},{id:'spel',label:'🎱 Spel'},{id:'prijzen',label:'💰 Prijzen'},{id:'seizoen',label:'🏆 Seizoen'},{id:'notificaties',label:'🔔 Notificaties'},{id:'audit',label:'📋 Audit log'}];
+
+  const resetNotifForm = () => {
+    setNotifBewerkId(null);
+    setNotifTitel('');
+    setNotifBericht('');
+    setNotifDoelgroep('alleLeden');
+    setNotifHerhaling('eenmalig');
+    setNotifDatum('');
+    setNotifTijd('12:00');
+    setNotifFormOpen(false);
+  };
+
+  const handleNotifBewerken = (n: GeplandeNotificatie) => {
+    setNotifBewerkId(n.id);
+    setNotifTitel(n.titel);
+    setNotifBericht(n.bericht);
+    setNotifDoelgroep(n.doelgroep);
+    setNotifHerhaling(n.herhaling);
+    const d = n.geplandOp.toDate();
+    setNotifDatum(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setNotifTijd(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+    setNotifFormOpen(true);
+  };
+
+  const handleNotifOpslaan = async () => {
+    if (!user || !profile || !notifTitel.trim() || !notifBericht.trim() || !notifDatum) return;
+    setNotifOpslaanBezig(true);
+    try {
+      const [uur, minuut] = notifTijd.split(':').map(Number);
+      const [jaar, maand, dag] = notifDatum.split('-').map(Number);
+      const geplandOp = new Date(jaar, maand - 1, dag, uur, minuut);
+      const actieUser = { uid: user.uid, naam: profile.naam };
+
+      if (notifBewerkId) {
+        await updateGeplandeNotificatie(notifBewerkId, {
+          titel: notifTitel.trim(),
+          bericht: notifBericht.trim(),
+          doelgroep: notifDoelgroep,
+          herhaling: notifHerhaling,
+          geplandOp,
+        }, actieUser);
+      } else {
+        await maakGeplandeNotificatie({
+          titel: notifTitel.trim(),
+          bericht: notifBericht.trim(),
+          doelgroep: notifDoelgroep,
+          herhaling: notifHerhaling,
+          geplandOp,
+        }, actieUser);
+      }
+      resetNotifForm();
+    } finally {
+      setNotifOpslaanBezig(false);
+    }
+  };
+
+  const handleNotifVerwijderen = async (n: GeplandeNotificatie) => {
+    if (!user || !profile) return;
+    const bevestigd = window.confirm(`"${n.titel}" verwijderen? Dit kan niet ongedaan worden gemaakt.`);
+    if (!bevestigd) return;
+    await verwijderGeplandeNotificatie(n.id, n.titel, { uid: user.uid, naam: profile.naam });
+  };
+
+  const handleNotifToggleActief = async (n: GeplandeNotificatie) => {
+    if (!user || !profile) return;
+    await updateGeplandeNotificatie(n.id, { actief: !n.actief }, { uid: user.uid, naam: profile.naam });
+  };
+
+  const handleNotifTestNu = async () => {
+    setNotifTestBezig('bezig');
+    setNotifTestResultaat(null);
+    try {
+      const fn = httpsCallable<Record<string, never>, { succes: boolean; foutmelding?: string; verwerkt?: number }>(functionsInstance, 'testVerwerkGeplandeNotificatiesNu');
+      const result = await fn({});
+      if (result.data.succes) {
+        setNotifTestResultaat(`✅ Verwerkt: ${result.data.verwerkt} notificatie(s) verstuurd (alleen die daadwerkelijk aan de beurt waren volgens hun schema).`);
+      } else {
+        setNotifTestResultaat(`⚠️ ${result.data.foutmelding}`);
+      }
+    } catch (e: unknown) {
+      setNotifTestResultaat(`❌ Mislukt: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setNotifTestBezig(null);
+    }
+  };
+
+  const doelgroepLabel: Record<NotificatieDoelgroep, string> = {
+    alleLeden: 'Alle leden',
+    spelendeLeden: 'Alleen spelende leden',
+    beheerderKashouder: 'Beheerder + kashouder',
+  };
 
   return (
     <>
@@ -540,6 +652,130 @@ function AdminPageContent() {
         )}
 
         {/* AUDIT */}
+        {tab==='notificaties' && (
+          <div style={{ padding: '0 20px' }}>
+            <div className="section-title">Geplande notificaties</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
+              Maak zelf eenmalige of wekelijkse meldingen, zonder dat daar een nieuwe app-update voor nodig is. Een lid ontvangt dit alleen als de eigen "Herinneringen"-instelling aan staat.
+            </div>
+
+            <button
+              onClick={handleNotifTestNu}
+              disabled={notifTestBezig !== null}
+              style={{ width: '100%', padding: 12, background: 'var(--gold)', color: 'var(--navy)', border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 600, marginBottom: 10, opacity: notifTestBezig ? 0.6 : 1 }}
+            >
+              {notifTestBezig ? '⏳ Bezig...' : '▶ Nu checken wat er aan de beurt is'}
+            </button>
+            {notifTestResultaat && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, marginBottom: 16, fontSize: 12, color: notifTestResultaat.startsWith('✅') ? 'var(--success)' : 'var(--error)', lineHeight: 1.5 }}>
+                {notifTestResultaat}
+              </div>
+            )}
+
+            {!notifFormOpen && (
+              <button
+                onClick={() => setNotifFormOpen(true)}
+                style={{ width: '100%', padding: 14, background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, marginBottom: 20 }}
+              >
+                ➕ Nieuwe notificatie
+              </button>
+            )}
+
+            {notifFormOpen && (
+              <div className="card" style={{ padding: 16, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{notifBewerkId ? 'Notificatie bewerken' : 'Nieuwe notificatie'}</div>
+
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Titel</label>
+                  <input value={notifTitel} onChange={e => setNotifTitel(e.target.value)} placeholder="Bijv. 🎱 Vergeet je inleg niet" style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--navy-mid)', color: 'var(--white)', fontSize: 14 }} />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Bericht</label>
+                  <textarea value={notifBericht} onChange={e => setNotifBericht(e.target.value)} rows={3} placeholder="De tekst van de melding" style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--navy-mid)', color: 'var(--white)', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }} />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Doelgroep</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['alleLeden', 'spelendeLeden', 'beheerderKashouder'] as NotificatieDoelgroep[]).map(dg => (
+                      <button key={dg} onClick={() => setNotifDoelgroep(dg)} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, border: `1.5px solid ${notifDoelgroep === dg ? 'var(--accent)' : 'var(--border)'}`, background: notifDoelgroep === dg ? 'var(--accent-soft)' : 'transparent', color: notifDoelgroep === dg ? 'var(--accent)' : 'var(--muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                        {doelgroepLabel[dg]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Herhaling</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => setNotifHerhaling('eenmalig')} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, border: `1.5px solid ${notifHerhaling === 'eenmalig' ? 'var(--accent)' : 'var(--border)'}`, background: notifHerhaling === 'eenmalig' ? 'var(--accent-soft)' : 'transparent', color: notifHerhaling === 'eenmalig' ? 'var(--accent)' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Eenmalig</button>
+                    <button onClick={() => setNotifHerhaling('wekelijks')} style={{ flex: 1, padding: '8px 4px', borderRadius: 10, border: `1.5px solid ${notifHerhaling === 'wekelijks' ? 'var(--accent)' : 'var(--border)'}`, background: notifHerhaling === 'wekelijks' ? 'var(--accent-soft)' : 'transparent', color: notifHerhaling === 'wekelijks' ? 'var(--accent)' : 'var(--muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Elke week</button>
+                  </div>
+                  {notifHerhaling === 'wekelijks' && (
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Herhaalt elke week op dezelfde dag-van-de-week en hetzelfde tijdstip als hieronder gekozen.</div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>{notifHerhaling === 'wekelijks' ? 'Datum (bepaalt de dag)' : 'Datum'}</label>
+                    <input type="date" value={notifDatum} onChange={e => setNotifDatum(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--navy-mid)', color: 'var(--white)', fontSize: 14 }} />
+                  </div>
+                  <div style={{ width: 110 }}>
+                    <label style={{ fontSize: 12, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Tijd</label>
+                    <input type="time" value={notifTijd} onChange={e => setNotifTijd(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--navy-mid)', color: 'var(--white)', fontSize: 14 }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button onClick={resetNotifForm} style={{ flex: 1, padding: 12, background: 'var(--navy-mid)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 14, fontWeight: 600 }}>Annuleren</button>
+                  <button
+                    onClick={handleNotifOpslaan}
+                    disabled={notifOpslaanBezig || !notifTitel.trim() || !notifBericht.trim() || !notifDatum}
+                    style={{ flex: 1, padding: 12, background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, opacity: (notifOpslaanBezig || !notifTitel.trim() || !notifBericht.trim() || !notifDatum) ? 0.6 : 1 }}
+                  >
+                    {notifOpslaanBezig ? 'Opslaan...' : notifBewerkId ? 'Wijzigingen opslaan' : 'Aanmaken'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="section-title">Overzicht</div>
+            {geplandeNotificaties.length === 0 && (
+              <div className="card" style={{ padding: '20px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                Nog geen geplande notificaties.
+              </div>
+            )}
+            {geplandeNotificaties.map(n => (
+              <div key={n.id} className="card" style={{ padding: 14, marginBottom: 8, opacity: n.actief ? 1 : 0.5 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{n.titel}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{n.bericht}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      <span>{doelgroepLabel[n.doelgroep]}</span>
+                      <span>·</span>
+                      <span>{n.herhaling === 'eenmalig' ? `Eenmalig — ${n.geplandOp.toDate().toLocaleString('nl-NL')}` : `Elke week — ${n.geplandOp.toDate().toLocaleDateString('nl-NL', { weekday: 'long' })} ${n.geplandOp.toDate().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`}</span>
+                    </div>
+                    {n.laatstVerstuurdOp && (
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Laatst verstuurd: {n.laatstVerstuurdOp.toDate().toLocaleString('nl-NL')}</div>
+                    )}
+                    {!n.actief && n.herhaling === 'eenmalig' && n.laatstVerstuurdOp && (
+                      <div style={{ fontSize: 11, color: 'var(--success)', marginTop: 4 }}>✅ Verstuurd</div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button onClick={() => handleNotifBewerken(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--white)', fontSize: 12, fontWeight: 600 }}>✎ Bewerken</button>
+                  <button onClick={() => handleNotifToggleActief(n)} style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: n.actief ? 'var(--warning)' : 'var(--success)', fontSize: 12, fontWeight: 600 }}>{n.actief ? 'Pauzeren' : 'Activeren'}</button>
+                  <button onClick={() => handleNotifVerwijderen(n)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--error)', fontSize: 12, fontWeight: 600 }}>🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {tab==='audit' && (
           <div style={{ padding: '0 20px' }}>
             <div className="section-title">Alle systeem activiteit</div>

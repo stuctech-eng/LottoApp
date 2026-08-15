@@ -122,6 +122,24 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /geplandeNotificaties/{id} {
+      // Alle ingelogde leden mogen zien wat er gepland staat (geen
+      // gevoelige info) — alleen beheerder mag aanmaken/wijzigen/
+      // verwijderen. Consistent met hoe de rest van Beheer werkt.
+      allow read: if ingelogd();
+      allow create, update, delete: if isBeheerder();
+    }
+
+    match /notificatieVerzendingen/{id} {
+      // Puur statuslogging (wie kreeg wat, wanneer) — nooit vanaf de
+      // client schrijven. De atomaire create()-claim in
+      // verwerkGeplandeNotificaties gebeurt via de Admin SDK, die
+      // deze regels toch al omzeilt; expliciet false voorkomt dat een
+      // kwaadwillende zelf een claim zou kunnen vervalsen.
+      allow read: if ingelogd();
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read: if ingelogd();
       allow write: if isBeheerder();

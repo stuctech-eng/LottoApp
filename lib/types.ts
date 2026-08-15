@@ -195,6 +195,9 @@ export type AuditAction =
   | 'lid_verwijderd'
   | 'lid_heractiveerd'
   | 'lid_definitief_verwijderd'
+  | 'geplande_notificatie_aangemaakt'
+  | 'geplande_notificatie_gewijzigd'
+  | 'geplande_notificatie_verwijderd'
   | 'trekking_ingevoerd'
   | 'trekking_gewijzigd'
   | 'seizoen_gestart'
@@ -211,3 +214,39 @@ export interface AuditLogEntry {
 }
 
 // Aangemaakt: lottosaldo_correctie audit-type
+
+// ─────────────────────── Geplande notificaties ───────────────────────
+
+export type NotificatieDoelgroep = 'alleLeden' | 'spelendeLeden' | 'beheerderKashouder';
+export type NotificatieHerhaling = 'eenmalig' | 'wekelijks';
+
+export interface GeplandeNotificatie {
+  id: string;
+  titel: string;
+  bericht: string;
+  doelgroep: NotificatieDoelgroep;
+  herhaling: NotificatieHerhaling;
+  /** Voor eenmalig: het exacte moment van versturen.
+   *  Voor wekelijks: alleen dag-van-de-week + tijdstip worden
+   *  hieruit gebruikt, herhaalt zich elke week op datzelfde moment. */
+  geplandOp: Timestamp;
+  actief: boolean;
+  laatstVerstuurdOp: Timestamp | null;
+  /** ISO-weekstring (bijv. "2026-W33") van de laatste periode waarvoor
+   *  daadwerkelijk is verstuurd — voorkomt dubbele wekelijkse
+   *  verzending zonder alleen op een tijdstempel te vertrouwen. */
+  laatstVerstuurdVoorPeriode: string | null;
+  aangemaaktDoor: string;
+  aangemaaktDoorNaam: string;
+  aangemaaktOp: Timestamp | null;
+}
+
+export interface NotificatieVerzending {
+  notificatieId: string;
+  periode: string;
+  verstuurdOp: Timestamp | null;
+  aantalDoelgroep: number;
+  aantalMetToken: number;
+  aantalVerstuurd: number;
+}
+
