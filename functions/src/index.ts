@@ -152,7 +152,21 @@ async function getFcmTokens(userId: string, setting: keyof NotificationSettings)
 // veroorzaakte een TypeScript-buildfout door noUnusedLocals in tsconfig.
 // Verwijderd; geen functionaliteit verloren.
 
-async function sendToTokens(tokens: string[], notification: { title: string; body: string }, data?: Record<string, string>) {
+/**
+ * BUGFIX (14 augustus 2026): deze functie LOGDE eerder alleen dat
+ * ongeldige tokens "worden opgeschoond" — maar verwijderde ze nooit
+ * daadwerkelijk uit Firestore. Gevolg: dode tokens (ontstaan door
+ * PWA-herinstallaties, cache-wissen, browser-sessiewissels) stapelden
+ * zich op en werden bij ELKE melding opnieuw geprobeerd, voor altijd.
+ * Op 14 augustus bleken alle 4 opgeslagen tokens van kashouder/
+ * beheerder ongeldig — de functie draaide foutloos, maar niemand
+ * kreeg iets, want er was simpelweg geen enkel geldig token meer over.
+ *
+ * userId is nodig om te weten uit welke users/{userId}/fcmTokens/
+ * subcollectie een ongeldig token daadwerkelijk verwijderd moet
+ * worden — vandaar de nieuwe, verplichte parameter.
+ */
+async function sendToTokens(userId: string, tokens: string[], notification: { title: string; body: string }, data?: Record<string, string>) {
   if (tokens.length === 0) return;
   try {
     const response = await messaging.sendEachForMulticast({
@@ -167,7 +181,14 @@ async function sendToTokens(tokens: string[], notification: { title: string; bod
       }
     });
     if (invalidTokens.length > 0) {
-      functions.logger.info(`${invalidTokens.length} ongeldige FCM tokens — worden opgeschoond`);
+      functions.logger.info(`${invalidTokens.length} ongeldige FCM tokens voor ${userId} — worden nu écht verwijderd`);
+      await Promise.all(
+        invalidTokens.map(token => db.doc(`users/${userId}/fcmTokens/${token}`).delete().catch(() => {
+          // Los, niet-kritiek: als verwijderen zelf al faalt (bijv. het
+          // document bestond al niet meer), mag dat de rest van het
+          // versturen niet verstoren.
+        }))
+      );
     }
   } catch (err) {
     functions.logger.error('FCM send error:', err);
@@ -307,14 +328,14 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
         body = `De ballen vielen op ${getrokkenTekst}. Jij had ${aantalGoed} goed. Niemand had alle 6 — de pot groeit naar ${potTekst}! Wie pakt hem volgende zaterdag? 🤞`;
       }
 
-      await sendToTokens(tokens, { title, body }, { trekkingId });
+      await sendToTokens(deelnemer.userId, tokens, { title, body }, { trekkingId });
     }
 
     // Push naar niet-betalers
     for (const nietBetaler of nietBetalers) {
       const tokens = await getFcmTokens(nietBetaler.userId, 'herinneringen');
       if (tokens.length === 0) continue;
-      await sendToTokens(tokens, {
+      await sendToTokens(nietBetaler.userId, tokens, {
         title: '🎱 Trekking gemist',
         body: `Je had deze week niet betaald, dus de getrokken nummers [${trekking.nummers.join(', ')}] tellen niet mee voor jouw verzameling. Je eerder verzamelde nummers blijven wel gewoon staan — betaal op tijd om weer mee te doen. De pot staat nu op ${potTekst}. 💪`,
       }, { path: '/betalen' });
@@ -338,7 +359,7 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
         for (const wachtendDoc of wachtendeSnap.docs) {
           const tokens = await getFcmTokens(wachtendDoc.id, 'trekkingResultaten');
           if (tokens.length === 0) continue;
-          await sendToTokens(tokens, {
+          await sendToTokens(wachtendDoc.id, tokens, {
             title: '🎉 Er is een winnaar!',
             body: `${winnaarNamen} won de pot — de nieuwe speelreeks is begonnen en jij doet vanaf nu mee!`,
           }, { path: '/dashboard' });
@@ -369,7 +390,7 @@ export const onBetalingBevestigd = functions.firestore.onDocumentUpdated(
     functions.logger.info(`Betaling bevestigd voor ${userId}: €${bedrag}`);
 
     const tokens = await getFcmTokens(userId, 'betalingBevestigd');
-    await sendToTokens(tokens, {
+    await sendToTokens(userId, tokens, {
       title: '✅ Betaling bevestigd',
       body: `€${bedrag.toFixed(2)} (${omschrijving}) is bevestigd. Je doet mee aan de trekking van deze week!`,
     });
@@ -396,7 +417,7 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
     const userIds = [...new Set(openBetalingen.docs.map(d => d.data().userId as string))];
     for (const userId of userIds) {
       const tokens = await getFcmTokens(userId, 'herinneringen');
-      await sendToTokens(tokens, {
+      await sendToTokens(userId, tokens, {
         title: '⏰ Betaalherinnering',
         body: 'Je inleg voor deze week staat nog open. Betaal vóór zaterdag 18:00 — mis je de deadline, dan telt de trekking van morgen niet mee voor je verzameling.',
       }, { path: '/betalen' });
@@ -422,7 +443,7 @@ export const onTrekkingHerinnering = functions.scheduler.onSchedule(
     for (const userDoc of usersSnap.docs) {
       const tokens = await getFcmTokens(userDoc.id, 'trekkingResultaten');
       if (tokens.length > 0) {
-        await sendToTokens(tokens, {
+        await sendToTokens(userDoc.id, tokens, {
           title: '🎱 Lotto-uitslag invoeren',
           body: 'De trekking van vanavond is beschikbaar. Voer de nummers in via de app.',
         }, { path: '/trekkingen' });
@@ -468,7 +489,7 @@ export const onTikkieCheckHerinnering = functions.scheduler.onSchedule(
     for (const userDoc of alleDocs) {
       const tokens = await getFcmTokens(userDoc.id, 'herinneringen');
       if (tokens.length > 0) {
-        await sendToTokens(tokens, {
+        await sendToTokens(userDoc.id, tokens, {
           title: '💳 Tikkie checken',
           body: 'Tijd om Tikkie te checken op nieuwe stortingen, vóór de trekking van morgen.',
         }, { path: '/kashouder/financieel' });
@@ -517,7 +538,7 @@ export const onTikkieLinkVerval = functions.scheduler.onSchedule(
     for (const userDoc of usersSnap.docs) {
       const tokens = await getFcmTokens(userDoc.id, 'herinneringen');
       if (tokens.length > 0) {
-        await sendToTokens(tokens, {
+        await sendToTokens(userDoc.id, tokens, {
           title: '🔗 Tikkie-link waarschijnlijk verlopen',
           body: `De Tikkie-link is ${dagenGeleden} dagen niet bijgewerkt en verloopt doorgaans na 14 dagen. Ververs 'm via Beheer → Instellingen.`,
         }, { path: '/beheerder/admin' });
@@ -638,7 +659,7 @@ export const onBetalingenAanmaken = functions.firestore.onDocumentUpdated(
     for (const { userId, weken } of laagSaldoMeldingen) {
       const tokens = await getFcmTokens(userId, 'herinneringen');
       if (tokens.length === 0) continue;
-      await sendToTokens(tokens, {
+      await sendToTokens(userId, tokens, {
         title: weken === 1 ? '🔴 LottoSaldo bijna op' : '🟡 LottoSaldo wordt laag',
         body: weken === 1
           ? 'Je hebt nog maar 1 week LottoSaldo over. Stort bij zodat je automatisch blijft meedoen.'
