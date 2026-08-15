@@ -19,6 +19,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { User } from './types';
 import { normaliseerRol } from './firestore-users';
+import { activeerNotificaties, notificatiesIngeschakeld } from './firebase-messaging';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -149,6 +150,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
     return unsub;
+  }, [user]);
+
+  // BUGFIX (15 augustus 2026): het FCM-token werd voorheen ALLEEN
+  // ververst op het exacte moment dat iemand de notificatie-toggle op
+  // Profiel handmatig aanzette — de toggle-state (notifActief) begon
+  // daar altijd op 'false', ongeacht of er al eerder toestemming was
+  // gegeven, dus dit gebeurde in de praktijk bijna nooit vanzelf.
+  // Gevolg: tokens werden na verloop van tijd ongeldig (browser-
+  // gedrag, PWA-herinstallaties, service-worker-updates) en er was
+  // geen enkel automatisch mechanisme om ze te vervangen — totdat
+  // iemand toevallig de aparte FCM-diagnostiekpagina bezocht.
+  //
+  // Fix: bij elke ingelogde sessie, ongeacht welke pagina bezocht
+  // wordt, wordt het token stilzwijgend ververst — maar uitsluitend
+  // als er al eerder daadwerkelijk toestemming is gegeven
+  // (notificatiesIngeschakeld() checkt de ECHTE browser-permissie,
+  // niet een React-state). Nooit ongevraagd om toestemming vragen.
+  useEffect(() => {
+    if (!user) return;
+    if (!notificatiesIngeschakeld()) return;
+    activeerNotificaties(user.uid).catch(err => {
+      console.error('Automatische token-verversing mislukt:', err);
+    });
   }, [user]);
 
   const loginWithEmail = async (email: string, password: string) => {

@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { updateUserTickets, updateUserTelefoon, formatLidSinds } from '@/lib/firestore-users';
 import { logAudit } from '@/lib/firestore-audit';
-import { activeerNotificaties, deactiveerNotificaties } from '@/lib/firebase-messaging';
+import { activeerNotificaties, deactiveerNotificaties, notificatiesIngeschakeld } from '@/lib/firebase-messaging';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Ticket } from '@/lib/types';
@@ -69,7 +69,13 @@ function ProfielPageContent() {
   const [telefoonOpgeslagen, setTelefoonOpgeslagen] = useState(false);
 
   // Notificaties
-  const [notifActief, setNotifActief] = useState(false);
+  // BUGFIX (15 augustus 2026): begon voorheen altijd op false, ook als
+  // er al eerder toestemming was gegeven — waardoor de toggle bij elk
+  // bezoek "uit" leek te staan, en het token dus alleen ververst werd
+  // op het moment dat iemand 'm handmatig weer aanzette. Nu meteen de
+  // ECHTE status (browsertoestemming), consistent met de nieuwe
+  // automatische verversing in lib/auth-context.tsx.
+  const [notifActief, setNotifActief] = useState(() => notificatiesIngeschakeld());
   const [notifBezig, setNotifBezig] = useState(false);
   const [notifToast, setNotifToast] = useState<string | null>(null);
 
