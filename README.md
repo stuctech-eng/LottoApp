@@ -324,11 +324,10 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - Leden verwijderen (soft-delete + definitief), heractiveren
 - Betaalsysteem, storting-verrekening, Tikkie-laatst-gecontroleerd
 - Wachtrij voor nieuwe leden — inclusief de gefixte storting-verrekening-check
-- Notificatie-token-opschoning en automatische verversing bij elke sessie (bevestigd met eigen ogen: van 7 naar 1 token, testmelding kwam aan)
+- Notificaties, alle drie de bugs — token-opschoning, automatische verversing, én de service worker-samenvoeging: **bevestigd met een geslaagde testmelding op `/profiel/notificaties`** (Test-tab), ná het samenvoegen van de twee service workers. De hele keten (toestemming → token → server → aflevering → weergave) is nu end-to-end bewezen werkend
 - Cumulatieve spelmodus, rol-afhankelijke navigatie
 
 ### Openstaand ⏳
-- **Service worker-samenvoeging (bug 3, notificaties)** — sterk onderbouwde hypothese, nog niet bevestigd met een geslaagde testmelding ná deze specifieke fix
 - Eerste automatische vrijgave van wachtende leden bij een echte winnaar — nog niet meegemaakt (moet nog een winnaar vallen)
 - Eerste volledige run van `onZaterdagSaldoHerinnering` op de geplande tijd (i.p.v. handmatig getriggerd) nog niet apart bevestigd
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen

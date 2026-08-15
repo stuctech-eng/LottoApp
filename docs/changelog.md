@@ -50,7 +50,7 @@ Dit werd de langste sessie van het project tot nu toe. Aanleiding: een geplande 
 
 **Fix, volgens Firebase's eigen aanbeveling voor precies dit scenario**: alles samengevoegd in **één** service worker. Firebase Messaging zit nu ín `app/sw.ts`, via de moderne `firebase/messaging/sw`-module-API (in plaats van de oudere `importScripts()`-compat-variant die niet in een module-gebaseerde worker past). `lib/firebase-messaging.ts` registreert niet langer een eigen, tweede worker — wacht simpelweg op de al-actieve, samengevoegde worker. Het oude, aparte bestand is leeggemaakt met een duidelijke uitleg, met het verzoek het handmatig uit de repo te verwijderen (niet iets wat via een geleverde zip zelf kan gebeuren).
 
-**Status aan het einde van de sessie**: deze laatste fix is de sterkst onderbouwde, meest waarschijnlijke verklaring — maar nog niet bevestigd met een geslaagde testmelding ná specifiek déze wijziging. Expliciet zo vastgelegd in plaats van voortijdig "opgelost" te melden, na een paar eerdere momenten deze sessie waarin een fix voorbarig als werkend werd aangenomen.
+**Bevestigd, met een geslaagde testmelding**: deze fix bleek inderdaad de hoofdoorzaak. Getest via de nieuwe, samengevoegde `/profiel/notificaties`-pagina (zie hieronder) — een testmelding kwam na deze wijziging daadwerkelijk aan. Hiermee zijn alle drie de bugs in de meldingsketen (dode tokens, kapotte auto-verversing, service worker-conflict) bevestigd opgelost, niet alleen "zou moeten werken".
 
 ### Notificaties, alles bij elkaar: nieuwe pagina `/profiel/notificaties`
 
