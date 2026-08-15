@@ -1004,3 +1004,54 @@ export const stuurTestNotificatie = functions.https.onCall(async (request) => {
     return { succes: false, foutmelding: `Interne fout: ${details}` };
   }
 });
+
+// ─────────────────────── onZaterdagSaldoHerinnering ───────────────────────
+
+/**
+ * Elke zaterdag 12:00 — een leuk, persoonlijk duwtje richting de
+ * trekking van diezelfde avond, met een concrete actie eraan
+ * gekoppeld: wie te weinig saldo heeft, heeft dan nog exact 6 uur om
+ * te storten vóór de 18:00-deadline (zie app/betalen/page.tsx).
+ *
+ * Alleen voor leden die daadwerkelijk meespelen — leden die nog op de
+ * nieuwe speelreeks wachten (wachtOpNieuweSpeelreeks) doen vanavond
+ * toch niet mee, dus voor hen zou dit bericht alleen verwarrend zijn.
+ */
+export const onZaterdagSaldoHerinnering = functions.scheduler.onSchedule(
+  {
+    schedule: '0 12 * * 6', // elke zaterdag 12:00
+    timeZone: 'Europe/Amsterdam',
+  },
+  async () => {
+    functions.logger.info('Zaterdag-saldo-herinnering versturen…');
+    const standaardInleg = await getStandaardInleg();
+
+    const usersSnap = await db.collection('users')
+      .where('actief', '==', true)
+      .get();
+
+    let aantalVerstuurd = 0;
+    for (const userDoc of usersSnap.docs) {
+      const data = userDoc.data();
+      const tickets = (data.tickets ?? []) as { id: string; nummers: number[] }[];
+      if (tickets.length === 0) continue;
+      if (data.wachtOpNieuweSpeelreeks === true) continue;
+
+      const tokens = await getFcmTokens(userDoc.id, 'herinneringen');
+      if (tokens.length === 0) continue;
+
+      const saldo = (data.lottoSaldo as number | undefined) ?? 0;
+      const genoegSaldo = saldo >= standaardInleg;
+
+      const title = '🎱 Vanavond vallen de ballen!';
+      const body = genoegSaldo
+        ? `Je saldo staat op €${saldo.toFixed(2)} — genoeg om mee te doen! 🍀`
+        : `Je saldo staat op €${saldo.toFixed(2)} — dat is niet genoeg. Stort vóór 18:00 vandaag via Tikkie om mee te doen!`;
+
+      await sendToTokens(userDoc.id, tokens, { title, body }, { path: '/betalen' });
+      aantalVerstuurd++;
+    }
+
+    functions.logger.info(`Zaterdag-saldo-herinnering verstuurd naar ${aantalVerstuurd} spelend(e) lid/leden.`);
+  }
+);

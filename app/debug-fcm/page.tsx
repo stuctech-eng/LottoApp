@@ -6,10 +6,11 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functionsInstance } from '@/lib/firebase';
 import app from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
 
-export default function DebugFcmPage() {
+function DebugFcmContent() {
   const { user } = useAuth();
   const [logs, setLogs] = useState<string[]>([]);
   const [bezig, setBezig] = useState(false);
@@ -118,5 +119,13 @@ export default function DebugFcmPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function DebugFcmPage() {
+  return (
+    <ProtectedRoute allowedRoles={['beheerder']}>
+      <DebugFcmContent />
+    </ProtectedRoute>
   );
 }
