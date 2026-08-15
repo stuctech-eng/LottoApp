@@ -1017,28 +1017,50 @@ export const stuurTestNotificatie = functions.https.onCall(async (request) => {
  * nieuwe speelreeks wachten (wachtOpNieuweSpeelreeks) doen vanavond
  * toch niet mee, dus voor hen zou dit bericht alleen verwarrend zijn.
  */
-export const onZaterdagSaldoHerinnering = functions.scheduler.onSchedule(
-  {
-    schedule: '0 12 * * 6', // elke zaterdag 12:00
-    timeZone: 'Europe/Amsterdam',
-  },
-  async () => {
-    functions.logger.info('Zaterdag-saldo-herinnering versturen…');
+/**
+ * Gedeelde kernlogica, herbruikbaar door zowel de geplande zaterdag-
+ * 12:00-melding als door een handmatige trigger (zie
+ * stuurZaterdagSaldoHerinneringNu hieronder) — zodat je dit niet een
+ * hele week hoeft af te wachten om te kunnen testen.
+ */
+async function voerZaterdagSaldoHerinneringUit() {
+  const statusRef = db.doc('debug/zaterdagSaldoHerinnering');
+  const details: { userId: string; naam: string; reden: string }[] = [];
+
+  try {
     const standaardInleg = await getStandaardInleg();
 
     const usersSnap = await db.collection('users')
       .where('actief', '==', true)
       .get();
 
+    let aantalMetTicket = 0;
+    let aantalNietWachtend = 0;
+    let aantalMetToken = 0;
     let aantalVerstuurd = 0;
+
     for (const userDoc of usersSnap.docs) {
       const data = userDoc.data();
+      const naam = (data.naam as string | undefined) ?? userDoc.id;
       const tickets = (data.tickets ?? []) as { id: string; nummers: number[] }[];
-      if (tickets.length === 0) continue;
-      if (data.wachtOpNieuweSpeelreeks === true) continue;
+      if (tickets.length === 0) {
+        details.push({ userId: userDoc.id, naam, reden: 'geen ticket' });
+        continue;
+      }
+      aantalMetTicket++;
+
+      if (data.wachtOpNieuweSpeelreeks === true) {
+        details.push({ userId: userDoc.id, naam, reden: 'wacht op nieuwe speelreeks' });
+        continue;
+      }
+      aantalNietWachtend++;
 
       const tokens = await getFcmTokens(userDoc.id, 'herinneringen');
-      if (tokens.length === 0) continue;
+      if (tokens.length === 0) {
+        details.push({ userId: userDoc.id, naam, reden: 'geen (geldig) FCM-token, of \'herinneringen\'-instelling staat uit' });
+        continue;
+      }
+      aantalMetToken++;
 
       const saldo = (data.lottoSaldo as number | undefined) ?? 0;
       const genoegSaldo = saldo >= standaardInleg;
@@ -1049,9 +1071,61 @@ export const onZaterdagSaldoHerinnering = functions.scheduler.onSchedule(
         : `Je saldo staat op €${saldo.toFixed(2)} — dat is niet genoeg. Stort vóór 18:00 vandaag via Tikkie om mee te doen!`;
 
       await sendToTokens(userDoc.id, tokens, { title, body }, { path: '/betalen' });
+      details.push({ userId: userDoc.id, naam, reden: `verstuurd (saldo €${saldo.toFixed(2)})` });
       aantalVerstuurd++;
     }
 
+    await statusRef.set({
+      laatsteRun: admin.firestore.FieldValue.serverTimestamp(),
+      succes: true,
+      foutmelding: null,
+      aantalGebruikersGevonden: usersSnap.size,
+      aantalMetTicket,
+      aantalNietWachtend,
+      aantalMetToken,
+      aantalVerstuurd,
+      details,
+    });
+
     functions.logger.info(`Zaterdag-saldo-herinnering verstuurd naar ${aantalVerstuurd} spelend(e) lid/leden.`);
+    return { succes: true, aantalVerstuurd };
+  } catch (err: unknown) {
+    const foutmelding = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    functions.logger.error('Zaterdag-saldo-herinnering fout:', err);
+    await statusRef.set({
+      laatsteRun: admin.firestore.FieldValue.serverTimestamp(),
+      succes: false,
+      foutmelding,
+      details,
+    });
+    return { succes: false, foutmelding };
+  }
+}
+
+export const onZaterdagSaldoHerinnering = functions.scheduler.onSchedule(
+  {
+    schedule: '0 12 * * 6', // elke zaterdag 12:00
+    timeZone: 'Europe/Amsterdam',
+  },
+  async () => {
+    functions.logger.info('Zaterdag-saldo-herinnering versturen (geplande run)…');
+    await voerZaterdagSaldoHerinneringUit();
   }
 );
+
+/**
+ * Handmatige trigger, alleen voor beheerder — voert exact dezelfde
+ * logica uit als de geplande zaterdag-12:00-versie, zodat je niet
+ * een hele week hoeft te wachten om te testen of het werkt.
+ */
+export const stuurZaterdagSaldoHerinneringNu = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const callerSnap = await db.doc(`users/${request.auth.uid}`).get();
+  if (callerSnap.data()?.rol !== 'beheerder') {
+    throw new functions.https.HttpsError('permission-denied', 'Alleen beheerder mag dit handmatig triggeren.');
+  }
+  functions.logger.info(`Zaterdag-saldo-herinnering handmatig getriggerd door ${request.auth.uid}.`);
+  return await voerZaterdagSaldoHerinneringUit();
+});

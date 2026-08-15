@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getMessaging, getToken } from 'firebase/messaging';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functionsInstance } from '@/lib/firebase';
 import app from '@/lib/firebase';
@@ -9,6 +9,18 @@ import { useAuth } from '@/lib/auth-context';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? '';
+
+interface ZaterdagStatus {
+  laatsteRun?: Timestamp;
+  succes: boolean;
+  foutmelding: string | null;
+  aantalGebruikersGevonden?: number;
+  aantalMetTicket?: number;
+  aantalNietWachtend?: number;
+  aantalMetToken?: number;
+  aantalVerstuurd?: number;
+  details?: { userId: string; naam: string; reden: string }[];
+}
 
 function DebugFcmContent() {
   const { user } = useAuth();
@@ -38,6 +50,41 @@ function DebugFcmContent() {
       setTestResultaat(`❌ Mislukt: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setTestBezig(false);
+    }
+  };
+
+  // Zaterdag-saldo-herinnering: statusverslag ophalen + handmatig kunnen triggeren
+  const [zaterdagStatus, setZaterdagStatus] = useState<ZaterdagStatus | null>(null);
+  const [zaterdagLaden, setZaterdagLaden] = useState(false);
+  const [zaterdagTriggerBezig, setZaterdagTriggerBezig] = useState(false);
+
+  const haalZaterdagStatusOp = async () => {
+    setZaterdagLaden(true);
+    try {
+      const snap = await getDoc(doc(db, 'debug/zaterdagSaldoHerinnering'));
+      setZaterdagStatus(snap.exists() ? (snap.data() as ZaterdagStatus) : null);
+    } finally {
+      setZaterdagLaden(false);
+    }
+  };
+
+  useEffect(() => {
+    haalZaterdagStatusOp();
+  }, []);
+
+  const triggerZaterdagNu = async () => {
+    setZaterdagTriggerBezig(true);
+    try {
+      const fn = httpsCallable<Record<string, never>, { succes: boolean; foutmelding?: string; aantalVerstuurd?: number }>(functionsInstance, 'stuurZaterdagSaldoHerinneringNu');
+      await fn({});
+      // Kort wachten zodat de Firestore-write van de functie zelf
+      // gegarandeerd binnen is vóór we opnieuw ophalen.
+      await new Promise(r => setTimeout(r, 1500));
+      await haalZaterdagStatusOp();
+    } catch (e: unknown) {
+      setZaterdagStatus({ succes: false, foutmelding: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setZaterdagTriggerBezig(false);
     }
   };
 
@@ -109,6 +156,42 @@ function DebugFcmContent() {
           {testResultaat}
         </div>
       )}
+
+      <div style={{ color: '#4a9eff', fontSize: 16, fontWeight: 700, marginTop: 8, marginBottom: 12 }}>🎱 Zaterdag-saldo-herinnering</div>
+      <button onClick={triggerZaterdagNu} disabled={zaterdagTriggerBezig} style={{ width: '100%', padding: 14, background: '#f0c060', color: '#0d1b2a', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, marginBottom: 12, opacity: zaterdagTriggerBezig ? 0.6 : 1 }}>
+        {zaterdagTriggerBezig ? '⏳ Bezig...' : '▶ Nu handmatig versturen (test)'}
+      </button>
+
+      <div style={{ background: '#132233', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        {zaterdagLaden && <div style={{ color: '#7a9ab8', fontSize: 13 }}>Laden...</div>}
+        {!zaterdagLaden && !zaterdagStatus && <div style={{ color: '#7a9ab8', fontSize: 13 }}>Nog nooit gedraaid.</div>}
+        {!zaterdagLaden && zaterdagStatus && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: zaterdagStatus.succes ? '#34c97a' : '#ff5a5a', marginBottom: 8 }}>
+              {zaterdagStatus.succes ? '✅ Laatste run geslaagd' : '❌ Laatste run mislukt'}
+              {zaterdagStatus.laatsteRun && ` — ${zaterdagStatus.laatsteRun.toDate().toLocaleString('nl-NL')}`}
+            </div>
+            {zaterdagStatus.foutmelding && (
+              <div style={{ fontSize: 12, color: '#ff5a5a', marginBottom: 8, wordBreak: 'break-all' }}>{zaterdagStatus.foutmelding}</div>
+            )}
+            {zaterdagStatus.succes && (
+              <div style={{ fontSize: 12, color: '#f8fafc', marginBottom: 10, lineHeight: 1.8 }}>
+                {zaterdagStatus.aantalGebruikersGevonden} actieve leden gevonden → {zaterdagStatus.aantalMetTicket} met ticket → {zaterdagStatus.aantalNietWachtend} spelen mee (niet wachtend) → {zaterdagStatus.aantalMetToken} met geldig token → <strong>{zaterdagStatus.aantalVerstuurd} melding(en) verstuurd</strong>
+              </div>
+            )}
+            {zaterdagStatus.details && zaterdagStatus.details.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, color: '#7a9ab8', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Per lid</div>
+                {zaterdagStatus.details.map((d, i) => (
+                  <div key={i} style={{ fontSize: 12, color: d.reden.startsWith('verstuurd') ? '#34c97a' : '#7a9ab8', marginBottom: 4 }}>
+                    {d.naam}: {d.reden}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <div style={{ background: '#132233', borderRadius: 12, padding: 14, minHeight: 300 }}>
         {logs.length === 0 && <div style={{ color: '#7a9ab8', fontSize: 13 }}>Druk op Start om te beginnen...</div>}
