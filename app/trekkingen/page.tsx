@@ -104,6 +104,49 @@ function TrekkingInvoerModal({
     }
   };
 
+  // Haalt alle losse getallen uit geplakte tekst, ongeacht scheidingsteken (spatie/komma/tab).
+  // Werkt voor 1- én 2-cijferige nummers omdat er op scheidingstekens gesplitst wordt, niet op karakterpositie.
+  const parsePlaktekst = (tekst: string): number[] => {
+    const matches = tekst.match(/\d+/g);
+    if (!matches) return [];
+    return matches.map(m => parseInt(m, 10)).filter(n => !isNaN(n) && n >= 0 && n <= 99);
+  };
+
+  // Vult de hoofdnummers (en indien aanwezig de bonusbal) in één keer met geplakte trekkingsgetallen.
+  const vulFormulierIn = (getallen: number[]) => {
+    const n = [...nummers];
+    for (let i = 0; i < spelConfig.aantalGetallen; i++) {
+      n[i] = getallen[i] !== undefined ? String(getallen[i]) : '';
+    }
+    setNummers(n);
+    setFoutieveIndexen(new Set());
+    setError(null);
+    if (spelConfig.bonusBal && getallen.length > spelConfig.aantalGetallen) {
+      setBonusBal(String(getallen[spelConfig.aantalGetallen]));
+    }
+    const laatsteIngevuld = Math.min(getallen.length, spelConfig.aantalGetallen) - 1;
+    setTimeout(() => inputRefs.current[Math.max(laatsteIngevuld, 0)]?.focus(), 50);
+  };
+
+  // Bij plakken in een bal-invoerveld: 2+ getallen gevonden → hele trekking in één keer invullen.
+  // Precies 1 getal → normale plak-actie voor dat veld laten gebeuren (onChange filtert al niet-cijfers).
+  const handleNummerPaste = (i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const getallen = parsePlaktekst(e.clipboardData.getData('text'));
+    if (getallen.length >= 2) {
+      e.preventDefault();
+      vulFormulierIn(getallen);
+    }
+  };
+
+  // Bonusveld ondersteunt hetzelfde: plak je daar de volledige trekking, dan vult het toch alles in.
+  const handleBonusPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const getallen = parsePlaktekst(e.clipboardData.getData('text'));
+    if (getallen.length >= 2) {
+      e.preventDefault();
+      vulFormulierIn(getallen);
+    }
+  };
+
   const handleSave = async () => {
     if (!user || !profile) return;
     if (!seizoen) { setError('Geen actief seizoen gevonden. Maak eerst een seizoen aan.'); return; }
@@ -209,6 +252,7 @@ function TrekkingInvoerModal({
                     value={val}
                     onChange={e => handleNummerChange(i, e.target.value)}
                     onKeyDown={e => handleKeyDown(i, e)}
+                    onPaste={e => handleNummerPaste(i, e)}
                     style={{
                       width: 52, height: 52, borderRadius: '50%',
                       background: 'var(--surface)',
@@ -227,6 +271,7 @@ function TrekkingInvoerModal({
                     <input
                       type="number" inputMode="numeric" placeholder="Bonusnummer"
                       value={bonusBal} onChange={e => setBonusBal(e.target.value.replace(/[^0-9]/g, ''))}
+                      onPaste={handleBonusPaste}
                       style={{
                         width: '100%', height: 48, borderRadius: 13,
                         background: 'var(--gold-soft)', border: '1.5px solid rgba(240,192,96,0.3)',
