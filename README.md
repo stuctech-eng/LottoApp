@@ -153,9 +153,49 @@ Schrijft een volledig statusverslag naar `debug/zaterdagSaldoHerinnering` (per-l
 
 ---
 
+## Geplande notificaties — beheerder maakt zelf meldingen (15 augustus 2026)
+
+**Beheer → tab "🔔 Notificaties"**: de beheerder kan zelf eenmalige of wekelijkse meldingen aanmaken, bewerken, pauzeren en verwijderen — zonder dat daar ooit nog een nieuwe deploy voor nodig is. Dit was tot dan toe niet mogelijk: elke geplande melding (zoals de zaterdag-12:00-herinnering hierboven) stond hardgecodeerd in de Cloud Function zelf.
+
+### Architectuur — bewust géén aparte scheduler per notificatie
+Firebase Cloud Functions kan geen dynamische, per-melding schema's aanmaken (schema's liggen vast bij deploy-tijd). Oplossing, na overleg met GPT als tweede AI-mening (Claude blijft eindverantwoordelijk voor wat daadwerkelijk gebouwd wordt): **één vaste achtergrondfunctie** (`verwerkGeplandeNotificaties`, elke 5 minuten) die een Firestore-collectie (`geplandeNotificaties`) checkt op wat er *nu* verstuurd moet worden — puur data-gedreven, geen code-wijziging nodig voor een nieuwe melding.
+
+- **Doelgroepen**: 3 vaste opties — alle leden, alleen spelende leden (`actief && tickets.length > 0 && !wachtOpNieuweSpeelreeks`, exact dezelfde definitie als elders in de app), of beheerder+kashouder. Bewust geen losse ledenselectie ("onnodig complex voor nu").
+- **Herhaling**: eenmalig, of wekelijks (herhaalt op dezelfde dag-van-de-week + tijdstip als het oorspronkelijke gekozen moment).
+- **Valt onder de bestaande "Herinneringen"-instelling** — een beheerder kan zo nooit de eigen notificatievoorkeur van een lid overrulen; gebruikt gewoon `getFcmTokens(userId, 'herinneringen')`.
+- **Dubbele verzending bij wekelijkse meldingen voorkomen**: een atomaire "claim" per periode. Elke keer dat de achtergrondfunctie iets wil versturen, probeert die eerst een document aan te maken op `notificatieVerzendingen/{notificatieId}_{periode}` via Firestore's `create()` — die faalt vanzelf (ALREADY_EXISTS) als een andere run dit al claimde. Geen handmatige transactie-logica nodig; dit is atomisch door hoe `create()` zelf werkt. **Vooraf geïsoleerd getest** met 9 scenario's (inclusief het kritieke: twee "gelijktijdige" claimpogingen, waarvan er precies één mag slagen) voordat het ooit naar productie ging.
+- **Handmatig testen**: een knop ("▶ Nu checken wat er aan de beurt is") roept dezelfde kernlogica synchroon aan, zodat een nieuwe melding niet op de eerstvolgende 5-minuten-tik hoeft te wachten om te verifiëren.
+
+### Firestore
+```
+/geplandeNotificaties/{id}
+  titel, bericht, doelgroep, herhaling, geplandOp, actief,
+  laatstVerstuurdOp, laatstVerstuurdVoorPeriode,
+  aangemaaktDoor, aangemaaktDoorNaam, aangemaaktOp
+
+/notificatieVerzendingen/{notificatieId}_{periode}
+  notificatieId, periode, verstuurdOp,
+  aantalDoelgroep, aantalMetToken, aantalVerstuurd
+```
+Rules: `geplandeNotificaties` — lezen voor iedereen ingelogd, schrijven alleen beheerder. `notificatieVerzendingen` — puur statuslogging, nooit vanaf de client schrijfbaar (de atomaire claim gebeurt via de Cloud Function/Admin SDK).
+
+---
+
 ## Vereniging-instellingen
 
 Beheer → Instellingen → "Vereniging": **Naam vereniging** en **Standaard inleg** bewerkbaar, opgeslagen in `/verenigingConfig/main`.
+
+---
+
+## Voorwaarden & Privacy (15 augustus 2026)
+
+`/profiel/voorwaarden` — een informele, leesbare voorwaarden- en privacypagina, bereikbaar via Profiel. Inhoud is tot stand gekomen via een concept-tekst die eerst aan GPT is voorgelegd voor een tweede mening (Claude blijft eindverantwoordelijk voor wat er in de app terechtkomt), met als expliciete afspraak: **geen eigen juridische conclusies trekken** (bijv. nooit beweren "wij zijn vergunningvrij" — dat is een inschatting die niet in eigen voorwaarden hoort, ook al maakt de Kansspelautoriteit wel degelijk onderscheid voor besloten kring-kansspelen).
+
+Twee dingen zijn **dynamisch** gemaakt t.o.v. het oorspronkelijke concept, in plaats van hardgecodeerd:
+- Het bedrag van de standaard inleg (leest live uit `/verenigingConfig/main`, i.p.v. een hardgecoded "€4" dat zou verouderen als het bedrag ooit wijzigt)
+- De namen van de huidige beheerder(s)/kashouder(s) in de voettekst (leest live uit de ledenlijst, i.p.v. `[naam]`-placeholders)
+
+14 secties: wie kan meedoen, hoe het spel werkt, betaalde deelname, betalen, de digitale kas, transparantie, uitnodigingen, welke gegevens worden bewaard, privacy, wat er gebeurt als je stopt, aansprakelijkheid voor technische storingen, verwijzing naar Startinfo & Speluitleg, contact, en een slotwoord.
 
 ---
 
@@ -260,6 +300,15 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
   laatsteRun, succes, foutmelding, aantalGebruikersGevonden,
   aantalMetTicket, aantalNietWachtend, aantalMetToken,
   aantalVerstuurd, details[]
+
+/geplandeNotificaties/{id}
+  titel, bericht, doelgroep, herhaling, geplandOp, actief,
+  laatstVerstuurdOp, laatstVerstuurdVoorPeriode,
+  aangemaaktDoor, aangemaaktDoorNaam, aangemaaktOp
+
+/notificatieVerzendingen/{notificatieId}_{periode}
+  notificatieId, periode, verstuurdOp,
+  aantalDoelgroep, aantalMetToken, aantalVerstuurd
 ```
 
 **Ontbrekend veld = impliciete default** geldt nu voor: `actief` (true), `onboardingCompleted` (true), `wachtOpNieuweSpeelreeks` (false/onwaar), `notificationSettings` (alle categorieën aan behalve ranglijstUpdates) — nooit een migratiescript nodig, zie architectuurregel 7.
@@ -288,6 +337,8 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `stuurTestNotificatie` | Callable, ingelogde gebruikers | Testmelding naar het eigen account, met zichtbare foutmelding i.p.v. generiek "internal" |
 | `stuurTestNotificatieMetNotificationVeld` | Callable, ingelogde gebruikers | Tijdelijke diagnosefunctie (notification-veld i.p.v. data-only) — kan weg zodra de SW-fix structureel bevestigd is |
 | `stuurZaterdagSaldoHerinneringNu` | Callable, alleen beheerder | Handmatige trigger van de zaterdag-melding, voor testen zonder te wachten |
+| `verwerkGeplandeNotificaties` | Elke 5 minuten | Generieke achtergrondfunctie voor door de beheerder zelf aangemaakte meldingen (Beheer → Notificaties) — checkt `geplandeNotificaties` op wat nu verstuurd moet worden, atomaire claim per periode voorkomt dubbele verzending |
+| `testVerwerkGeplandeNotificatiesNu` | Callable, alleen beheerder | Handmatige trigger van dezelfde kernlogica, voor direct testen na het aanmaken van een nieuwe melding |
 
 `sendToTokens()` verwijdert sinds 15 augustus **echt** ongeldige tokens (was eerder alleen een logregel).
 
@@ -308,10 +359,11 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `/spelregels`, `/help`, `/debug-fcm` | Redirects (naar `/startinfo` resp. `/profiel/notificaties`) |
 | `/profiel` | Lid — naam, ticket, telefoon, link naar Notificaties |
 | **`/profiel/notificaties`** | **Lid — nieuw: Instellingen-tab (per categorie) + Test-tab (diagnostiek, testmelding, zaterdag-trigger beheerder-only)** |
+| `/profiel/voorwaarden` | Lid — Voorwaarden & Privacy, dynamisch bedrag en namen |
 | `/kas` | Alle rollen — alleen-lezen kasoverzicht |
 | `/kashouder`, `/kashouder/financieel` | Kashouder(+) — inclusief "Tikkie laatst gecontroleerd" |
 | `/leden` | Kashouder+ — uitnodigen, ❌ soft-delete, 🗑️ definitief verwijderen (bij inactief), Heractiveren |
-| `/beheerder`, `/beheerder/admin` | Beheerder |
+| `/beheerder`, `/beheerder/admin` | Beheerder — Instellingen, Spel, Prijzen, Seizoen, **Notificaties (nieuw)**, Audit log |
 | `/ranglijst`, `/hall-of-fame` | Alle rollen |
 | `/offline`, `/serwist/[path]` | PWA-ondersteuning, geen UI |
 
@@ -326,8 +378,10 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - Wachtrij voor nieuwe leden — inclusief de gefixte storting-verrekening-check
 - Notificaties, alle drie de bugs — token-opschoning, automatische verversing, én de service worker-samenvoeging: **bevestigd met een geslaagde testmelding op `/profiel/notificaties`** (Test-tab), ná het samenvoegen van de twee service workers. De hele keten (toestemming → token → server → aflevering → weergave) is nu end-to-end bewezen werkend
 - Cumulatieve spelmodus, rol-afhankelijke navigatie
+- Voorwaarden & Privacy-pagina, met dynamisch bedrag en namen
 
 ### Openstaand ⏳
+- **Geplande notificaties (Beheer → Notificaties)** — kernlogica geïsoleerd getest (9/9 geslaagd) en de Cloud Function compileert schoon, maar nog niet bevestigd met een daadwerkelijk aangemaakte en aangekomen melding in productie
 - Eerste automatische vrijgave van wachtende leden bij een echte winnaar — nog niet meegemaakt (moet nog een winnaar vallen)
 - Eerste volledige run van `onZaterdagSaldoHerinnering` op de geplande tijd (i.p.v. handmatig getriggerd) nog niet apart bevestigd
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen
