@@ -307,6 +307,17 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
 
     for (const lid of alleActieveLeden) {
       const userData = lid.data;
+
+      // Leden die nog op een nieuwe speelreeks wachten (net lid via
+      // uitnodiging mid-reeks, of heractiveerd terwijl ze nog
+      // wachtten) mogen nooit meedoen aan de LOPENDE reeks — ook niet
+      // als ze toch al een ticket hebben en betaald hebben. Vroeger
+      // hing dit toevallig af van een lege tickets-lijst; dat is geen
+      // garantie (de UI verbiedt ticket aanmaken tijdens wachten
+      // niet, en heractiveren herstelt een eerder aangemaakt ticket).
+      // Daarom hier expliciet gecheckt, ongeacht ticket/betaalstatus.
+      if (userData.wachtOpNieuweSpeelreeks === true) continue;
+
       const tickets = ((userData.tickets ?? []) as { id: string; naam: string; nummers: number[] }[])
         .filter(t => t.nummers && t.nummers.length > 0);
       if (tickets.length === 0) continue;
@@ -835,6 +846,9 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
 
     const deelnemers: LidTickets[] = [];
     for (const lid of alleLeden) {
+      // Zelfde wachtrij-check als onTrekkingVerwerkt — zie de
+      // toelichting daar. Bij herberekenen moet dit net zo streng zijn.
+      if (lid.data.wachtOpNieuweSpeelreeks === true) continue;
       if (!betalersVoorDezeTrekking.has(lid.id)) continue;
       const tickets = ((lid.data.tickets ?? []) as { id: string; naam: string; nummers: number[] }[])
         .filter(t => t.nummers && t.nummers.length > 0);
