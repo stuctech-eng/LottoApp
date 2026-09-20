@@ -162,6 +162,29 @@ function AdminPageContent() {
     }
   };
 
+  const handleHerberekenPrijsBedrag = async () => {
+    const bevestigd = window.confirm(
+      'Dit berekent het prijsbedrag van ALLE winnaars opnieuw, ook degenen die al een bedrag hebben — bijv. na het corrigeren van een foutieve betaling. Doorgaan?'
+    );
+    if (!bevestigd) return;
+    setPrijsBedragBezig(true);
+    setPrijsBedragError(null);
+    setPrijsBedragResultaat(null);
+    try {
+      const result = await vulHistorischPrijsBedragIn(true);
+      if (result.bijgewerkt === 0) {
+        setPrijsBedragResultaat('Geen winnaars gevonden om te herberekenen.');
+      } else {
+        const regels = result.details.map(d => `${d.userNaam}: €${d.prijsBedrag.toFixed(0)}`).join(', ');
+        setPrijsBedragResultaat(`✓ (herberekend) ${result.bijgewerkt} winnaar-resultaat(en). ${regels}`);
+      }
+    } catch (err) {
+      setPrijsBedragError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
+    } finally {
+      setPrijsBedragBezig(false);
+    }
+  };
+
   const handleBekijkDetails = async () => {
     setDetailsBezig(true);
     setDetailsError(null);
@@ -665,6 +688,13 @@ function AdminPageContent() {
                 style={{ width: '100%', background: 'linear-gradient(135deg,var(--gold),#c08820)', color: 'var(--navy)', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: prijsBedragBezig ? 0.6 : 1 }}
               >
                 {prijsBedragBezig ? '⏳ Bezig…' : '💰 Historisch prijsbedrag invullen'}
+              </button>
+              <button
+                onClick={handleHerberekenPrijsBedrag}
+                disabled={prijsBedragBezig}
+                style={{ width: '100%', background: 'var(--surface2)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: prijsBedragBezig ? 0.6 : 1, marginTop: 10 }}
+              >
+                {prijsBedragBezig ? '⏳ Bezig…' : '♻️ Alle winnaars herberekenen (na correctie)'}
               </button>
               {prijsBedragResultaat && (
                 <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 10, lineHeight: 1.5 }}>{prijsBedragResultaat}</div>

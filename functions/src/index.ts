@@ -922,11 +922,17 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
  * winnende trekking zelf — geld dat pas ná die winst bevestigd is,
  * hoort bij de volgende speelreeks, niet bij deze uitbetaling.
  *
- * Veilig om vaker te draaien: raakt alleen resultaten waar
+ * Veilig om vaker te draaien: raakt standaard alleen resultaten waar
  * prijsBedrag nog ontbreekt (null of niet aanwezig). Bij meerdere
  * winnaars van dezelfde trekking wordt de pot gedeeld door het
  * aantal winnaars — elke winnaar krijgt zijn eigen aandeel, niet de
  * volle pot.
+ *
+ * Met forceer: true worden OOK winnaars met een al ingevuld
+ * prijsBedrag opnieuw berekend — nodig als brondata achteraf is
+ * gecorrigeerd (bijv. een betaling die alsnog als 'gecorrigeerd'
+ * gemarkeerd werd) en het eerder vastgelegde bedrag dus niet meer
+ * klopt.
  *
  * Alleen beheerders mogen dit aanroepen.
  */
@@ -939,8 +945,10 @@ export const vulHistorischPrijsBedragIn = functions.https.onCall(async (request)
     throw new functions.https.HttpsError('permission-denied', 'Alleen beheerders mogen dit uitvoeren.');
   }
 
+  const forceer = request.data?.forceer === true;
+
   const winnaarsSnap = await db.collection('resultaten').where('isWinnaar', '==', true).get();
-  const teVullen = winnaarsSnap.docs.filter(d => d.data().prijsBedrag == null);
+  const teVullen = forceer ? winnaarsSnap.docs : winnaarsSnap.docs.filter(d => d.data().prijsBedrag == null);
 
   if (teVullen.length === 0) {
     return { bijgewerkt: 0, details: [] as { userNaam: string; trekkingId: string; prijsBedrag: number }[] };

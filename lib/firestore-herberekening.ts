@@ -32,9 +32,14 @@ interface VulHistorischPrijsBedragInResult {
  * alleen resultaten waar het bedrag nog ontbreekt. Alleen beheerders
  * mogen dit aanroepen (wordt ook server-side afgedwongen).
  */
-export async function vulHistorischPrijsBedragIn(): Promise<VulHistorischPrijsBedragInResult> {
-  const fn = httpsCallable<Record<string, never>, VulHistorischPrijsBedragInResult>(functionsInstance, 'vulHistorischPrijsBedragIn');
-  const result = await fn({});
+/**
+ * forceer: true berekent OOK winnaars met een al ingevuld prijsBedrag
+ * opnieuw — nodig als brondata achteraf gecorrigeerd is (bijv. een
+ * betaling die alsnog als 'gecorrigeerd' gemarkeerd werd).
+ */
+export async function vulHistorischPrijsBedragIn(forceer = false): Promise<VulHistorischPrijsBedragInResult> {
+  const fn = httpsCallable<{ forceer?: boolean }, VulHistorischPrijsBedragInResult>(functionsInstance, 'vulHistorischPrijsBedragIn');
+  const result = await fn({ forceer });
   return result.data;
 }
 
