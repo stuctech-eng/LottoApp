@@ -333,14 +333,19 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
     // dus mogelijk anders) live herberekend te worden. Zie ook de
     // uitgebreide toelichting in lib/firestore-prijzenpot.ts over
     // waarom dit NIET hetzelfde is als het totale kassaldo.
+    //
+    // Bij meerdere winnaars wordt de pot GEDEELD: prijsBedrag is per
+    // winnaar dus prijzenpot / aantal winnaars, niet de volle pot
+    // voor iedereen.
     const prijzenpot = await berekenPrijzenpotServerSide({ uitgeslotenTrekkingId: trekkingId });
+    const prijsPerWinnaar = output.winnaars.length > 0 ? prijzenpot / output.winnaars.length : 0;
 
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
       const ref = db.collection('resultaten').doc();
       batch.set(ref, {
         ...resultaat,
-        prijsBedrag: resultaat.isWinnaar ? prijzenpot : null,
+        prijsBedrag: resultaat.isWinnaar ? prijsPerWinnaar : null,
         verwerktOp: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
@@ -387,9 +392,13 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       let body: string;
 
       if (mijnResultaat?.isWinnaar) {
-        // Winnaar!
+        // Winnaar! Bij meerdere winnaars wordt de pot gedeeld — dan
+        // melden we het eigen aandeel, niet de volle pot.
         title = '🎰 Jackpot!';
-        body = `De ballen zijn gevallen... ${getrokkenTekst}. En jij had ze allemaal goed! 🏆 Gefeliciteerd ${deelnemer.userNaam}, jij wint de pot van ${potTekst}! Wat een avond!`;
+        const winstTekst = output.winnaars.length > 1
+          ? `jij wint mee — met ${output.winnaars.length} winnaars is de pot van ${potTekst} gedeeld, jouw deel: €${prijsPerWinnaar.toFixed(0)}`
+          : `jij wint de pot van €${prijsPerWinnaar.toFixed(0)}`;
+        body = `De ballen zijn gevallen... ${getrokkenTekst}. En jij had ze allemaal goed! 🏆 Gefeliciteerd ${deelnemer.userNaam}, ${winstTekst}! Wat een avond!`;
       } else if (output.winnaars.length > 0) {
         // Er is een winnaar maar niet jij
         const aantalGoed = mijnResultaat?.aantalGoed ?? 0;
@@ -840,18 +849,20 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
     const output = verwerkTrekking({ trekking, deelnemers, spelConfig });
 
     // Zelfde prijzenpot-vastlegging als in onTrekkingVerwerkt — zie
-    // toelichting daar. Bij herberekenen kan dit dus een eerder
-    // vastgelegd prijsBedrag opnieuw (en mogelijk anders) berekenen,
-    // wat precies de bedoeling is: herberekenen betekent "reconstrueer
-    // dit opnieuw, vanaf de brondata".
+    // toelichting daar, inclusief het delen van de pot bij meerdere
+    // winnaars. Bij herberekenen kan dit dus een eerder vastgelegd
+    // prijsBedrag opnieuw (en mogelijk anders) berekenen, wat precies
+    // de bedoeling is: herberekenen betekent "reconstrueer dit
+    // opnieuw, vanaf de brondata".
     const prijzenpot = await berekenPrijzenpotServerSide({ uitgeslotenTrekkingId: trekkingDoc.id });
+    const prijsPerWinnaar = output.winnaars.length > 0 ? prijzenpot / output.winnaars.length : 0;
 
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
       const ref = db.collection('resultaten').doc();
       batch.set(ref, {
         ...resultaat,
-        prijsBedrag: resultaat.isWinnaar ? prijzenpot : null,
+        prijsBedrag: resultaat.isWinnaar ? prijsPerWinnaar : null,
         verwerktOp: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
@@ -912,10 +923,10 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
  * hoort bij de volgende speelreeks, niet bij deze uitbetaling.
  *
  * Veilig om vaker te draaien: raakt alleen resultaten waar
- * prijsBedrag nog ontbreekt (null of niet aanwezig). Winnaars van
- * dezelfde trekking delen hetzelfde prijsbedrag (er is nergens in
- * het systeem een splits-regel voor meerdere winnaars — zie ook de
- * bestaande pushmelding-tekst, die iedere winnaar "de pot" toezegt).
+ * prijsBedrag nog ontbreekt (null of niet aanwezig). Bij meerdere
+ * winnaars van dezelfde trekking wordt de pot gedeeld door het
+ * aantal winnaars — elke winnaar krijgt zijn eigen aandeel, niet de
+ * volle pot.
  *
  * Alleen beheerders mogen dit aanroepen.
  */
@@ -947,7 +958,7 @@ export const vulHistorischPrijsBedragIn = functions.https.onCall(async (request)
   const details: { userNaam: string; trekkingId: string; prijsBedrag: number }[] = [];
   const batch = db.batch();
 
-  for (const [trekkingId, docs] of perTrekking) {
+  for (const [trekkingId, docsTeVullen] of perTrekking) {
     const trekkingSnap = await db.doc(`trekkingen/${trekkingId}`).get();
     const trekkingDatum = trekkingSnap.exists ? (trekkingSnap.data()?.datum?.toDate?.() as Date | undefined) : undefined;
     if (!trekkingDatum) {
@@ -955,12 +966,23 @@ export const vulHistorischPrijsBedragIn = functions.https.onCall(async (request)
       continue;
     }
     const trekkingWeek = getTrekkingWeek(trekkingDatum);
-    const prijsBedrag = await berekenPrijzenpotServerSide({
+
+    // Totaal aantal winnaars van déze trekking — niet alleen degenen
+    // die nog een leeg prijsBedrag hebben, want anders zou een
+    // gedeeltelijke tweede run de pot verkeerd delen.
+    const alleWinnaarsSnap = await db.collection('resultaten')
+      .where('trekkingId', '==', trekkingId)
+      .where('isWinnaar', '==', true)
+      .get();
+    const aantalWinnaars = alleWinnaarsSnap.size;
+
+    const totalePot = await berekenPrijzenpotServerSide({
       totEnMetWeek: trekkingWeek,
       uitgeslotenTrekkingId: trekkingId,
     });
+    const prijsBedrag = aantalWinnaars > 0 ? totalePot / aantalWinnaars : 0;
 
-    for (const d of docs) {
+    for (const d of docsTeVullen) {
       batch.update(d.ref, { prijsBedrag });
       details.push({ userNaam: d.data().userNaam as string ?? 'Onbekend', trekkingId, prijsBedrag });
     }

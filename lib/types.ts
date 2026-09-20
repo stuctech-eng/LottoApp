@@ -119,13 +119,15 @@ export interface Resultaat {
   punten: number;
   isWinnaar: boolean;
   /**
-   * De prijzenpot van de speelreeks op het moment van winnen —
-   * alleen gevuld bij isWinnaar: true, anders null. Vastgelegd op
-   * het moment zelf (niet achteraf live herberekend) zodat het
-   * bedrag correct blijft ook nadat er weer nieuwe stortingen voor
-   * de volgende speelreeks binnenkomen. Zie lib/firestore-prijzenpot.ts.
+   * Het EIGEN aandeel van deze winnaar in de prijzenpot — bij
+   * meerdere winnaars van dezelfde trekking is dit de pot gedeeld
+   * door het aantal winnaars, niet de volle pot. Alleen gevuld bij
+   * isWinnaar: true, anders null. Vastgelegd op het moment van
+   * winnen (niet achteraf live herberekend) zodat het bedrag correct
+   * blijft ook nadat er weer nieuwe stortingen voor de volgende
+   * speelreeks binnenkomen. Zie lib/firestore-prijzenpot.ts.
    */
-  prijsBedrag: number | null;
+  prijsBedrag?: number | null;
   verwerktOp: Timestamp | null;
 }
 
