@@ -118,6 +118,14 @@ export interface Resultaat {
   bonusGoed: boolean;
   punten: number;
   isWinnaar: boolean;
+  /**
+   * De prijzenpot van de speelreeks op het moment van winnen —
+   * alleen gevuld bij isWinnaar: true, anders null. Vastgelegd op
+   * het moment zelf (niet achteraf live herberekend) zodat het
+   * bedrag correct blijft ook nadat er weer nieuwe stortingen voor
+   * de volgende speelreeks binnenkomen. Zie lib/firestore-prijzenpot.ts.
+   */
+  prijsBedrag: number | null;
   verwerktOp: Timestamp | null;
 }
 

@@ -107,7 +107,9 @@ function TrekkingDetailContent() {
               {winnaars.map(w => (
                 <div key={`${w.userId}-${w.ticketId}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>{w.userNaam} · {w.ticketNaam}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>{w.aantalGoed} goed</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
+                    {w.aantalGoed} goed{w.prijsBedrag !== null ? ` · €${w.prijsBedrag.toFixed(0)}` : ''}
+                  </span>
                 </div>
               ))}
             </div>

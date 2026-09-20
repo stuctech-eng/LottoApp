@@ -85,6 +85,7 @@ export function subscribeResultaten(trekkingId: string, callback: (resultaten: R
           bonusGoed: data.bonusGoed ?? false,
           punten: data.punten ?? 0,
           isWinnaar: data.isWinnaar ?? false,
+          prijsBedrag: data.prijsBedrag ?? null,
           verwerktOp: data.verwerktOp ?? null,
         } as Resultaat;
       });

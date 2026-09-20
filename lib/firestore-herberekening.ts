@@ -19,3 +19,21 @@ export async function herberekenHuidigeSpeelreeks(seizoenId: string): Promise<He
   const result = await fn({ seizoenId });
   return result.data;
 }
+
+interface VulHistorischPrijsBedragInResult {
+  bijgewerkt: number;
+  details: { userNaam: string; trekkingId: string; prijsBedrag: number }[];
+}
+
+/**
+ * Roept de Cloud Function vulHistorischPrijsBedragIn aan: vult
+ * prijsBedrag in op winnaar-resultaten van vóór het bestaan van dat
+ * veld. Eenmalige backfill — veilig om vaker aan te roepen, raakt
+ * alleen resultaten waar het bedrag nog ontbreekt. Alleen beheerders
+ * mogen dit aanroepen (wordt ook server-side afgedwongen).
+ */
+export async function vulHistorischPrijsBedragIn(): Promise<VulHistorischPrijsBedragInResult> {
+  const fn = httpsCallable<Record<string, never>, VulHistorischPrijsBedragInResult>(functionsInstance, 'vulHistorischPrijsBedragIn');
+  const result = await fn({});
+  return result.data;
+}

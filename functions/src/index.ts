@@ -138,6 +138,64 @@ async function getBetalersVoorWeek(trekkingWeek: string): Promise<Set<string>> {
   return betalers;
 }
 
+/**
+ * Server-side variant van berekenActuelePrijzenpot() in
+ * lib/firestore-prijzenpot.ts — zelfde logica (speelreeks-grens +
+ * som van bevestigde, niet-storting betalingen vanaf die grens),
+ * hier met de admin-SDK omdat een Cloud Function geen client-code
+ * kan importeren (zie ook heeftHuidigeSpeelreeksAlTrekkingen).
+ *
+ * uitgeslotenTrekkingId: telt niet mee bij het bepalen van "de
+ * laatste trekking met winnaar" — nodig zowel live (de trekking die
+ * nu net verwerkt wordt, bestaat nog niet in /resultaten op het
+ * moment van aanroepen, dus puur defensief) als bij historische
+ * reconstructie (de winnende trekking zelf mag niet als grens voor
+ * zíjn eigen prijzenpot-berekening worden gebruikt).
+ *
+ * totEnMetWeek: begrenst de som naar boven — nodig voor historische
+ * reconstructie van een inmiddels AFGESLOTEN speelreeks, zodat geld
+ * dat pas ná die winst bevestigd is (voor de volgende speelreeks)
+ * niet meetelt. Live (tijdens onTrekkingVerwerkt) laat je dit weg,
+ * net als de live clientfunctie.
+ */
+async function berekenPrijzenpotServerSide(opts?: { totEnMetWeek?: string; uitgeslotenTrekkingId?: string }): Promise<number> {
+  const winnendeResultatenSnap = await db.collection('resultaten').where('isWinnaar', '==', true).get();
+
+  let vanafWeek: string | null = null;
+  const trekkingIds = [...new Set(
+    winnendeResultatenSnap.docs
+      .map(d => d.data().trekkingId as string)
+      .filter(id => id !== opts?.uitgeslotenTrekkingId)
+  )];
+
+  if (trekkingIds.length > 0) {
+    let laatsteWinDatum: Date | null = null;
+    for (const trekkingId of trekkingIds) {
+      const trekkingSnap = await db.doc(`trekkingen/${trekkingId}`).get();
+      const datum = trekkingSnap.exists ? (trekkingSnap.data()?.datum?.toDate?.() as Date | undefined) : undefined;
+      if (datum && (!laatsteWinDatum || datum > laatsteWinDatum)) laatsteWinDatum = datum;
+    }
+    if (laatsteWinDatum) {
+      const naWinst = new Date(laatsteWinDatum);
+      naWinst.setDate(naWinst.getDate() + 7);
+      vanafWeek = getTrekkingWeek(naWinst);
+    }
+  }
+
+  const betalingenSnap = await db.collection('betalingen').where('status', '==', 'betaald').get();
+  let pot = 0;
+  betalingenSnap.forEach(d => {
+    const data = d.data();
+    if (data.isSaldoStorting === true) return;
+    const week = data.trekkingWeek as string | undefined;
+    if (!week) return;
+    if (vanafWeek && week < vanafWeek) return;
+    if (opts?.totEnMetWeek && week > opts.totEnMetWeek) return;
+    pot += (data.bedrag as number | undefined) ?? 0;
+  });
+  return pot;
+}
+
 async function getFcmTokens(userId: string, setting: keyof NotificationSettings): Promise<string[]> {
   const userDoc = await db.doc(`users/${userId}`).get();
   if (!userDoc.exists) return [];
@@ -268,10 +326,23 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
 
     const output = verwerkTrekking({ trekking, deelnemers, spelConfig });
 
+    // Prijzenpot van déze speelreeks — vóór de batch berekend (de
+    // winnaars van deze trekking staan dan nog niet in /resultaten),
+    // en meegeschreven op elk winnend resultaat zodat het bedrag
+    // vastligt op het moment van winnen, i.p.v. steeds opnieuw (en
+    // dus mogelijk anders) live herberekend te worden. Zie ook de
+    // uitgebreide toelichting in lib/firestore-prijzenpot.ts over
+    // waarom dit NIET hetzelfde is als het totale kassaldo.
+    const prijzenpot = await berekenPrijzenpotServerSide({ uitgeslotenTrekkingId: trekkingId });
+
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
       const ref = db.collection('resultaten').doc();
-      batch.set(ref, { ...resultaat, verwerktOp: admin.firestore.FieldValue.serverTimestamp() });
+      batch.set(ref, {
+        ...resultaat,
+        prijsBedrag: resultaat.isWinnaar ? prijzenpot : null,
+        verwerktOp: admin.firestore.FieldValue.serverTimestamp(),
+      });
     }
     for (const update of output.ranglijstUpdates) {
       if (update.extraPunten > 0) {
@@ -294,10 +365,13 @@ export const onTrekkingVerwerkt = functions.firestore.onDocumentCreated(
       trekking.ingevoerdDoorNaam
     );
 
-    // Bereken actueel kassaldo voor in de notificatie
-    const kasmutaties = await db.collection('kasmutaties').get();
-    const kassaldo = kasmutaties.docs.reduce((sum, d) => sum + (d.data().bedrag ?? 0), 0);
-    const potTekst = `€${kassaldo.toFixed(0)}`;
+    // BUGFIX: gebruikte hier eerder het totale, cumulatieve kassaldo
+    // (incl. al bevestigde stortingen voor toekomstige weken) — dat
+    // gaf een te hoog, misleidend bedrag in precies de melding waar
+    // het om de prijzenpot van déze speelreeks gaat. `prijzenpot`
+    // (hierboven al berekend voor het resultaat-record) is hier het
+    // juiste getal.
+    const potTekst = `€${prijzenpot.toFixed(0)}`;
     const getrokkenTekst = trekking.nummers.join(', ');
 
     // Push naar deelnemers met persoonlijk verhaal
@@ -765,10 +839,21 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
 
     const output = verwerkTrekking({ trekking, deelnemers, spelConfig });
 
+    // Zelfde prijzenpot-vastlegging als in onTrekkingVerwerkt — zie
+    // toelichting daar. Bij herberekenen kan dit dus een eerder
+    // vastgelegd prijsBedrag opnieuw (en mogelijk anders) berekenen,
+    // wat precies de bedoeling is: herberekenen betekent "reconstrueer
+    // dit opnieuw, vanaf de brondata".
+    const prijzenpot = await berekenPrijzenpotServerSide({ uitgeslotenTrekkingId: trekkingDoc.id });
+
     const batch = db.batch();
     for (const resultaat of output.resultaten) {
       const ref = db.collection('resultaten').doc();
-      batch.set(ref, { ...resultaat, verwerktOp: admin.firestore.FieldValue.serverTimestamp() });
+      batch.set(ref, {
+        ...resultaat,
+        prijsBedrag: resultaat.isWinnaar ? prijzenpot : null,
+        verwerktOp: admin.firestore.FieldValue.serverTimestamp(),
+      });
     }
     await batch.commit();
 
@@ -814,6 +899,85 @@ export const herberekenSpeelreeks = functions.https.onCall(async (request) => {
     herberekend: speelreeksTrekkingenBasis.length,
     winnaars: alleWinnaarNamen,
   };
+});
+
+// ─────────────────────── vulHistorischPrijsBedragIn ───────────────────────
+
+/**
+ * Eenmalige backfill: vult prijsBedrag in op winnaar-resultaten van
+ * vóór het bestaan van dat veld (waar het dus nog ontbreekt).
+ * Reconstrueert het bedrag met dezelfde prijzenpot-logica als
+ * onTrekkingVerwerkt, maar begrensd tot en met de week van de
+ * winnende trekking zelf — geld dat pas ná die winst bevestigd is,
+ * hoort bij de volgende speelreeks, niet bij deze uitbetaling.
+ *
+ * Veilig om vaker te draaien: raakt alleen resultaten waar
+ * prijsBedrag nog ontbreekt (null of niet aanwezig). Winnaars van
+ * dezelfde trekking delen hetzelfde prijsbedrag (er is nergens in
+ * het systeem een splits-regel voor meerdere winnaars — zie ook de
+ * bestaande pushmelding-tekst, die iedere winnaar "de pot" toezegt).
+ *
+ * Alleen beheerders mogen dit aanroepen.
+ */
+export const vulHistorischPrijsBedragIn = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const userDoc = await db.doc(`users/${request.auth.uid}`).get();
+  if (!userDoc.exists || userDoc.data()?.rol !== 'beheerder') {
+    throw new functions.https.HttpsError('permission-denied', 'Alleen beheerders mogen dit uitvoeren.');
+  }
+
+  const winnaarsSnap = await db.collection('resultaten').where('isWinnaar', '==', true).get();
+  const teVullen = winnaarsSnap.docs.filter(d => d.data().prijsBedrag == null);
+
+  if (teVullen.length === 0) {
+    return { bijgewerkt: 0, details: [] as { userNaam: string; trekkingId: string; prijsBedrag: number }[] };
+  }
+
+  // Groeperen per trekking — winnaars van dezelfde trekking delen
+  // dezelfde prijzenpot-berekening (en dus hetzelfde bedrag).
+  const perTrekking = new Map<string, typeof teVullen>();
+  for (const d of teVullen) {
+    const trekkingId = d.data().trekkingId as string;
+    if (!perTrekking.has(trekkingId)) perTrekking.set(trekkingId, []);
+    perTrekking.get(trekkingId)!.push(d);
+  }
+
+  const details: { userNaam: string; trekkingId: string; prijsBedrag: number }[] = [];
+  const batch = db.batch();
+
+  for (const [trekkingId, docs] of perTrekking) {
+    const trekkingSnap = await db.doc(`trekkingen/${trekkingId}`).get();
+    const trekkingDatum = trekkingSnap.exists ? (trekkingSnap.data()?.datum?.toDate?.() as Date | undefined) : undefined;
+    if (!trekkingDatum) {
+      functions.logger.warn(`Trekking ${trekkingId} niet gevonden of zonder datum — overgeslagen.`);
+      continue;
+    }
+    const trekkingWeek = getTrekkingWeek(trekkingDatum);
+    const prijsBedrag = await berekenPrijzenpotServerSide({
+      totEnMetWeek: trekkingWeek,
+      uitgeslotenTrekkingId: trekkingId,
+    });
+
+    for (const d of docs) {
+      batch.update(d.ref, { prijsBedrag });
+      details.push({ userNaam: d.data().userNaam as string ?? 'Onbekend', trekkingId, prijsBedrag });
+    }
+  }
+
+  await batch.commit();
+
+  await logAudit(
+    'trekking_gewijzigd',
+    `Historisch prijsBedrag ingevuld voor ${details.length} winnaar-resultaat(en) over ${perTrekking.size} trekking(en).`,
+    request.auth.uid,
+    userDoc.data()?.naam ?? 'Beheerder'
+  );
+
+  functions.logger.info(`vulHistorischPrijsBedragIn voltooid: ${details.length} resultaat(en) bijgewerkt.`);
+
+  return { bijgewerkt: details.length, details };
 });
 
 // ─────────────────────── verzilverUitnodiging ───────────────────────

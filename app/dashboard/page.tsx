@@ -104,12 +104,21 @@ function Confetti() {
 }
 
 // Winnaar scherm
-function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder, onGeclaimed }: { resultaat: Resultaat; kassaldo: number; trekking: Trekking; kashouder: User | null; onGeclaimed: () => void }) {
+// BUGFIX: toonde eerder het totale, cumulatieve kassaldo (incl. al
+// bevestigde stortingen voor toekomstige weken) i.p.v. de prijzenpot
+// van déze speelreeks. Gebruikt nu resultaat.prijsBedrag — vastgelegd
+// server-side op het moment van winnen (zie functions/src/index.ts),
+// dus permanent correct, ook nadat dit scherm ooit wordt gesloten.
+function WinnaarScherm({ resultaat, trekking, kashouder, onGeclaimed }: { resultaat: Resultaat; trekking: Trekking; kashouder: User | null; onGeclaimed: () => void }) {
   const kashouderNaam = kashouder?.naam ?? 'de kashouder';
   const kashouderTelefoon = kashouder?.telefoon?.replace(/\s/g, '') ?? '';
+  const prijsBedrag = resultaat.prijsBedrag;
+  const prijsTekst = prijsBedrag !== null ? `€${prijsBedrag.toFixed(0)}` : 'het bedrag (vraag na bij de beheerder)';
 
   const tikkieBericht = encodeURIComponent(
-    `Hoi ${kashouderNaam}! 🏆 Ik heb gewonnen bij LottoClub! Kun je €${kassaldo.toFixed(0)} overmaken? Stuur me een Tikkie!`
+    prijsBedrag !== null
+      ? `Hoi ${kashouderNaam}! 🏆 Ik heb gewonnen bij LottoClub! Kun je €${prijsBedrag.toFixed(0)} overmaken? Stuur me een Tikkie!`
+      : `Hoi ${kashouderNaam}! 🏆 Ik heb gewonnen bij LottoClub! Kun je aangeven hoeveel ik krijg en het overmaken? Stuur me een Tikkie!`
   );
   const whatsappUrl = kashouderTelefoon
     ? `https://wa.me/${kashouderTelefoon}?text=${tikkieBericht}`
@@ -144,8 +153,8 @@ function WinnaarScherm({ resultaat, kassaldo, trekking, kashouder, onGeclaimed }
         {/* Pot bedrag */}
         <div style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.15),rgba(240,192,96,0.05))', border: '1px solid rgba(240,192,96,0.3)', borderRadius: 24, padding: '24px 32px', marginBottom: 24, animation: 'fadeUp 0.5s ease 0.4s both' }}>
           <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Jouw winst</div>
-          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 64, letterSpacing: -2, color: 'var(--gold)', lineHeight: 1, textShadow: '0 0 20px rgba(240,192,96,0.4)' }}>
-            €{kassaldo.toFixed(0)}
+          <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: prijsBedrag !== null ? 64 : 22, letterSpacing: -2, color: 'var(--gold)', lineHeight: 1, textShadow: '0 0 20px rgba(240,192,96,0.4)' }}>
+            {prijsTekst}
           </div>
         </div>
 
@@ -309,7 +318,6 @@ function DashboardPageContent() {
   if (!laden && ikHebGewonnen && laatsteTrekking && !geclaimed) {
     return <WinnaarScherm
       resultaat={mijnResultaatLaatste!}
-      kassaldo={saldo}
       trekking={laatsteTrekking}
       kashouder={kashouder}
       onGeclaimed={() => setWinnaarGeclaimed(true)}
@@ -509,7 +517,9 @@ function DashboardPageContent() {
                   )}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {winnaarResultaat && winnaarResultaat.userId !== user?.uid ? `${winnaarResultaat.userNaam} · ${winnaarResultaat.aantalGoed} goed` : ''}
+                  {winnaarResultaat && winnaarResultaat.userId !== user?.uid
+                    ? `${winnaarResultaat.userNaam} · ${winnaarResultaat.aantalGoed} goed${winnaarResultaat.prijsBedrag !== null ? ` · €${winnaarResultaat.prijsBedrag.toFixed(0)}` : ''}`
+                    : ''}
                   {mijnResultaatLaatste ? ` · Jij: ${mijnResultaatLaatste.aantalGoed} goed` : ''}
                 </div>
               </div>

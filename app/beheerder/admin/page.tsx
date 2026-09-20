@@ -10,7 +10,7 @@ import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelcon
 import { subscribeVerenigingConfig, updateVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
-import { herberekenHuidigeSpeelreeks } from '@/lib/firestore-herberekening';
+import { herberekenHuidigeSpeelreeks, vulHistorischPrijsBedragIn } from '@/lib/firestore-herberekening';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
 import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User, GeplandeNotificatie, NotificatieDoelgroep, NotificatieHerhaling } from '@/lib/types';
 import { subscribeGeplandeNotificaties, maakGeplandeNotificatie, updateGeplandeNotificatie, verwijderGeplandeNotificatie } from '@/lib/firestore-geplande-notificaties';
@@ -59,6 +59,9 @@ function AdminPageContent() {
   const [herberekenBezig, setHerberekenBezig] = useState(false);
   const [herberekenResultaat, setHerberekenResultaat] = useState<string | null>(null);
   const [herberekenError, setHerberekenError] = useState<string | null>(null);
+  const [prijsBedragBezig, setPrijsBedragBezig] = useState(false);
+  const [prijsBedragResultaat, setPrijsBedragResultaat] = useState<string | null>(null);
+  const [prijsBedragError, setPrijsBedragError] = useState<string | null>(null);
 
   const [tikkieLink, setTikkieLink] = useState('');
   const [tikkieBezig, setTikkieBezig] = useState(false);
@@ -134,6 +137,25 @@ function AdminPageContent() {
       setHerberekenError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
     } finally {
       setHerberekenBezig(false);
+    }
+  };
+
+  const handleVulPrijsBedragIn = async () => {
+    setPrijsBedragBezig(true);
+    setPrijsBedragError(null);
+    setPrijsBedragResultaat(null);
+    try {
+      const result = await vulHistorischPrijsBedragIn();
+      if (result.bijgewerkt === 0) {
+        setPrijsBedragResultaat('Niets om bij te werken — alle winnaars hebben al een vastgelegd prijsbedrag.');
+      } else {
+        const regels = result.details.map(d => `${d.userNaam}: €${d.prijsBedrag.toFixed(0)}`).join(', ');
+        setPrijsBedragResultaat(`✓ ${result.bijgewerkt} winnaar-resultaat(en) bijgewerkt. ${regels}`);
+      }
+    } catch (err) {
+      setPrijsBedragError(err instanceof Error ? err.message : 'Bijwerken mislukt.');
+    } finally {
+      setPrijsBedragBezig(false);
     }
   };
 
@@ -603,6 +625,29 @@ function AdminPageContent() {
               )}
               {herberekenError && (
                 <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 10, lineHeight: 1.5 }}>⚠️ {herberekenError}</div>
+              )}
+            </div>
+
+            <div className="section-title">Historisch prijsbedrag</div>
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.6 }}>
+                Eenmalige actie: vult het gewonnen bedrag met terugwerkende kracht
+                in bij winnaars van vóórdat dit werd vastgelegd. Reconstrueert de
+                prijzenpot zoals die stond op het moment van die winst. Veilig om
+                vaker te draaien — raakt alleen winnaars waar het bedrag nog ontbreekt.
+              </div>
+              <button
+                onClick={handleVulPrijsBedragIn}
+                disabled={prijsBedragBezig}
+                style={{ width: '100%', background: 'linear-gradient(135deg,var(--gold),#c08820)', color: 'var(--navy)', border: 'none', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: prijsBedragBezig ? 0.6 : 1 }}
+              >
+                {prijsBedragBezig ? '⏳ Bezig…' : '💰 Historisch prijsbedrag invullen'}
+              </button>
+              {prijsBedragResultaat && (
+                <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 10, lineHeight: 1.5 }}>{prijsBedragResultaat}</div>
+              )}
+              {prijsBedragError && (
+                <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 10, lineHeight: 1.5 }}>⚠️ {prijsBedragError}</div>
               )}
             </div>
           </div>

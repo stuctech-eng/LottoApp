@@ -48,6 +48,8 @@ export interface Resultaat {
   bonusGoed: boolean;
   punten: number;
   isWinnaar: boolean;
+  /** Zie lib/types.ts — identieke definitie, alleen gevuld bij isWinnaar. */
+  prijsBedrag?: number | null;
   verwerktOp: FirebaseFirestore.Timestamp | null;
 }
 
