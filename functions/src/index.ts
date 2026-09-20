@@ -1002,6 +1002,99 @@ export const vulHistorischPrijsBedragIn = functions.https.onCall(async (request)
   return { bijgewerkt: details.length, details };
 });
 
+// ─────────────────────── bekijkPrijzenpotDetails ───────────────────────
+
+/**
+ * Alleen-lezen diagnose-tool: toont ITEMIZED welke bevestigde
+ * betalingen meetelden in de prijzenpot-berekening van een winnende
+ * trekking, i.p.v. alleen het eindtotaal. Bedoeld om een onverwacht
+ * bedrag te kunnen controleren zonder eindeloos door het auditlog te
+ * moeten scrollen (zie ook de iPhone-first debug-filosofie: fouten/
+ * afwijkingen moeten in de app zelf te analyseren zijn).
+ *
+ * Zonder trekkingId: pakt de meest recente trekking met een winnaar.
+ * Schrijft niets. Alleen beheerders mogen dit aanroepen.
+ */
+export const bekijkPrijzenpotDetails = functions.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Niet ingelogd.');
+  }
+  const userDoc = await db.doc(`users/${request.auth.uid}`).get();
+  if (!userDoc.exists || userDoc.data()?.rol !== 'beheerder') {
+    throw new functions.https.HttpsError('permission-denied', 'Alleen beheerders mogen dit uitvoeren.');
+  }
+
+  let trekkingId = request.data?.trekkingId as string | undefined;
+  const winnendeResultatenSnap = await db.collection('resultaten').where('isWinnaar', '==', true).get();
+
+  if (!trekkingId) {
+    if (winnendeResultatenSnap.empty) {
+      throw new functions.https.HttpsError('not-found', 'Er is nog geen winnaar geweest.');
+    }
+    const trekkingIds = [...new Set(winnendeResultatenSnap.docs.map(d => d.data().trekkingId as string))];
+    let laatste: { id: string; datum: Date } | null = null;
+    for (const id of trekkingIds) {
+      const snap = await db.doc(`trekkingen/${id}`).get();
+      const datum = snap.exists ? (snap.data()?.datum?.toDate?.() as Date | undefined) : undefined;
+      if (datum && (!laatste || datum > laatste.datum)) laatste = { id, datum };
+    }
+    if (!laatste) {
+      throw new functions.https.HttpsError('not-found', 'Kon geen winnende trekking met datum vinden.');
+    }
+    trekkingId = laatste.id;
+  }
+
+  const trekkingSnap = await db.doc(`trekkingen/${trekkingId}`).get();
+  if (!trekkingSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Trekking niet gevonden.');
+  }
+  const trekkingDatum = trekkingSnap.data()?.datum?.toDate?.() as Date | undefined;
+  if (!trekkingDatum) {
+    throw new functions.https.HttpsError('failed-precondition', 'Trekking heeft geen datum.');
+  }
+  const trekkingWeek = getTrekkingWeek(trekkingDatum);
+
+  // Zelfde speelreeks-grens als berekenPrijzenpotServerSide, hier
+  // itemized teruggegeven i.p.v. alleen de som.
+  const anderTrekkingIds = [...new Set(
+    winnendeResultatenSnap.docs
+      .map(d => d.data().trekkingId as string)
+      .filter(id => id !== trekkingId)
+  )];
+  let vanafWeek: string | null = null;
+  let laatsteWinDatum: Date | null = null;
+  for (const id of anderTrekkingIds) {
+    const snap = await db.doc(`trekkingen/${id}`).get();
+    const datum = snap.exists ? (snap.data()?.datum?.toDate?.() as Date | undefined) : undefined;
+    if (datum && (!laatsteWinDatum || datum > laatsteWinDatum)) laatsteWinDatum = datum;
+  }
+  if (laatsteWinDatum) {
+    const naWinst = new Date(laatsteWinDatum);
+    naWinst.setDate(naWinst.getDate() + 7);
+    vanafWeek = getTrekkingWeek(naWinst);
+  }
+
+  const betalingenSnap = await db.collection('betalingen').where('status', '==', 'betaald').get();
+  const items: { userNaam: string; trekkingWeek: string; bedrag: number; docId: string }[] = [];
+  let totaal = 0;
+  betalingenSnap.forEach(d => {
+    const data = d.data();
+    if (data.isSaldoStorting === true) return;
+    const week = data.trekkingWeek as string | undefined;
+    if (!week) return;
+    if (vanafWeek && week < vanafWeek) return;
+    if (week > trekkingWeek!) return;
+    const bedrag = (data.bedrag as number | undefined) ?? 0;
+    items.push({ userNaam: data.userNaam as string ?? 'Onbekend', trekkingWeek: week, bedrag, docId: d.id });
+    totaal += bedrag;
+  });
+  items.sort((a, b) => a.trekkingWeek.localeCompare(b.trekkingWeek));
+
+  const aantalWinnaars = winnendeResultatenSnap.docs.filter(d => d.data().trekkingId === trekkingId).length;
+
+  return { trekkingId, trekkingWeek, vanafWeek, aantalWinnaars, totaal, items };
+});
+
 // ─────────────────────── verzilverUitnodiging ───────────────────────
 
 /**

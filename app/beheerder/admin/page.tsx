@@ -10,7 +10,7 @@ import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelcon
 import { subscribeVerenigingConfig, updateVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
-import { herberekenHuidigeSpeelreeks, vulHistorischPrijsBedragIn } from '@/lib/firestore-herberekening';
+import { herberekenHuidigeSpeelreeks, vulHistorischPrijsBedragIn, bekijkPrijzenpotDetails } from '@/lib/firestore-herberekening';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
 import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User, GeplandeNotificatie, NotificatieDoelgroep, NotificatieHerhaling } from '@/lib/types';
 import { subscribeGeplandeNotificaties, maakGeplandeNotificatie, updateGeplandeNotificatie, verwijderGeplandeNotificatie } from '@/lib/firestore-geplande-notificaties';
@@ -62,6 +62,9 @@ function AdminPageContent() {
   const [prijsBedragBezig, setPrijsBedragBezig] = useState(false);
   const [prijsBedragResultaat, setPrijsBedragResultaat] = useState<string | null>(null);
   const [prijsBedragError, setPrijsBedragError] = useState<string | null>(null);
+  const [detailsBezig, setDetailsBezig] = useState(false);
+  const [detailsResultaat, setDetailsResultaat] = useState<string | null>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   const [tikkieLink, setTikkieLink] = useState('');
   const [tikkieBezig, setTikkieBezig] = useState(false);
@@ -156,6 +159,26 @@ function AdminPageContent() {
       setPrijsBedragError(err instanceof Error ? err.message : 'Bijwerken mislukt.');
     } finally {
       setPrijsBedragBezig(false);
+    }
+  };
+
+  const handleBekijkDetails = async () => {
+    setDetailsBezig(true);
+    setDetailsError(null);
+    setDetailsResultaat(null);
+    try {
+      const result = await bekijkPrijzenpotDetails();
+      const regels = result.items
+        .map(i => `${i.trekkingWeek} · ${i.userNaam}: €${i.bedrag.toFixed(2)}`)
+        .join('\n');
+      setDetailsResultaat(
+        `Trekkingweek ${result.trekkingWeek} · vanaf ${result.vanafWeek ?? '(begin)'} · ${result.aantalWinnaars} winnaar(s)\n` +
+        `Totaal: €${result.totaal.toFixed(2)}\n\n${regels || '(geen betalingen gevonden)'}`
+      );
+    } catch (err) {
+      setDetailsError(err instanceof Error ? err.message : 'Ophalen mislukt.');
+    } finally {
+      setDetailsBezig(false);
     }
   };
 
@@ -648,6 +671,29 @@ function AdminPageContent() {
               )}
               {prijsBedragError && (
                 <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 10, lineHeight: 1.5 }}>⚠️ {prijsBedragError}</div>
+              )}
+            </div>
+
+            <div className="section-title">Prijzenpot-berekening bekijken</div>
+            <div className="card" style={{ padding: 18 }}>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14, lineHeight: 1.6 }}>
+                Alleen-lezen: toont per betaling welk bedrag is meegeteld
+                in de prijzenpot van de meest recente winnende trekking —
+                handig om een onverwacht bedrag te controleren zonder
+                door het auditlog te hoeven scrollen. Wijzigt niets.
+              </div>
+              <button
+                onClick={handleBekijkDetails}
+                disabled={detailsBezig}
+                style={{ width: '100%', background: 'var(--surface2)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 13, padding: 14, fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: detailsBezig ? 0.6 : 1 }}
+              >
+                {detailsBezig ? '⏳ Bezig…' : '🔍 Bekijk berekening laatste winnaar'}
+              </button>
+              {detailsResultaat && (
+                <div style={{ fontSize: 12, color: 'var(--white)', marginTop: 10, lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{detailsResultaat}</div>
+              )}
+              {detailsError && (
+                <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 10, lineHeight: 1.5 }}>⚠️ {detailsError}</div>
               )}
             </div>
           </div>

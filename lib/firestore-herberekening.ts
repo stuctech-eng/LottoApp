@@ -37,3 +37,32 @@ export async function vulHistorischPrijsBedragIn(): Promise<VulHistorischPrijsBe
   const result = await fn({});
   return result.data;
 }
+
+interface PrijzenpotDetailsItem {
+  userNaam: string;
+  trekkingWeek: string;
+  bedrag: number;
+  docId: string;
+}
+
+interface PrijzenpotDetailsResult {
+  trekkingId: string;
+  trekkingWeek: string;
+  vanafWeek: string | null;
+  aantalWinnaars: number;
+  totaal: number;
+  items: PrijzenpotDetailsItem[];
+}
+
+/**
+ * Roept de Cloud Function bekijkPrijzenpotDetails aan: alleen-lezen
+ * diagnose — laat exact zien welke bevestigde betalingen meetelden in
+ * de prijzenpot-berekening van een winnende trekking (zonder
+ * trekkingId: de meest recente winnaar). Schrijft niets. Alleen
+ * beheerders mogen dit aanroepen (wordt ook server-side afgedwongen).
+ */
+export async function bekijkPrijzenpotDetails(trekkingId?: string): Promise<PrijzenpotDetailsResult> {
+  const fn = httpsCallable<{ trekkingId?: string }, PrijzenpotDetailsResult>(functionsInstance, 'bekijkPrijzenpotDetails');
+  const result = await fn({ trekkingId });
+  return result.data;
+}
