@@ -14,7 +14,7 @@ import {
   verwijderLidDefinitief,
 } from '@/lib/firestore-users';
 import { subscribeAlleTrekkingen, subscribeResultaten, subscribeUserResultaten } from '@/lib/firestore-trekkingen';
-import { subscribeUserBetalingen, corrigeerLottoSaldo, stortLottoSaldo, herverrekenLottoSaldo } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, subscribeBetalingen, relevanteTrekkingWeek, corrigeerLottoSaldo, stortLottoSaldo, herverrekenLottoSaldo } from '@/lib/firestore-payments';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { logAudit } from '@/lib/firestore-audit';
 import { whatsappLink } from '@/lib/providers/notifications';
@@ -41,6 +41,12 @@ function LidDetailContent() {
   const [resultatenLaatsteTrekking, setResultatenLaatsteTrekking] = useState<Resultaat[]>([]);
   const [ditLidResultaten, setDitLidResultaten] = useState<Resultaat[]>([]);
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
+  // Club-breed, ALLEEN om de huidige week te bepalen (architectuurregel
+  // 12 — relevanteTrekkingWeek moet club-breed, nooit op basis van
+  // alleen dit ene lid se eigen historie; anders precies het Kees-
+  // incident opnieuw). Dit lid se eigen betalingen (hierboven) blijven
+  // de bron voor alles wat wél per-lid getoond wordt.
+  const [alleBetalingen, setAlleBetalingen] = useState<Betaling[]>([]);
   const [laden, setLaden] = useState(true);
   const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
 
@@ -61,8 +67,12 @@ function LidDetailContent() {
     if (!id) return;
     const u1 = subscribeUserResultaten(id, setDitLidResultaten);
     const u2 = subscribeUserBetalingen(id, setBetalingen);
-    return () => { u1(); u2(); };
+    const u3 = subscribeBetalingen(setAlleBetalingen);
+    return () => { u1(); u2(); u3(); };
   }, [id]);
+
+  const huidigeWeek = relevanteTrekkingWeek(alleBetalingen);
+  const heeftBetaaldDezeWeek = betalingen.some(b => b.trekkingWeek === huidigeWeek && b.status === 'betaald');
 
   const laatsteTrekking = trekkingen[0] ?? null;
 
@@ -443,26 +453,34 @@ function LidDetailContent() {
                   hier zodat je niet meer hoeft te schakelen. */}
               <div className="card" style={{ padding: 14 }}>
                 <div className="section-title" style={{ marginBottom: 8 }}>Betaalstatus deze week</div>
-                {betaalFout && <div style={{ fontSize: 12, color: 'var(--error)', marginBottom: 8 }}>⚠️ {betaalFout}</div>}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={handleStorten}
-                    disabled={betaalBezig}
-                    style={{ flex: 1, minWidth: 110, background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betaalBezig ? 0.6 : 1 }}
-                  >
-                    💰 Storten
-                  </button>
-                  {(lid.lottoSaldo ?? 0) >= standaardInleg && (
-                    <button
-                      onClick={handleVerreken}
-                      disabled={betaalBezig}
-                      title="Gebruikt bestaand LottoSaldo — boekt geen nieuw geld bij"
-                      style={{ flex: 1, minWidth: 110, background: 'var(--surface2)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betaalBezig ? 0.6 : 1 }}
-                    >
-                      🔁 Verreken (€{(lid.lottoSaldo ?? 0).toFixed(2)})
-                    </button>
-                  )}
-                </div>
+                {heeftBetaaldDezeWeek ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: 'var(--success)' }}>
+                    ✓ Al betaald deze week — niets te doen
+                  </div>
+                ) : (
+                  <>
+                    {betaalFout && <div style={{ fontSize: 12, color: 'var(--error)', marginBottom: 8 }}>⚠️ {betaalFout}</div>}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={handleStorten}
+                        disabled={betaalBezig}
+                        style={{ flex: 1, minWidth: 110, background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betaalBezig ? 0.6 : 1 }}
+                      >
+                        💰 Storten
+                      </button>
+                      {(lid.lottoSaldo ?? 0) >= standaardInleg && (
+                        <button
+                          onClick={handleVerreken}
+                          disabled={betaalBezig}
+                          title="Gebruikt bestaand LottoSaldo — boekt geen nieuw geld bij"
+                          style={{ flex: 1, minWidth: 110, background: 'var(--surface2)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betaalBezig ? 0.6 : 1 }}
+                        >
+                          🔁 Verreken (€{(lid.lottoSaldo ?? 0).toFixed(2)})
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="card" style={{ padding: 14 }}>
