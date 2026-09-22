@@ -5,6 +5,8 @@ import { doc, updateDoc } from 'firebase/firestore';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
+import { updateUserTelefoon, updateUserTickets } from '@/lib/firestore-users';
+import { TICKET_CONFIG, valideerTicketNummers } from '@/lib/constants';
 
 /**
  * Eenmalige introductie voor NIEUWE leden — verschijnt alleen als
@@ -16,13 +18,21 @@ import { db } from '@/lib/firebase';
  * terug te vinden via Profiel → Startinfo & Speluitleg.
  */
 
-const STAPPEN = 5;
+// Was 5 — stap 6 (telefoon + ticket) toegevoegd als VERPLICHTE stap,
+// zodat nieuwe leden niet meer per ongeluk zonder allebei het
+// dashboard in kunnen. Zie ook README/changelog: dit dekt het gat dat
+// leden die tijdens de wachtrij toetraden, en gewone nieuwe leden,
+// eerder beiden konden overslaan.
+const STAPPEN = 6;
 
 function WelkomPageContent() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [stap, setStap] = useState(1);
   const [bezig, setBezig] = useState(false);
+  const [telefoon, setTelefoon] = useState('');
+  const [nummers, setNummers] = useState<string[]>(Array(TICKET_CONFIG.aantalNummers).fill(''));
+  const [afrondenFout, setAfrondenFout] = useState<string | null>(null);
 
   // Ontbrekend veld = true (bestaand lid) — nooit de onboarding
   // opnieuw tonen, ook niet bij een handmatig bezoek aan deze URL.
@@ -44,10 +54,22 @@ function WelkomPageContent() {
   const volgende = () => setStap(s => Math.min(s + 1, STAPPEN));
   const vorige = () => setStap(s => Math.max(s - 1, 1));
 
+  const nummersAlsGetallen = nummers.map(n => parseInt(n, 10));
+  const ticketFoutmelding = valideerTicketNummers(nummersAlsGetallen);
+  const telefoonGeldig = telefoon.trim().length >= 6;
+  const stap6Compleet = telefoonGeldig && !ticketFoutmelding;
+
   const handleAfronden = async () => {
     if (!user) return;
+    if (!stap6Compleet) {
+      setAfrondenFout(!telefoonGeldig ? 'Vul een geldig telefoonnummer in.' : ticketFoutmelding);
+      return;
+    }
+    setAfrondenFout(null);
     setBezig(true);
     try {
+      await updateUserTelefoon(user.uid, telefoon.trim());
+      await updateUserTickets(user.uid, [{ id: `ticket-${Date.now()}`, naam: 'Mijn ticket', nummers: nummersAlsGetallen }]);
       await updateDoc(doc(db, 'users', user.uid), { onboardingCompleted: true });
     } finally {
       router.push('/dashboard');
@@ -195,6 +217,53 @@ function WelkomPageContent() {
             </div>
           )}
 
+          {stap === 6 && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10 }}>🎯 Bijna klaar</div>
+              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.5, marginBottom: 8 }}>Vul je gegevens in</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.6 }}>
+                Allebei nodig om echt mee te doen — zonder telefoonnummer kan de kashouder je niet bereiken, zonder ticket tel je niet mee bij een trekking.
+              </div>
+
+              <label className="form-label">Telefoonnummer (voor WhatsApp)</label>
+              <input
+                value={telefoon}
+                onChange={e => { setTelefoon(e.target.value); setAfrondenFout(null); }}
+                placeholder="06 12345678"
+                className="form-input"
+                style={{ marginBottom: 20 }}
+              />
+
+              <label className="form-label">Jouw {TICKET_CONFIG.aantalNummers} nummers ({TICKET_CONFIG.min}-{TICKET_CONFIG.max})</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                {nummers.map((val, i) => (
+                  <input
+                    key={i}
+                    type="number"
+                    inputMode="numeric"
+                    min={TICKET_CONFIG.min}
+                    max={TICKET_CONFIG.max}
+                    value={val}
+                    onChange={e => {
+                      const next = [...nummers];
+                      next[i] = e.target.value;
+                      setNummers(next);
+                      setAfrondenFout(null);
+                    }}
+                    style={{
+                      width: 46, height: 46, borderRadius: '50%',
+                      background: 'var(--surface)',
+                      border: '1.5px solid var(--border)',
+                      textAlign: 'center', fontSize: 14, fontWeight: 600,
+                      color: 'var(--white)', fontFamily: "'DM Sans',sans-serif", outline: 'none',
+                    }}
+                  />
+                ))}
+              </div>
+              {afrondenFout && <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>⚠️ {afrondenFout}</div>}
+            </div>
+          )}
+
         </div>
 
         {/* Navigatie */}
@@ -217,8 +286,8 @@ function WelkomPageContent() {
           ) : (
             <button
               onClick={handleAfronden}
-              disabled={bezig}
-              style={{ flex: 2, background: 'linear-gradient(135deg,var(--success),#1a8a50)', color: 'white', border: 'none', borderRadius: 16, padding: 16, fontSize: 15, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: bezig ? 0.6 : 1 }}
+              disabled={bezig || !stap6Compleet}
+              style={{ flex: 2, background: 'linear-gradient(135deg,var(--success),#1a8a50)', color: 'white', border: 'none', borderRadius: 16, padding: 16, fontSize: 15, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: bezig || !stap6Compleet ? 'not-allowed' : 'pointer', opacity: bezig || !stap6Compleet ? 0.5 : 1 }}
             >
               {bezig ? 'Even geduld…' : '✓ Naar het dashboard'}
             </button>
