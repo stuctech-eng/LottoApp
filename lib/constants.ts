@@ -23,5 +23,25 @@ export function valideerTicketNummers(
   return null;
 }
 
+/**
+ * Kale dag-check voor het sluitingsmoment van ticket wijzigen —
+ * vrijdag 24:00 (= zaterdag 00:00), heropent maandag. Dit is maar de
+ * HELFT van de regel: wijzigen mag namelijk sowieso alleen in de
+ * EERSTE week van een speelreeks (tot de eerste trekking daarvan) —
+ * ná die eerste trekking staat wijzigen de rest van de hele
+ * speelreeks vast, ongeacht de dag. Die tweede voorwaarde vereist
+ * trekking-/resultaatdata en kan dus niet hier (puur, geen Firestore)
+ * bepaald worden — zie de combinatie in app/profiel/page.tsx.
+ *
+ * Geldt UITSLUITEND voor het wijzigen van bestaande nummers. Een
+ * eerste ticket aanmaken (nog geen nummers gekozen) blijft altijd
+ * mogelijk — dat is geen "wijziging" en benadeelt niemand, want zo'n
+ * lid heeft nog geen opgebouwde voortgang om mee te knoeien.
+ */
+export function magTicketWijzigenOpDezeDag(): boolean {
+  const dag = new Date().getDay(); // 0 = zondag, 6 = zaterdag
+  return dag >= 1 && dag <= 5; // maandag t/m vrijdag
+}
+
 export const STANDAARD_INLEG = 4;
 export const STANDAARD_OMSCHRIJVING = 'Inleg LottoClub';

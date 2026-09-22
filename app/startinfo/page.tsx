@@ -133,6 +133,9 @@ function StartinfoContent() {
               <Blok titel="🎫 1 ticket per persoon">
                 <Info tekst="Iedereen speelt met precies 1 ticket van 6 nummers. Gelijke kansen voor iedereen." />
               </Blok>
+              <Blok titel="🔒 Wanneer mag je je nummers wijzigen?">
+                <Info tekst="Alleen in de eerste week van een nieuwe speelreeks — vanaf het moment dat er een winnaar valt, tot en met de eerstvolgende trekking. Wijzigen sluit op vrijdag 24:00 (dus vlak vóór zaterdag). Zodra die eerste trekking is geweest, staan de nummers vast voor de rest van de hele speelreeks — tot de volgende winnaar." />
+              </Blok>
               <Blok titel="🔄 Nieuwe speelreeks na een winnaar">
                 <Info tekst="Zodra iemand alle 6 nummers heeft verzameld, is diegene winnaar en begint automatisch een nieuwe speelreeks — voor iedereen weer vanaf 0." />
               </Blok>

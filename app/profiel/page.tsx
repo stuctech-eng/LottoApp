@@ -10,8 +10,10 @@ import { logAudit } from '@/lib/firestore-audit';
 import { deactiveerNotificaties } from '@/lib/firebase-messaging';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Ticket } from '@/lib/types';
+import { Ticket, Trekking, Resultaat } from '@/lib/types';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
+import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
+import { magTicketWijzigenOpDezeDag } from '@/lib/constants';
 
 const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -81,6 +83,36 @@ function ProfielPageContent() {
     const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
     return unsub;
   }, []);
+
+  // Voor "mag ticket wijzigen": alleen toegestaan in de eerste week
+  // van een speelreeks (nog geen trekking geweest sinds de laatste
+  // winnaar). Zie lib/constants.ts (magTicketWijzigenOpDezeDag) voor
+  // de dag-helft van de regel — dit hier is de reeks-helft, die wél
+  // trekking-/resultaatdata nodig heeft.
+  const [trekkingen, setTrekkingen] = useState<Trekking[]>([]);
+  const [resultatenLaatsteTrekking, setResultatenLaatsteTrekking] = useState<Resultaat[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeAlleTrekkingen(setTrekkingen);
+    return unsub;
+  }, []);
+
+  const laatsteTrekking = trekkingen[0] ?? null;
+
+  useEffect(() => {
+    if (!laatsteTrekking) { setResultatenLaatsteTrekking([]); return; }
+    const unsub = subscribeResultaten(laatsteTrekking.id, setResultatenLaatsteTrekking);
+    return unsub;
+  }, [laatsteTrekking?.id]);
+
+  // Geen laatste trekking (gloednieuwe club) → nog geen enkele
+  // trekking ooit, dus per definitie de "eerste week". Had de laatste
+  // trekking wél een winnaar → die trekking sloot de vorige reeks af,
+  // dus de HUIDIGE (nieuwe) reeks heeft er nog 0 gehad. Had de
+  // laatste trekking GEEN winnaar (rollover) → die trekking hoort al
+  // bij de huidige, nog lopende reeks → wijzigen zit op slot.
+  const speelreeksHeeftAlTrekkingGehad = !!laatsteTrekking && !resultatenLaatsteTrekking.some(r => r.isWinnaar);
+  const magTicketWijzigenNu = magTicketWijzigenOpDezeDag() && !speelreeksHeeftAlTrekkingGehad;
 
   useEffect(() => {
     if (profile?.naam) setNaam(profile.naam);
@@ -266,8 +298,10 @@ function ProfielPageContent() {
           )}
 
           {tickets.length >= 1 && (
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
-              Je hebt 1 ticket per persoon — tik op je ticket hieronder om de nummers te wijzigen.
+            <div style={{ fontSize: 11, color: magTicketWijzigenNu ? 'var(--muted)' : 'var(--warning)', marginBottom: 10, lineHeight: 1.5 }}>
+              {magTicketWijzigenNu
+                ? 'Je hebt 1 ticket per persoon — tik op je ticket hieronder om de nummers te wijzigen.'
+                : '🔒 Wijzigen zit op slot voor deze speelreeks (kan pas weer na de volgende winnaar, tot vrijdag 24:00).'}
             </div>
           )}
 
@@ -380,6 +414,7 @@ function ProfielPageContent() {
         onClose={() => setModalOpen(false)}
         onSave={handleSaveTicket}
         onDelete={editTicket ? handleDeleteTicket : undefined}
+        kanWijzigen={magTicketWijzigenNu}
       />
     </>
   );

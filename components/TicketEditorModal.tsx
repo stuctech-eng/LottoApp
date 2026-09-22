@@ -9,9 +9,18 @@ interface TicketEditorModalProps {
   onClose: () => void;
   onSave: (ticket: Ticket) => Promise<void>;
   onDelete?: (ticketId: string) => Promise<void>;
+  /**
+   * Alleen relevant als `ticket` een BESTAAND ticket is (wijzigen) —
+   * bepaald door de ouderpagina, want dat vereist trekking-/
+   * resultaatdata die deze modal zelf niet heeft. Een eerste ticket
+   * aanmaken (ticket === null) is hierdoor nooit geblokkeerd.
+   * Standaard true zodat bestaande aanroepen (nog) niet breken.
+   */
+  kanWijzigen?: boolean;
 }
 
-export default function TicketEditorModal({ open, ticket, onClose, onSave, onDelete }: TicketEditorModalProps) {
+export default function TicketEditorModal({ open, ticket, onClose, onSave, onDelete, kanWijzigen = true }: TicketEditorModalProps) {
+  const wijzigenGeblokkeerd = !!ticket && !kanWijzigen;
   const [naam, setNaam] = useState('');
   const [nummers, setNummers] = useState<string[]>(Array(TICKET_CONFIG.aantalNummers).fill(''));
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +42,7 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
   if (!open) return null;
 
   const handleSave = async () => {
+    if (wijzigenGeblokkeerd) return;
     if (!naam.trim()) {
       setError('Vul een naam in voor dit ticket');
       return;
@@ -106,6 +116,12 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
             {ticket ? '🎱 Ticket bewerken' : '🎱 Nieuw ticket'}
           </div>
 
+          {wijzigenGeblokkeerd && (
+            <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.25)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 12.5, color: 'var(--warning)', lineHeight: 1.6 }}>
+              🔒 Wijzigen kan alleen in de eerste week van een speelreeks (tot de eerste trekking daarvan), en niet meer ná vrijdag 24:00. Deze speelreeks is al onderweg — je nummers staan vast tot de volgende winnaar.
+            </div>
+          )}
+
           <label className="form-label">Naam van dit ticket</label>
           <input
             type="text"
@@ -113,6 +129,7 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
             placeholder="Bijv. Mijn nummers"
             value={naam}
             onChange={e => setNaam(e.target.value)}
+            disabled={wijzigenGeblokkeerd}
           />
 
           <label className="form-label">{TICKET_CONFIG.aantalNummers} nummers ({TICKET_CONFIG.min}-{TICKET_CONFIG.max})</label>
@@ -125,6 +142,7 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
                 min={TICKET_CONFIG.min}
                 max={TICKET_CONFIG.max}
                 value={val}
+                disabled={wijzigenGeblokkeerd}
                 onChange={e => {
                   const next = [...nummers];
                   next[i] = e.target.value;
@@ -136,6 +154,7 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
                   border: '1.5px solid var(--border)',
                   textAlign: 'center', fontSize: 15, fontWeight: 600,
                   color: 'var(--white)', fontFamily: "'DM Sans',sans-serif", outline: 'none',
+                  opacity: wijzigenGeblokkeerd ? 0.5 : 1,
                 }}
               />
             ))}
@@ -151,11 +170,11 @@ export default function TicketEditorModal({ open, ticket, onClose, onSave, onDel
 
           <button
             onClick={handleSave}
-            disabled={bezig}
+            disabled={bezig || wijzigenGeblokkeerd}
             className="btn-primary"
-            style={{ marginBottom: ticket && onDelete ? 10 : 0, opacity: bezig ? 0.6 : 1 }}
+            style={{ marginBottom: ticket && onDelete ? 10 : 0, opacity: bezig || wijzigenGeblokkeerd ? 0.5 : 1, cursor: wijzigenGeblokkeerd ? 'not-allowed' : 'pointer' }}
           >
-            {bezig ? 'Even geduld…' : '✓ Opslaan'}
+            {wijzigenGeblokkeerd ? '🔒 Wijzigen gesloten' : bezig ? 'Even geduld…' : '✓ Opslaan'}
           </button>
 
           {ticket && onDelete && (
