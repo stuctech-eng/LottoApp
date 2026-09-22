@@ -2,26 +2,49 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeKasmutaties, berekenKasSaldo, subscribeBetalingen, subscribeUserBetalingen, relevanteTrekkingWeek, weekStringNaarDatum } from '@/lib/firestore-payments';
-import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
+import { subscribeBetalingen, subscribeUserBetalingen, relevanteTrekkingWeek } from '@/lib/firestore-payments';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { berekenActuelePrijzenpot } from '@/lib/firestore-prijzenpot';
-import { Kasmutatie, Betaling, Seizoen, Trekking, Resultaat, User } from '@/lib/types';
+import { Betaling, Trekking, Resultaat, User } from '@/lib/types';
 
 // Kashouder contactgegevens dynamisch ophalen uit users collectie
 
-function volgendeZaterdag(): string {
-  const nu = new Date();
-  const dag = nu.getDay();
-  const dagenTot = dag === 6 ? 7 : (6 - dag);
-  const za = new Date(nu);
-  za.setDate(nu.getDate() + dagenTot);
-  return za.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+// "Nog X dagen"-badge op het nieuwe dashboardkaartje — 0 op zaterdag
+// zelf, i.p.v. de "+7 dagen"-sprong die volgendeZaterdag() bewust wél
+// maakt voor de datumregel elders.
+function dagenTotVolgendeTrekking(): number {
+  const dag = new Date().getDay();
+  return dag === 6 ? 0 : 6 - dag;
 }
+
+// Gedeelde "tegel-als-knop"-stijl voor de nieuwe dashboardkaarten —
+// lichte bevel-rand + zachte schaduw, zodat een tegel er tastbaar/
+// klikbaar uitziet zonder een los "Alle →"-tekstje nodig te hebben.
+const tapCard: CSSProperties = {
+  display: 'block',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderTopColor: 'rgba(255,255,255,0.14)',
+  borderRadius: 16,
+  boxShadow: '0 5px 14px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.04) inset',
+  textDecoration: 'none',
+  color: 'inherit',
+  position: 'relative',
+};
+
+const chevron: CSSProperties = {
+  position: 'absolute',
+  top: 14,
+  right: 14,
+  fontSize: 15,
+  color: 'var(--muted)',
+  opacity: 0.6,
+};
 
 function formatDatum(ts: Trekking['datum']): string {
   if (!ts) return '—';
@@ -202,10 +225,8 @@ function DashboardPageContent() {
   const { profile, profileLoading, user } = useAuth();
   const router = useRouter();
 
-  const [mutaties, setMutaties] = useState<Kasmutatie[]>([]);
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [mijnBetalingen, setMijnBetalingen] = useState<Betaling[]>([]);
-  const [seizoen, setSeizoen] = useState<Seizoen | null>(null);
   const [trekkingen, setTrekkingen] = useState<Trekking[]>([]);
   const [leden, setLeden] = useState<User[]>([]);
   const [mijnResultaten, setMijnResultaten] = useState<Resultaat[]>([]);
@@ -237,16 +258,14 @@ function DashboardPageContent() {
   useEffect(() => {
     if (!user) return;
     let geladen = 0;
-    const klaar = () => { geladen++; if (geladen >= 5) setLaden(false); };
+    const klaar = () => { geladen++; if (geladen >= 3) setLaden(false); };
 
-    const u1 = subscribeKasmutaties((m) => { setMutaties(m); klaar(); });
     const u2 = subscribeBetalingen((b) => { setBetalingen(b); klaar(); });
     const u3 = subscribeUserBetalingen(user.uid, (b) => { setMijnBetalingen(b); klaar(); });
-    const u4 = subscribeSeizoen((s) => { setSeizoen(s); klaar(); });
     const u5 = subscribeAlleTrekkingen((t) => { setTrekkingen(t); klaar(); });
     const u6 = subscribeAllUsers(setLeden);
 
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
+    return () => { u2(); u3(); u5(); u6(); };
   }, [user]);
 
   const laatsteTrekking = trekkingen[0] ?? null;
@@ -265,7 +284,6 @@ function DashboardPageContent() {
     );
   }
 
-  const saldo = berekenKasSaldo(mutaties);
   const actieveLeden = leden.filter(l => l.actief);
   // KRITIEK: alleen betalingen van de huidige ISO-week meetellen.
   // Zonder deze filter blijft een lid voor altijd als "betaald"
@@ -277,7 +295,6 @@ function DashboardPageContent() {
   );
   const betaaldeLeden = new Set(betalingenDezeWeek.filter(b => b.status === 'betaald').map(b => b.userId));
   const aantalBetaald = actieveLeden.filter(l => betaaldeLeden.has(l.id)).length;
-  const aantalOpen = actieveLeden.length - aantalBetaald;
 
   const mijnLaatsteBetaling = mijnBetalingen[0] ?? null;
   const heeftBetaald = mijnLaatsteBetaling?.status === 'betaald';
@@ -298,12 +315,6 @@ function DashboardPageContent() {
     // Check localStorage bij laden
     return false; // wordt later ingevuld als trekking bekend is
   });
-
-  const mijnPunten = profile?.ranglijstPunten ?? 0;
-  const mijnPositie = leden
-    .filter(l => l.actief)
-    .sort((a, b) => (b.ranglijstPunten ?? 0) - (a.ranglijstPunten ?? 0))
-    .findIndex(l => l.id === user?.uid) + 1;
 
   // Kashouder — eerst kashouder rol, dan beheerder als fallback
   const kashouder = leden.find(l => l.rol === 'kashouder') ?? leden.find(l => l.rol === 'beheerder') ?? null;
@@ -354,225 +365,145 @@ function DashboardPageContent() {
           </div>
         )}
 
-        {/* Pot hero */}
-        <div style={{ margin: '0 20px 16px' }}>
-          <div style={{ background: 'linear-gradient(135deg,#1a3a5c 0%,#0f2438 100%)', border: '1px solid rgba(74,158,255,0.22)', borderRadius: 22, padding: 20, position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'radial-gradient(circle,rgba(74,158,255,0.15) 0%,transparent 70%)', borderRadius: '50%' }} />
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>🏆 Te winnen deze speelreeks</div>
-            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 52, letterSpacing: -2, lineHeight: 1, marginBottom: 4 }}>
+        {/* Prijzenpot — bovenaan, hoogste prioriteit */}
+        <div style={{ padding: '0 20px', marginBottom: 10 }}>
+          <Link href="/kas" style={{ ...tapCard, textAlign: 'center', padding: '16px 18px', background: 'linear-gradient(135deg,rgba(240,192,96,0.14),rgba(240,192,96,0.03)), var(--surface)', borderColor: 'rgba(240,192,96,0.32)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 4 }}>🏆 Te winnen deze speelreeks</div>
+            <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, color: 'var(--gold)', lineHeight: 1.05 }}>
               {laden || prijzenpot === null ? '…' : `€${prijzenpot.toFixed(0)}`}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>
-              {seizoen ? seizoen.naam : '—'} · {actieveLeden.length} deelnemers
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7, marginBottom: 16 }}>
-              Kassaldo (incl. vooruitbetaald LottoSaldo): €{saldo.toFixed(0)}
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Link href="/trekkingen" style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(74,158,255,0.2)', color: 'var(--white)', borderRadius: 14, padding: '13px 0', fontSize: 14, fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>🎱 Trekkingen</Link>
-            </div>
-          </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Groeit elke week zonder winnaar</div>
+          </Link>
         </div>
 
         {/* Mijn LottoSaldo */}
-        <div style={{ padding: '0 20px', marginBottom: 16 }}>
+        <div style={{ padding: '0 20px', marginBottom: 10 }}>
           {(() => {
             const lottoSaldo = profile?.lottoSaldo ?? 0;
             const wekenTegoed = Math.floor(lottoSaldo / standaardInleg);
-            // heeftBetaald (hierboven al bepaald) geeft aan of de
-            // meest recente/relevante week al bevestigd is. Die telt
-            // niet meer mee in het resterende saldo (al afgeschreven),
-            // maar moet wel meetellen in wat er in totaal "gedekt" is
-            // — anders lijkt het net alsof er bijna niks meer over is,
-            // terwijl deze week + het restsaldo samen verder vooruit
-            // reiken dan het kale saldo-getal laat zien.
-            let status: { kleur: string; bg: string; bericht: string };
-            if (lottoSaldo <= 0 && !heeftBetaald) {
-              status = { kleur: 'var(--muted)', bg: 'var(--surface)', bericht: 'Nog geen saldo — stort om automatisch mee te blijven doen' };
-            } else if (lottoSaldo < standaardInleg && !heeftBetaald) {
-              status = { kleur: 'var(--error)', bg: 'var(--error-soft)', bericht: `Nog €${(standaardInleg - lottoSaldo).toFixed(2)} nodig voor deze week` };
-            } else if (heeftBetaald && wekenTegoed > 0) {
-              status = wekenTegoed <= 1
-                ? { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: `Deze trekking + nog ${wekenTegoed} ${wekenTegoed === 1 ? 'week' : 'weken'} extra` }
-                : { kleur: 'var(--success)', bg: 'var(--success-soft)', bericht: `Deze trekking + nog ${wekenTegoed} weken extra` };
-            } else if (heeftBetaald) {
-              status = { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: 'Deze trekking gedekt — daarna nog geen saldo' };
-            } else if (wekenTegoed <= 1) {
-              status = { kleur: 'var(--warning)', bg: 'var(--warning-soft)', bericht: 'Bijna op — denk aan bijstorten' };
-            } else {
-              status = { kleur: 'var(--success)', bg: 'var(--success-soft)', bericht: `Nog ${wekenTegoed} weken automatisch gedekt` };
-            }
+            let kleur = 'var(--success)';
+            let kort = `Nog ${wekenTegoed} weken gedekt`;
+            if (lottoSaldo <= 0 && !heeftBetaald) { kleur = 'var(--muted)'; kort = 'Nog geen saldo'; }
+            else if (lottoSaldo < standaardInleg && !heeftBetaald) { kleur = 'var(--error)'; kort = `Nog €${(standaardInleg - lottoSaldo).toFixed(2)} nodig`; }
+            else if (heeftBetaald && wekenTegoed <= 1) { kleur = 'var(--warning)'; kort = wekenTegoed === 1 ? 'Deze + 1 week extra' : 'Deze trekking gedekt'; }
+            else if (heeftBetaald) { kleur = 'var(--success)'; kort = `Deze + ${wekenTegoed} weken extra`; }
+            else if (wekenTegoed <= 1) { kleur = 'var(--warning)'; kort = 'Bijna op'; }
             return (
-              <div className="card" style={{ padding: 16, background: status.bg, border: `1px solid ${status.kleur}33` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>💰</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>Mijn LottoSaldo</div>
-                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 26, color: status.kleur, letterSpacing: -0.5 }}>€{lottoSaldo.toFixed(2)}</div>
+              <Link href="/betalen" style={{ ...tapCard, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Mijn LottoSaldo</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 25, color: 'var(--gold)', letterSpacing: -0.5 }}>€{lottoSaldo.toFixed(2)}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: kleur, flexShrink: 0 }} />
+                      <div style={{ fontSize: 11, color: kleur, fontWeight: 600 }}>{kort}</div>
+                    </div>
                   </div>
-                  <Link href="/betalen" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: '8px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>Storten</Link>
                 </div>
-                <div style={{ fontSize: 12, color: status.kleur, fontWeight: 600, marginTop: 10 }}>{status.bericht}</div>
-                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4, lineHeight: 1.5 }}>
-                  Bij elke nieuwe speelweek wordt hier automatisch €{standaardInleg.toFixed(2)} van afgeschreven — geen actie nodig zolang er saldo is.
-                </div>
-              </div>
+                <div style={{ background: 'var(--accent)', color: 'white', borderRadius: 11, padding: '9px 15px', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>Storten</div>
+              </Link>
             );
           })()}
         </div>
 
-        {/* Betaalstatus */}
-        <div style={{ padding: '0 20px', marginBottom: 16 }}>
-          <div className="section-title">Betaalstatus</div>
-          {!mijnLaatsteBetaling && (
-            <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--warning-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>⏳</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>Nog niet betaald</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Stort om mee te doen deze week</div>
-              </div>
-              <Link href="/betalen" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Storten →</Link>
-            </div>
+        {/* Mijn betaalstatus — direct onder LottoSaldo; ja, enigszins
+            dubbel met het puntje hierboven, maar dit blok geeft leden
+            in één oogopslag zekerheid, los van het saldo-cijfer zelf */}
+        <div style={{ padding: '0 20px', marginBottom: 10 }}>
+          {inVerificatie ? (
+            <Link href="/betalen" style={{ ...tapCard, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 9, background: 'var(--warning-soft)', borderColor: 'rgba(255,170,51,0.28)' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--warning)' }}>In verificatie — €{mijnLaatsteBetaling!.bedrag.toFixed(2)}</div>
+              <div style={{ marginLeft: 'auto', fontSize: 14, color: 'var(--muted)', opacity: 0.6 }}>›</div>
+            </Link>
+          ) : heeftBetaald ? (
+            <Link href="/betalen" style={{ ...tapCard, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 9, background: 'var(--success-soft)', borderColor: 'rgba(62,207,126,0.28)' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--success)' }}>Betaald voor deze week</div>
+              <div style={{ marginLeft: 'auto', fontSize: 14, color: 'var(--muted)', opacity: 0.6 }}>›</div>
+            </Link>
+          ) : (
+            <Link href="/betalen" style={{ ...tapCard, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 9, background: 'var(--warning-soft)', borderColor: 'rgba(255,170,51,0.28)' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--warning)' }}>Nog niet betaald deze week</div>
+              <div style={{ marginLeft: 'auto', fontSize: 14, color: 'var(--muted)', opacity: 0.6 }}>›</div>
+            </Link>
           )}
-          {inVerificatie && (
-            <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--warning-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📤</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>In verificatie — €{mijnLaatsteBetaling.bedrag.toFixed(2)}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Kashouder bevestigt zo snel mogelijk</div>
-              </div>
-              <span className="badge badge-warning">⏳ Wachten</span>
-            </div>
-          )}
-          {heeftBetaald && (() => {
-            const trekkingDatum = mijnLaatsteBetaling.trekkingWeek
-              ? weekStringNaarDatum(mijnLaatsteBetaling.trekkingWeek)
-              : null;
-            return (
-              <div className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--success-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✅</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{mijnLaatsteBetaling.omschrijving} — €{mijnLaatsteBetaling.bedrag.toFixed(2)}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {trekkingDatum ? `Trekking ${trekkingDatum}` : 'Betaald'}
-                  </div>
-                </div>
-                <span className="badge badge-green">Betaald</span>
-              </div>
-            );
-          })()}
         </div>
 
-        {/* Stats */}
-        <div style={{ padding: '0 20px', marginBottom: 16 }}>
-          <div className="section-title">Dit seizoen</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 18, marginBottom: 8 }}>🎯</div>
-              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.8, color: 'var(--accent)' }}>{mijnPunten}</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Ranglijst punten</div>
-            </div>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 18, marginBottom: 8 }}>📊</div>
-              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.8, color: 'var(--accent)' }}>
-                {laden || mijnPositie === 0 ? '—' : `#${mijnPositie}`}
+        {/* Volgende trekking + eigen nummers */}
+        <div style={{ padding: '0 20px', marginBottom: 10 }}>
+          <Link href="/trekkingen" style={{ ...tapCard, padding: '13px 16px', display: 'block' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase' }}>⏰ Volgende trekking</div>
+              <div style={{ background: 'var(--accent-soft)', border: '1px solid rgba(74,158,255,0.3)', borderRadius: 18, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>
+                {dagenTotVolgendeTrekking() === 0 ? 'Vandaag' : `Nog ${dagenTotVolgendeTrekking()} ${dagenTotVolgendeTrekking() === 1 ? 'dag' : 'dagen'}`}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Positie</div>
             </div>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 18, marginBottom: 8 }}>🎱</div>
-              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.8, color: 'var(--gold)' }}>{trekkingen.length}</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Trekkingen</div>
-            </div>
-            <div className="card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 18, marginBottom: 8 }}>👥</div>
-              <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.8, color: 'var(--success)' }}>{actieveLeden.length}</div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Leden</div>
-            </div>
-          </div>
+            {profile?.tickets?.[0]?.nummers?.length ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gap: 6 }}>
+                {profile.tickets[0].nummers.map(n => (
+                  <div key={n} className="bal bal-normal" style={{ width: '100%', aspectRatio: '1', fontSize: 12.5 }}>{n}</div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>Nog geen ticket ingesteld — stel je nummers in via Profiel.</div>
+            )}
+          </Link>
         </div>
 
-        {/* Laatste trekking */}
-        {laatsteTrekking && (
-          <div style={{ padding: '0 20px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div className="section-title" style={{ marginBottom: 0 }}>Laatste trekking</div>
-              <Link href="/trekkingen" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
-            </div>
-            <Link href={`/trekkingen/${laatsteTrekking.id}`} style={{ textDecoration: 'none' }}>
-              <div style={{ background: winnaarResultaat ? 'linear-gradient(135deg,rgba(240,192,96,0.08) 0%,var(--surface) 100%)' : 'var(--surface)', border: `1px solid ${winnaarResultaat ? 'rgba(240,192,96,0.2)' : 'var(--border)'}`, borderRadius: 18, padding: '16px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>{formatDatum(laatsteTrekking.datum)}</span>
-                  {winnaarResultaat ? <span className="badge badge-gold">🏆 Winnaar</span> : <span className="badge badge-green">✓ Verwerkt</span>}
-                </div>
-                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {laatsteTrekking.nummers.map(n => {
-                    const isHit = mijnResultaatLaatste?.matchedNumbers?.includes(n) ?? false;
-                    return (
-                      <div key={n} className={`bal ${isHit ? 'bal-hit' : 'bal-normal'}`} style={{ width: 34, height: 34, fontSize: 12 }}>{n}</div>
-                    );
-                  })}
-                  {laatsteTrekking.bonusBal !== null && (
-                    <div className="bal bal-bonus" style={{ width: 34, height: 34, fontSize: 11 }}>B·{laatsteTrekking.bonusBal}</div>
-                  )}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  {winnaarResultaat && winnaarResultaat.userId !== user?.uid
-                    ? `${winnaarResultaat.userNaam} · ${winnaarResultaat.aantalGoed} goed${winnaarResultaat.prijsBedrag != null ? ` · €${winnaarResultaat.prijsBedrag.toFixed(0)}` : ''}`
-                    : ''}
-                  {mijnResultaatLaatste ? ` · Jij: ${mijnResultaatLaatste.aantalGoed} goed` : ''}
-                </div>
+        {/* Laatste trekking / winnaar */}
+        {laatsteTrekking ? (
+          <div style={{ padding: '0 20px', marginBottom: 10 }}>
+            <Link href={`/trekkingen/${laatsteTrekking.id}`} style={{ ...tapCard, padding: '13px 16px', display: 'block', background: winnaarResultaat ? 'linear-gradient(135deg,rgba(240,192,96,0.1),rgba(240,192,96,0.02)), var(--surface)' : tapCard.background, borderColor: winnaarResultaat ? 'rgba(240,192,96,0.28)' : 'var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: winnaarResultaat ? 'var(--gold)' : 'var(--muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+                Laatste trekking — {formatDatum(laatsteTrekking.datum)}
               </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {laatsteTrekking.nummers.map(n => {
+                  const isHit = mijnResultaatLaatste?.matchedNumbers?.includes(n) ?? false;
+                  return <div key={n} className={`bal ${isHit ? 'bal-hit' : 'bal-normal'}`} style={{ width: 28, height: 28, fontSize: 11 }}>{n}</div>;
+                })}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginTop: 9 }}>
+                {winnaarResultaat
+                  ? <>🎉 <span style={{ color: 'var(--gold)' }}>{winnaarResultaat.userNaam}</span> — {winnaarResultaat.aantalGoed} goed{winnaarResultaat.prijsBedrag != null ? <> — <span style={{ color: 'var(--gold)' }}>€{winnaarResultaat.prijsBedrag.toFixed(0)}</span></> : ''}</>
+                  : mijnResultaatLaatste ? `Jij: ${mijnResultaatLaatste.aantalGoed} goed` : 'Geen winnaar deze trekking'}
+              </div>
+              <div style={chevron}>›</div>
             </Link>
           </div>
+        ) : !laden && (
+          <div style={{ padding: '0 20px', marginBottom: 10 }}>
+            <div style={{ ...tapCard, padding: '16px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Nog geen trekkingen dit seizoen.</div>
+          </div>
         )}
 
-        {!laden && trekkingen.length === 0 && (
-          <div style={{ padding: '0 20px', marginBottom: 16 }}>
-            <div className="section-title">Laatste trekking</div>
-            <div className="card" style={{ padding: '16px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-              Nog geen trekkingen dit seizoen.
+        {/* Deelnemers — betaalstatus van de club zit hierin verwerkt */}
+        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+          <Link href="/deelnemers" style={{ ...tapCard, padding: '13px 16px', display: 'block' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 2 }}>Deelnemers</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--success)', marginBottom: 10 }}>
+              {laden ? 'Laden…' : `${aantalBetaald} / ${actieveLeden.length} betaald deze week`}
             </div>
-          </div>
-        )}
-
-        {/* Deelnemers */}
-        <div style={{ padding: '0 20px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="section-title" style={{ marginBottom: 0 }}>Deelnemers</div>
-            <Link href="/deelnemers" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, textDecoration: 'none' }}>Alle →</Link>
-          </div>
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {actieveLeden.slice(0, 6).map((lid) => (
-                <div key={lid.id} style={{ position: 'relative' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600, color: 'var(--white)', border: `2px solid ${betaaldeLeden.has(lid.id) ? 'var(--success)' : 'var(--warning)'}`, overflow: 'hidden' }}>
-                    {lid.foto ? <img src={lid.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : lid.naam.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: '50%', background: betaaldeLeden.has(lid.id) ? 'var(--success)' : 'var(--warning)', border: '2px solid var(--navy)' }} />
+            <div style={{ display: 'flex', gap: 7, overflowX: 'auto' }}>
+              {actieveLeden.slice(0, 6).map(lid => (
+                <div key={lid.id} style={{ flexShrink: 0, width: 34, height: 34, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'var(--white)', border: `2px solid ${betaaldeLeden.has(lid.id) ? 'var(--success)' : 'var(--warning)'}`, overflow: 'hidden' }}>
+                  {lid.foto ? <img src={lid.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : lid.naam.charAt(0).toUpperCase()}
                 </div>
               ))}
               {actieveLeden.length > 6 && (
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>
+                <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: '50%', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 700, color: 'var(--muted)' }}>
                   +{actieveLeden.length - 6}
                 </div>
               )}
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>
-              {laden ? 'Laden…' : `${aantalBetaald} betaald · ${aantalOpen} open`}
+            <div style={{ display: 'flex', gap: 14, marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: 'var(--success)' }}>● betaald</div>
+              <div style={{ fontSize: 11, color: 'var(--warning)' }}>● nog niet</div>
             </div>
-          </div>
-        </div>
-
-        {/* Volgende trekking */}
-        <div style={{ padding: '0 20px', marginBottom: 8 }}>
-          <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.2)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 28 }}>⏰</span>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Volgende trekking</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{volgendeZaterdag()}</div>
-            </div>
-          </div>
+            <div style={chevron}>›</div>
+          </Link>
         </div>
       </div>
 
