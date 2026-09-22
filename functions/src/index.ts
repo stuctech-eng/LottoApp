@@ -539,7 +539,7 @@ export const onTrekkingHerinnering = functions.scheduler.onSchedule(
       if (tokens.length > 0) {
         await sendToTokens(userDoc.id, tokens, {
           title: '🎱 Lotto-uitslag invoeren',
-          body: 'De trekking van vanavond is beschikbaar. Voer de nummers in via de app.',
+          body: 'De trekking van vanavond is beschikbaar. Check eerst Tikkie op nieuwe stortingen — invoeren bevriest wie deze week meedoet.',
         }, { path: '/trekkingen' });
         aantalVerstuurd++;
       }

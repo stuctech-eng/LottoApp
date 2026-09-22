@@ -241,6 +241,19 @@ function TrekkingInvoerModal({
             </div>
           ) : (
             <>
+              {/* Tikkie-check herinnering — het moment van opslaan
+                  bevriest wie deze week meetelt als betaald, dus dit
+                  moet je hebben gezien VOORDAT je invoert, niet pas
+                  achteraf. Staat hier i.p.v. alleen in een pushmelding,
+                  want die kan gemist zijn of allang niet meer relevant
+                  aanvoelen tegen de tijd dat je daadwerkelijk invoert. */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.25)', borderRadius: 12, padding: '10px 14px', marginBottom: 16 }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>💳</span>
+                <div style={{ fontSize: 12, color: 'var(--warning)', lineHeight: 1.5 }}>
+                  Eerst Tikkie gecontroleerd op nieuwe stortingen? Zodra je hieronder opslaat, staat vast wie deze week meetelt als betaald.
+                </div>
+              </div>
+
               <label className="form-label">{spelConfig.aantalGetallen} nummers ({spelConfig.minGetal}-{spelConfig.maxGetal})</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
                 {nummers.map((val, i) => (
