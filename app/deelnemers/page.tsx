@@ -9,7 +9,7 @@ import { subscribeBetalingen, relevanteTrekkingWeek } from '@/lib/firestore-paym
 import { User, Trekking, Resultaat, Betaling } from '@/lib/types';
 
 function DeelnemersContent() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [leden, setLeden] = useState<User[]>([]);
   const [trekkingen, setTrekkingen] = useState<Trekking[]>([]);
   const [resultatenLaatsteTrekking, setResultatenLaatsteTrekking] = useState<Resultaat[]>([]);
@@ -74,6 +74,19 @@ function DeelnemersContent() {
           </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Gesorteerd op aantal goed — deze speelreeks</div>
         </div>
+
+        {/* Tabbalk — "Administratief" alleen zichtbaar voor de
+            beheerder, brengt naar de ledenbeheer-pagina. Voor leden
+            en kashouder verschijnt deze rij niet — geen lege ruimte. */}
+        {profile?.rol === 'beheerder' && (
+          <>
+            <div style={{ padding: '14px 20px 4px', display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRadius: 12, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 12.5, fontWeight: 700 }}>Deelnemers</div>
+              <Link href="/leden" style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--muted)', fontSize: 12.5, fontWeight: 700, textDecoration: 'none' }}>👑 Administratief</Link>
+            </div>
+            <div style={{ padding: '2px 20px 6px', fontSize: 11, color: 'var(--muted)' }}>Alleen zichtbaar voor de beheerder</div>
+          </>
+        )}
 
         <div style={{ padding: '0 20px', paddingBottom: 32 }}>
           {laden && (

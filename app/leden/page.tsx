@@ -2,11 +2,10 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { subscribeAllUsers, formatLidSinds, updateUserRol, verwijderLid, heractiveerLid, verwijderLidDefinitief } from '@/lib/firestore-users';
+import { subscribeAllUsers, formatLidSinds } from '@/lib/firestore-users';
 import { maakUitnodiging } from '@/lib/firestore-invites';
-import { logAudit } from '@/lib/firestore-audit';
 import { useAuth } from '@/lib/auth-context';
-import { User, Rol } from '@/lib/types';
+import { User } from '@/lib/types';
 
 const NAV_KASHOUDER = [
   { href: '/kashouder', icon: '🏠', label: 'Dashboard' },
@@ -25,7 +24,23 @@ const NAV_BEHEERDER = [
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer' },
 ];
 
-const rolColors: Record<string,string> = { lid:'badge-blue', kashouder:'badge-green', beheerder:'badge-gold' };
+const rolLabel: Record<string, string> = { lid: 'lid', kashouder: 'kashouder', beheerder: 'beheerder' };
+const rolKleur: Record<string, string> = { lid: 'var(--accent)', kashouder: 'var(--success)', beheerder: 'var(--gold)' };
+
+const tapCard = {
+  display: 'flex' as const,
+  alignItems: 'center' as const,
+  gap: 12,
+  textDecoration: 'none',
+  color: 'inherit',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderColor: 'var(--border)',
+  borderTopColor: 'rgba(255,255,255,0.14)',
+  borderRadius: 16,
+  boxShadow: '0 5px 14px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.04) inset',
+  padding: '13px 14px',
+};
 
 function LedenPageContent() {
   const { user, profile } = useAuth();
@@ -33,13 +48,10 @@ function LedenPageContent() {
   const [filter, setFilter] = useState('Actief');
   const [leden, setLeden] = useState<User[]>([]);
   const [laden, setLaden] = useState(true);
-  const [bezigId, setBezigId] = useState<string | null>(null);
-  const [waarschuwing, setWaarschuwing] = useState<string | null>(null);
 
   const isBeheerder = profile?.rol === 'beheerder';
   const NAV = isBeheerder ? NAV_BEHEERDER : NAV_KASHOUDER;
   const dashboardHref = isBeheerder ? '/beheerder' : '/kashouder';
-  const aantalBeheerders = leden.filter(l => l.rol === 'beheerder').length;
 
   // Uitnodigen — zowel kashouder als beheerder mogen dit; deze pagina
   // zelf is al beperkt tot die twee rollen via ProtectedRoute.
@@ -62,62 +74,6 @@ function LedenPageContent() {
     }
   };
 
-  // Verwijderen/heractiveren — alleen beheerder, net als rol-wijzigen.
-  const [verwijderBezigId, setVerwijderBezigId] = useState<string | null>(null);
-
-  const handleVerwijderen = async (lid: User) => {
-    if (!user || !profile || !isBeheerder) return;
-    const bevestigd = window.confirm(`${lid.naam} verwijderen uit de club? Het account en alle historische data blijven bewaard — je kunt dit altijd ongedaan maken via 'Heractiveren'.`);
-    if (!bevestigd) return;
-    setVerwijderBezigId(lid.id);
-    try {
-      await verwijderLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
-    } finally {
-      setVerwijderBezigId(null);
-    }
-  };
-
-  const handleHeractiveren = async (lid: User) => {
-    if (!user || !profile || !isBeheerder) return;
-    setVerwijderBezigId(lid.id);
-    try {
-      await heractiveerLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
-    } finally {
-      setVerwijderBezigId(null);
-    }
-  };
-
-  const handleDefinitiefVerwijderen = async (lid: User) => {
-    if (!user || !profile || !isBeheerder) return;
-    const bevestigd = window.confirm(`${lid.naam} DEFINITIEF verwijderen? Dit kan niet ongedaan worden gemaakt — het profiel is daarna volledig weg. Gebruik dit alleen voor test-accounts, nooit voor een lid dat echt heeft meegespeeld.`);
-    if (!bevestigd) return;
-    setVerwijderBezigId(lid.id);
-    try {
-      await verwijderLidDefinitief({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
-    } finally {
-      setVerwijderBezigId(null);
-    }
-  };
-
-  const handleRolChange = async (lid: User, nieuweRol: Rol) => {
-    if (!user || !profile || nieuweRol === lid.rol) return;
-
-    // Systeemvoorwaarde: er moet altijd minstens 1 beheerder zijn.
-    if (lid.rol === 'beheerder' && nieuweRol !== 'beheerder' && aantalBeheerders <= 1) {
-      setWaarschuwing(`${lid.naam} is de laatste beheerder — wijs eerst iemand anders aan als beheerder voordat je deze rol wijzigt.`);
-      setTimeout(() => setWaarschuwing(null), 5000);
-      return;
-    }
-
-    setBezigId(lid.id);
-    try {
-      await updateUserRol(lid.id, nieuweRol);
-      await logAudit('rol_gewijzigd', `${profile.naam} wijzigde rol van ${lid.naam}: ${lid.rol} → ${nieuweRol}`, { uid: user.uid, naam: profile.naam }, { doelUserId: lid.id });
-    } finally {
-      setBezigId(null);
-    }
-  };
-
   useEffect(() => {
     const unsub = subscribeAllUsers((users) => {
       setLeden(users);
@@ -130,6 +86,7 @@ function LedenPageContent() {
     if (!l.naam.toLowerCase().includes(zoek.toLowerCase())) return false;
     if (filter === 'Actief') return l.actief;
     if (filter === 'Inactief') return !l.actief;
+    if (filter === 'Wachtrij') return l.wachtOpNieuweSpeelreeks === true;
     if (filter === 'Kashouders') return l.rol === 'kashouder';
     if (filter === 'Beheerders') return l.rol === 'beheerder';
     return true;
@@ -137,7 +94,7 @@ function LedenPageContent() {
 
   const totaal = leden.length;
   const actief = leden.filter(l => l.actief).length;
-  const kashouders = leden.filter(l => l.rol === 'kashouder' || l.rol === 'beheerder').length;
+  const wachtrij = leden.filter(l => l.wachtOpNieuweSpeelreeks === true).length;
   const inactief = totaal - actief;
 
   return (
@@ -200,26 +157,31 @@ function LedenPageContent() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, padding: '0 20px', marginBottom: 14, overflowX: 'auto' }}>
-          {['Alle','Actief','Inactief','Kashouders','Beheerders'].map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: '1.5px solid', background: filter===f?'var(--accent-soft)':'var(--surface)', borderColor: filter===f?'rgba(74,158,255,0.35)':'var(--border)', color: filter===f?'var(--accent)':'var(--muted)', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}>{f}</button>
+          {['Alle', 'Actief', 'Inactief', 'Wachtrij', 'Kashouders', 'Beheerders'].map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                flexShrink: 0, padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, border: '1.5px solid',
+                background: filter === f ? (f === 'Wachtrij' ? 'var(--warning-soft)' : 'var(--accent-soft)') : 'var(--surface)',
+                borderColor: filter === f ? (f === 'Wachtrij' ? 'rgba(255,170,51,0.35)' : 'rgba(74,158,255,0.35)') : 'var(--border)',
+                color: filter === f ? (f === 'Wachtrij' ? 'var(--warning)' : 'var(--accent)') : 'var(--muted)',
+                cursor: 'pointer', fontFamily: "'DM Sans',sans-serif",
+              }}
+            >
+              {f === 'Wachtrij' ? `⏳ Wachtrij` : f}
+            </button>
           ))}
         </div>
 
         <div style={{ display: 'flex', gap: 10, padding: '0 20px', marginBottom: 16 }}>
-          {[[String(totaal),'Totaal',''],[String(actief),'Actief','var(--success)'],[String(inactief),'Inactief','var(--warning)'],[String(kashouders),'Kashouder+','var(--gold)']].map(([v,l,c]) => (
+          {[[String(totaal), 'Totaal', ''], [String(actief), 'Actief', 'var(--success)'], [String(wachtrij), 'Wachtrij', 'var(--warning)'], [String(inactief), 'Inactief', 'var(--muted)']].map(([v, l, c]) => (
             <div key={l} style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 13, padding: '11px 8px', textAlign: 'center' }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: c || 'var(--white)' }}>{v}</div>
               <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{l}</div>
             </div>
           ))}
         </div>
-
-        {waarschuwing && (
-          <div style={{ margin: '0 20px 14px', background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.25)', borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
-            <span style={{ fontSize: 13, color: 'var(--warning)', lineHeight: 1.5 }}>{waarschuwing}</span>
-          </div>
-        )}
 
         {laden && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
@@ -233,76 +195,35 @@ function LedenPageContent() {
           </div>
         )}
 
-        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
-          {gefilterd.map((lid, i) => (
-            <div key={lid.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 12, opacity: lid.actief ? 1 : 0.5 }}>
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: 'var(--muted)' }}>{lid.naam.charAt(0).toUpperCase()}</div>
-                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: '50%', background: lid.actief ? 'var(--success)' : 'var(--muted)', border: '2px solid var(--navy)' }} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{lid.naam}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lid.email} · sinds {formatLidSinds(lid.lidSinds)}</div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                {isBeheerder ? (
-                  <select
-                    value={lid.rol}
-                    disabled={bezigId === lid.id}
-                    onChange={(e) => handleRolChange(lid, e.target.value as Rol)}
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: '4px 8px',
-                      borderRadius: 10,
-                      border: '1px solid var(--border)',
-                      background: 'var(--surface2)',
-                      color: lid.rol === 'beheerder' ? 'var(--gold)' : lid.rol === 'kashouder' ? 'var(--success)' : 'var(--accent)',
-                      fontFamily: "'DM Sans',sans-serif",
-                      opacity: bezigId === lid.id ? 0.5 : 1,
-                    }}
-                  >
-                    <option value="lid">lid</option>
-                    <option value="kashouder">kashouder</option>
-                    <option value="beheerder">beheerder</option>
-                  </select>
-                ) : (
-                  <span className={`badge ${rolColors[lid.rol]}`}>{lid.rol}</span>
-                )}
-                {!lid.actief && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>inactief</span>}
-                {isBeheerder && lid.id !== user?.uid && (
-                  lid.actief ? (
-                    <button
-                      onClick={() => handleVerwijderen(lid)}
-                      disabled={verwijderBezigId === lid.id}
-                      title="Verwijderen"
-                      style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--error)', background: 'var(--error-soft)', border: 'none', borderRadius: '50%', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
-                    >
-                      {verwijderBezigId === lid.id ? '…' : '❌'}
-                    </button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <button
-                        onClick={() => handleHeractiveren(lid)}
-                        disabled={verwijderBezigId === lid.id}
-                        style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
-                      >
-                        {verwijderBezigId === lid.id ? '…' : 'Heractiveren'}
-                      </button>
-                      <button
-                        onClick={() => handleDefinitiefVerwijderen(lid)}
-                        disabled={verwijderBezigId === lid.id}
-                        title="Definitief verwijderen — kan niet ongedaan worden gemaakt"
-                        style={{ fontSize: 13, color: 'var(--error)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', opacity: verwijderBezigId === lid.id ? 0.5 : 1 }}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          ))}
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 8 }}>
+          {gefilterd.map(lid => {
+            const wacht = lid.wachtOpNieuweSpeelreeks === true;
+            return (
+              <Link
+                key={lid.id}
+                href={`/leden/${lid.id}`}
+                style={{
+                  ...tapCard,
+                  opacity: lid.actief ? 1 : 0.55,
+                  borderColor: wacht ? 'rgba(255,170,51,0.4)' : tapCard.borderColor,
+                  boxShadow: wacht ? '0 5px 14px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,170,51,0.15) inset' : tapCard.boxShadow,
+                }}
+              >
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: 'var(--white)', border: `2px solid ${wacht ? 'var(--warning)' : lid.actief ? 'var(--success)' : 'var(--muted)'}`, flexShrink: 0, overflow: 'hidden' }}>
+                  {lid.foto ? <img src={lid.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : lid.naam.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lid.naam}</div>
+                  <div style={{ fontSize: 11, marginTop: 2, color: wacht ? 'var(--warning)' : 'var(--muted)' }}>
+                    {wacht ? '⏳ Wacht op nieuwe speelreeks' : !lid.actief ? 'Inactief' : `sinds ${formatLidSinds(lid.lidSinds)}`}
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: rolKleur[lid.rol], background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '3px 8px', flexShrink: 0 }}>
+                  {rolLabel[lid.rol] ?? lid.rol}
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
