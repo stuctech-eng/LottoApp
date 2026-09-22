@@ -258,6 +258,21 @@ export async function markeerTikkieGeopend(betalingId: string): Promise<void> {
  * Géén nieuwe kasmutatie in beide gevallen: dat geld zat al in de kas
  * sinds de storting zelf werd bevestigd.
  */
+/**
+ * Publiek, herbruikbaar aanroepbaar los van stortLottoSaldo — voor
+ * als een lid al genoeg LottoSaldo heeft liggen (bijv. na een
+ * correctie, of nadat een verkeerd-verrekende week is teruggedraaid)
+ * maar de automatische verrekening daar nog niet bij is geweest.
+ * Boekt GEEN nieuw geld (geen kasmutatie) — gebruikt uitsluitend
+ * saldo dat er al is. Zie ook de toelichting bij de functie zelf.
+ */
+export async function herverrekenLottoSaldo(
+  lid: { id: string; naam: string },
+  kashouder: ActieUser
+) {
+  await verrekenLottoSaldoMetOpenstaandeWeek(lid.id, lid.naam, kashouder);
+}
+
 async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: string, kashouder: ActieUser) {
   const userSnap = await getDoc(doc(db, 'users', userId));
   if (!userSnap.exists()) return;
@@ -278,21 +293,31 @@ async function verrekenLottoSaldoMetOpenstaandeWeek(userId: string, userNaam: st
   // BEWUST geen huidigTrekkingWeek() (pure kalenderdatum) — op
   // zaterdagavond, tussen de trekking en maandag, zou dat een
   // storting kunnen laten verrekenen met de allang-afgelopen week in
-  // plaats van de nieuwe, eerstvolgende. relevanteTrekkingWeek()
-  // bepaalt de week op basis van dit lid se eigen, daadwerkelijke
-  // betaalhistorie — hetzelfde patroon dat elders in de app (dashboard,
-  // kashouder, beheerder) al hetzelfde soort probleem oploste.
-  const alleBetalingenSnap = await getDocs(query(
+  // plaats van de nieuwe, eerstvolgende.
+  //
+  // BUGFIX: relevanteTrekkingWeek() moet CLUB-BREED bepaald worden
+  // (zoals dashboard en kashouder-financieel al doen), niet op basis
+  // van alleen dit ene lid se eigen betaalhistorie. Had een lid nog
+  // een oude, nooit-betaalde 'open' registratie staan van vóór de
+  // laatste winnende trekking (bijv. iemand die net lid werd toen
+  // die week nog liep), dan pakte de per-lid-variant die verouderde
+  // week i.p.v. de week waar de rest van de club al voor betaalt —
+  // met als gevolg dat de storting de allang-gepasseerde speelreeks
+  // "betaalde" i.p.v. de huidige, en dus niet meetelde in de actuele
+  // prijzenpot.
+  const alleBetalingenClubSnap = await getDocs(query(collection(db, 'betalingen')));
+  const alleBetalingenClub = alleBetalingenClubSnap.docs.map(d => d.data() as Betaling);
+  const week = relevanteTrekkingWeek(alleBetalingenClub);
+
+  const eigenBetalingenSnap = await getDocs(query(
     collection(db, 'betalingen'),
     where('userId', '==', userId)
   ));
-  const alleBetalingen = alleBetalingenSnap.docs.map(d => d.data() as Betaling);
-  const week = relevanteTrekkingWeek(alleBetalingen);
 
   // Al een 'betaald'-document voor deze week? Niets te doen.
-  if (alleBetalingenSnap.docs.some(d => d.data().trekkingWeek === week && d.data().status === 'betaald')) return;
+  if (eigenBetalingenSnap.docs.some(d => d.data().trekkingWeek === week && d.data().status === 'betaald')) return;
 
-  const openDoc = alleBetalingenSnap.docs.find(d => d.data().trekkingWeek === week && d.data().status === 'open');
+  const openDoc = eigenBetalingenSnap.docs.find(d => d.data().trekkingWeek === week && d.data().status === 'open');
 
   if (openDoc) {
     await updateDoc(openDoc.ref, {
