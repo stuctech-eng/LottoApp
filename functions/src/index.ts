@@ -508,15 +508,51 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
       .where('status', '==', 'open')
       .where('trekkingWeek', '==', huidigeWeek)
       .get();
-    const userIds = [...new Set(openBetalingen.docs.map(d => d.data().userId as string))];
-    for (const userId of userIds) {
+    const INLEG = await getStandaardInleg();
+
+    // BUGFIX: een lid kan hier "open" staan terwijl er allang genoeg
+    // LottoSaldo klaarligt — bijv. na een saldo-correctie die (vóór
+    // deze fix) geen verrekening triggerde. Zo iemand een "je hebt
+    // nog niet betaald, stort via Tikkie"-melding sturen is niet
+    // alleen onnodig maar ronduit fout. Daarom hier zelf eerst
+    // controleren én verrekenen waar mogelijk, i.p.v. blind te
+    // herinneren — deze functie repareert zulke gevallen dus ook
+    // meteen zelf, in plaats van alleen de melding te onderdrukken.
+    const batch = db.batch();
+    let aantalZelfVerrekend = 0;
+    const teHerinnerenUserIds: string[] = [];
+
+    const gezieneUsers = new Set<string>();
+    for (const betalingDoc of openBetalingen.docs) {
+      const userId = betalingDoc.data().userId as string;
+      if (gezieneUsers.has(userId)) continue;
+      gezieneUsers.add(userId);
+
+      const userSnap = await db.doc(`users/${userId}`).get();
+      const lottoSaldo = (userSnap.data()?.lottoSaldo as number | undefined) ?? 0;
+
+      if (lottoSaldo >= INLEG) {
+        batch.update(betalingDoc.ref, {
+          status: 'betaald',
+          bevestigd: admin.firestore.FieldValue.serverTimestamp(),
+          bevestigdDoor: 'systeem-lottosaldo',
+        });
+        batch.update(userSnap.ref, { lottoSaldo: admin.firestore.FieldValue.increment(-INLEG) });
+        aantalZelfVerrekend++;
+      } else {
+        teHerinnerenUserIds.push(userId);
+      }
+    }
+    if (aantalZelfVerrekend > 0) await batch.commit();
+
+    for (const userId of teHerinnerenUserIds) {
       const tokens = await getFcmTokens(userId, 'herinneringen');
       await sendToTokens(userId, tokens, {
         title: '⏰ Betaalherinnering',
         body: 'Je inleg voor deze week staat nog open. Betaal vóór zaterdag 18:00 — mis je de deadline, dan telt de trekking van morgen niet mee voor je verzameling.',
       }, { path: '/betalen' });
     }
-    functions.logger.info(`Herinneringen verstuurd naar ${userIds.length} leden.`);
+    functions.logger.info(`Zelf verrekend: ${aantalZelfVerrekend}. Herinneringen verstuurd naar ${teHerinnerenUserIds.length} leden.`);
   }
 );
 

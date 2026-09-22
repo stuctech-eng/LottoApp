@@ -341,7 +341,12 @@ function FinancieelPageContent() {
                         🔁 Verreken (€{(lid.lottoSaldo ?? 0).toFixed(2)} saldo)
                       </button>
                     )}
-                    {lid.telefoon && (
+                    {/* BUGFIX: stond eerder altijd naast "Verreken" te
+                        knipperen, ook als er al genoeg saldo lag — een
+                        "je hebt nog niet betaald"-bericht is dan
+                        feitelijk onjuist. Alleen tonen als saldo écht
+                        ontoereikend is (mutually exclusive met Verreken). */}
+                    {lid.telefoon && (lid.lottoSaldo ?? 0) < bedrag && (
                       <a
                         href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, standaardInleg, STANDAARD_OMSCHRIJVING, tikkieLink))}
                         target="_blank"

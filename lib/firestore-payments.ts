@@ -498,6 +498,14 @@ export async function corrigeerLottoSaldo(
     beheerder,
     { doelUserId: lid.id }
   );
+  // BUGFIX: ontbrak hier — stortLottoSaldo deed dit al wel. Zonder
+  // deze aanroep bleef een lid met genoeg (nieuw gecorrigeerd) saldo
+  // gewoon "Openstaand" staan tot iemand het handmatig zag en op
+  // Verreken drukte. Veilig in beide richtingen: verhoogt de correctie
+  // het saldo genoeg, dan wordt een openstaande week alsnog gedekt;
+  // verlaagt de correctie het, dan doet deze functie simpelweg niets
+  // (een al-bevestigde betaling wordt nooit teruggedraaid).
+  await verrekenLottoSaldoMetOpenstaandeWeek(lid.id, lid.naam, beheerder);
 }
 
 export async function registreerUitbetaling(input: {

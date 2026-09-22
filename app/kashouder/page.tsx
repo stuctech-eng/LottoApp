@@ -9,6 +9,7 @@ import {
   berekenKasSaldo,
   relevanteTrekkingWeek,
   stortLottoSaldo,
+  herverrekenLottoSaldo,
 } from '@/lib/firestore-payments';
 import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
@@ -97,6 +98,24 @@ function KashouderPageContent() {
     }
   };
 
+  // Zelfde knop als op Financieel — voor als een lid al genoeg
+  // LottoSaldo heeft liggen. Boekt geen nieuw geld, gebruikt puur
+  // bestaand saldo. Stond hier eerder niet, alleen op de aparte
+  // Financieel-pagina — nu op allebei de plekken consistent.
+  const handleHerverreken = async (lid: User) => {
+    const au = actieUser();
+    if (!au) return;
+    const bevestigd = window.confirm(`${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`);
+    if (!bevestigd) return;
+    setMarkeerFout(null);
+    try {
+      await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, au);
+    } catch (e) {
+      setMarkeerFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
+      setTimeout(() => setMarkeerFout(null), 5000);
+    }
+  };
+
   return (
     <>
       <div className="bg-grid" />
@@ -175,14 +194,25 @@ function KashouderPageContent() {
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{lid.naam}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>€{bedrag.toFixed(2)} · {omschrijving}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
                     <button
                       onClick={() => handleMarkeerBetaald(lid)}
                       style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
                     >
                       💰 Storten
                     </button>
-                    {lid.telefoon && (
+                    {(lid.lottoSaldo ?? 0) >= bedrag && (
+                      <button
+                        onClick={() => handleHerverreken(lid)}
+                        title="Gebruikt bestaand LottoSaldo — boekt geen nieuw geld bij"
+                        style={{ background: 'var(--surface2)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
+                      >
+                        🔁 Verreken (€{(lid.lottoSaldo ?? 0).toFixed(2)} saldo)
+                      </button>
+                    )}
+                    {/* Alleen tonen als saldo écht ontoereikend is —
+                        anders is "nog niet betaald" feitelijk onjuist. */}
+                    {lid.telefoon && (lid.lottoSaldo ?? 0) < bedrag && (
                       <a
                         href={whatsappLink(lid.telefoon, buildWhatsappHerinnering(lid.naam, standaardInleg, STANDAARD_OMSCHRIJVING, tikkieLink))}
                         target="_blank"
