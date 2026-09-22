@@ -482,7 +482,7 @@ function AdminPageContent() {
                       <input
                         type="text" inputMode="decimal" className="form-input" value={inlegInvoer}
                         onChange={e => { setInlegInvoer(e.target.value); setInlegError(null); }}
-                        placeholder="4,00"
+                        placeholder="Bedrag in euro's"
                         style={{ marginBottom: 8, borderColor: inlegError ? 'var(--error)' : undefined }}
                         autoFocus
                       />
