@@ -249,12 +249,14 @@ function NotificatiesContent() {
           >
             Instellingen
           </button>
-          <button
-            onClick={() => setTab('test')}
-            style={{ flex: 1, padding: '10px 0', borderRadius: 14, border: `1.5px solid ${tab === 'test' ? 'var(--accent)' : 'var(--border)'}`, background: tab === 'test' ? 'var(--accent-soft)' : 'var(--surface)', color: tab === 'test' ? 'var(--accent)' : 'var(--muted)', fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
-          >
-            Test
-          </button>
+          {isBeheerder && (
+            <button
+              onClick={() => setTab('test')}
+              style={{ flex: 1, padding: '10px 0', borderRadius: 14, border: `1.5px solid ${tab === 'test' ? 'var(--accent)' : 'var(--border)'}`, background: tab === 'test' ? 'var(--accent-soft)' : 'var(--surface)', color: tab === 'test' ? 'var(--accent)' : 'var(--muted)', fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}
+            >
+              Test
+            </button>
+          )}
         </div>
 
         {tab === 'instellingen' && (
@@ -305,7 +307,7 @@ function NotificatiesContent() {
           </div>
         )}
 
-        {tab === 'test' && (
+        {tab === 'test' && isBeheerder && (
           <div style={{ padding: '0 20px 32px' }}>
             <button onClick={runDiagnostiek} disabled={bezig} style={{ width: '100%', padding: 14, background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, marginBottom: 12, opacity: bezig ? 0.6 : 1, fontFamily: "'DM Sans',sans-serif" }}>
               {bezig ? '⏳ Bezig...' : '▶ Start diagnostiek'}
