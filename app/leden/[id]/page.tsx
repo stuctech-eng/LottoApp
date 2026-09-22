@@ -8,12 +8,14 @@ import {
   subscribeAllUsers,
   formatLidSinds,
   updateUserRol,
+  updateUserTelefoon,
   verwijderLid,
   heractiveerLid,
   verwijderLidDefinitief,
 } from '@/lib/firestore-users';
 import { subscribeAlleTrekkingen, subscribeResultaten, subscribeUserResultaten } from '@/lib/firestore-trekkingen';
-import { subscribeUserBetalingen, corrigeerLottoSaldo } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, corrigeerLottoSaldo, stortLottoSaldo, herverrekenLottoSaldo } from '@/lib/firestore-payments';
+import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { logAudit } from '@/lib/firestore-audit';
 import { whatsappLink } from '@/lib/providers/notifications';
 import { User, Trekking, Resultaat, Betaling, Rol } from '@/lib/types';
@@ -40,6 +42,12 @@ function LidDetailContent() {
   const [ditLidResultaten, setDitLidResultaten] = useState<Resultaat[]>([]);
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [laden, setLaden] = useState(true);
+  const [standaardInleg, setStandaardInleg] = useState(DEFAULT_VERENIGING_CONFIG.standaardInleg);
+
+  useEffect(() => {
+    const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
+    return unsub;
+  }, []);
 
   useEffect(() => {
     let geladen = 0;
@@ -143,6 +151,61 @@ function LidDetailContent() {
       await verwijderLidDefinitief({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
     } finally {
       setBezig(false);
+    }
+  };
+
+  // Storten + Verreken — stonden eerder alleen op Financieel/kashouder-
+  // home; nu ook hier, zodat je voor één lid niet meer heen en weer
+  // hoeft te schakelen tussen Leden en Financieel.
+  const [betaalBezig, setBetaalBezig] = useState(false);
+  const [betaalFout, setBetaalFout] = useState<string | null>(null);
+
+  const handleStorten = async () => {
+    if (!user || !profile || !lid) return;
+    const bevestigd = window.confirm(`€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
+    if (!bevestigd) return;
+    setBetaalFout(null);
+    setBetaalBezig(true);
+    try {
+      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, { uid: user.uid, naam: profile.naam });
+    } catch (e) {
+      setBetaalFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
+    } finally {
+      setBetaalBezig(false);
+    }
+  };
+
+  const handleVerreken = async () => {
+    if (!user || !profile || !lid) return;
+    const bevestigd = window.confirm(`${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`);
+    if (!bevestigd) return;
+    setBetaalFout(null);
+    setBetaalBezig(true);
+    try {
+      await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+    } catch (e) {
+      setBetaalFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
+    } finally {
+      setBetaalBezig(false);
+    }
+  };
+
+  // Telefoonnummer toevoegen/wijzigen — ontbrak eerder volledig op de
+  // adminkant; zonder dit was "zonder telefoon" een dood spoor, want
+  // er was nergens een manier om het namens het lid toe te voegen.
+  const [telefoonInvoer, setTelefoonInvoer] = useState('');
+  const [telefoonBewerken, setTelefoonBewerken] = useState(false);
+  const [telefoonBezig, setTelefoonBezig] = useState(false);
+
+  const handleTelefoonOpslaan = async () => {
+    if (!lid || !telefoonInvoer.trim()) return;
+    setTelefoonBezig(true);
+    try {
+      await updateUserTelefoon(lid.id, telefoonInvoer.trim());
+      setTelefoonBewerken(false);
+      setTelefoonInvoer('');
+    } finally {
+      setTelefoonBezig(false);
     }
   };
 
@@ -266,9 +329,29 @@ function LidDetailContent() {
                   <div style={{ fontSize: 13, color: 'var(--muted)' }}>✉️ E-mail</div>
                   <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{lid.email}</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 13, color: 'var(--muted)' }}>📱 Telefoon</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: lid.telefoon ? 'var(--white)' : 'var(--warning)' }}>{lid.telefoon || '⚠️ ontbreekt'}</div>
+                <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+                  {telefoonBewerken ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        value={telefoonInvoer}
+                        onChange={e => setTelefoonInvoer(e.target.value)}
+                        placeholder="06 12345678"
+                        autoFocus
+                        style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', fontSize: 12.5, color: 'var(--white)', fontFamily: "'DM Sans',sans-serif" }}
+                      />
+                      <button onClick={handleTelefoonOpslaan} disabled={telefoonBezig || !telefoonInvoer.trim()} style={{ background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", opacity: telefoonBezig ? 0.6 : 1 }}>
+                        {telefoonBezig ? '…' : 'Opslaan'}
+                      </button>
+                      <button onClick={() => { setTelefoonBewerken(false); setTelefoonInvoer(''); }} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 11.5, cursor: 'pointer', fontFamily: "'DM Sans',sans-serif" }}>Annuleren</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 13, color: 'var(--muted)' }}>📱 Telefoon</div>
+                      <button onClick={() => { setTelefoonBewerken(true); setTelefoonInvoer(lid.telefoon ?? ''); }} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: lid.telefoon ? 'var(--white)' : 'var(--warning)', fontFamily: "'DM Sans',sans-serif" }}>
+                        {lid.telefoon || '⚠️ ontbreekt — toevoegen'}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 13, color: 'var(--muted)' }}>🕓 Lid sinds</div>
@@ -354,6 +437,33 @@ function LidDetailContent() {
               {foutmelding && (
                 <div style={{ background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.25)', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: 'var(--warning)' }}>⚠️ {foutmelding}</div>
               )}
+
+              {/* Betaalstatus deze week — Storten/Verreken, zelfde
+                  functies als op Financieel/kashouder-home, nu ook
+                  hier zodat je niet meer hoeft te schakelen. */}
+              <div className="card" style={{ padding: 14 }}>
+                <div className="section-title" style={{ marginBottom: 8 }}>Betaalstatus deze week</div>
+                {betaalFout && <div style={{ fontSize: 12, color: 'var(--error)', marginBottom: 8 }}>⚠️ {betaalFout}</div>}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleStorten}
+                    disabled={betaalBezig}
+                    style={{ flex: 1, minWidth: 110, background: 'var(--success)', color: 'var(--navy)', border: 'none', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betaalBezig ? 0.6 : 1 }}
+                  >
+                    💰 Storten
+                  </button>
+                  {(lid.lottoSaldo ?? 0) >= standaardInleg && (
+                    <button
+                      onClick={handleVerreken}
+                      disabled={betaalBezig}
+                      title="Gebruikt bestaand LottoSaldo — boekt geen nieuw geld bij"
+                      style={{ flex: 1, minWidth: 110, background: 'var(--surface2)', color: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betaalBezig ? 0.6 : 1 }}
+                    >
+                      🔁 Verreken (€{(lid.lottoSaldo ?? 0).toFixed(2)})
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <div className="card" style={{ padding: 14 }}>
                 <div className="section-title" style={{ marginBottom: 8 }}>Rol wijzigen</div>

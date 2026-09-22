@@ -63,14 +63,16 @@ function VereistAandachtKaart() {
     trekkingOntbreekt = !laatsteDagOnly || laatsteDagOnly.getTime() !== verwachteZaterdag.getTime();
   }
 
-  // 2. In verificatie — wacht op de beheerder, niet andersom.
-  const inVerificatie = nietWachtend.filter(l => betalingPerLid.get(l.id)?.status === 'verificatie').length;
+  // BUGFIX: "in verificatie" is verwijderd als check — die status kan
+  // in de huidige app niet meer ontstaan. De functies die 'm ooit
+  // aanmaakten (meldBetaling, meldLottoSaldoStorting) én de functie
+  // om zo'n betaling te bevestigen (bevestigBetaling) zijn al op 25
+  // juli verwijderd; de kashouder registreert stortingen nu altijd
+  // direct als 'betaald'. Een check op een onbereikbare status is
+  // dode code — nooit iets om op te reageren.
 
-  // 3. Openstaand — geen betaling deze week, of status 'open'.
-  const openstaand = nietWachtend.filter(l => {
-    const status = betalingPerLid.get(l.id)?.status;
-    return status !== 'betaald' && status !== 'verificatie';
-  }).length;
+  // 2. Openstaand — geen betaling deze week.
+  const openstaand = nietWachtend.filter(l => betalingPerLid.get(l.id)?.status !== 'betaald').length;
 
   // 4. Geen ticket ingesteld — doet feitelijk niet mee, ook al is er
   // misschien wel betaald.
@@ -91,7 +93,6 @@ function VereistAandachtKaart() {
 
   const delen: string[] = [];
   if (trekkingOntbreekt) delen.push('trekking niet ingevoerd');
-  if (inVerificatie > 0) delen.push(`${inVerificatie} in verificatie`);
   if (openstaand > 0) delen.push(`${openstaand} openstaand`);
   if (zonderTicket > 0) delen.push(`${zonderTicket} zonder ticket`);
   if (zonderTelefoon > 0) delen.push(`${zonderTelefoon} zonder telefoon`);
@@ -99,12 +100,17 @@ function VereistAandachtKaart() {
 
   if (delen.length === 0) return null;
 
-  const totaal = (trekkingOntbreekt ? 1 : 0) + inVerificatie + openstaand + zonderTicket + zonderTelefoon + (tikkieVerouderd ? 1 : 0);
+  const totaal = (trekkingOntbreekt ? 1 : 0) + openstaand + zonderTicket + zonderTelefoon + (tikkieVerouderd ? 1 : 0);
 
-  // Eén tegel, één bestemming — bij trekking-ontbreekt gaat die voor
-  // (meest urgent, en /leden lost dat toch niet op); anders /leden,
-  // want daar horen de meeste van deze punten thuis.
-  const href = trekkingOntbreekt ? '/trekkingen' : '/leden';
+  // Eén tegel, één bestemming, in prioriteitsvolgorde:
+  // 1. Trekking ontbreekt — /leden lost dat toch niet op.
+  // 2. Alleen de Tikkie-check staat nog open — dat is een bulkactie
+  //    op Financieel, niet iets per lid; naar Leden sturen zou hier
+  //    fout zijn.
+  // 3. Anders: Leden — daar zijn Storten/Verreken/telefoon nu ook
+  //    direct per lid te regelen.
+  const alleenTikkie = !trekkingOntbreekt && openstaand === 0 && zonderTicket === 0 && zonderTelefoon === 0 && tikkieVerouderd;
+  const href = trekkingOntbreekt ? '/trekkingen' : alleenTikkie ? '/kashouder/financieel' : '/leden';
 
   return (
     <div style={{ padding: '0 20px', marginBottom: 14 }}>
