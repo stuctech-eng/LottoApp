@@ -13,15 +13,25 @@ import { User, Betaling, Trekking, Kasmutatie } from '@/lib/types';
 const DRIE_DAGEN_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
- * "Vereist aandacht" — zes losse checks, elk met zijn eigen, geëxpliciteerde
- * reden om er wel/niet in te staan. BEWUST NIET meegeteld: leden in de
- * wachtrij — dat lost zichzelf vanzelf op zodra er gewonnen wordt, vraagt
- * niets van de beheerder, en hoort dus bij status, niet bij "aandacht
- * vereist" (blijft gewoon zichtbaar via het filter op de Leden-pagina).
+ * "Vereist aandacht" — probleem voor probleem, niet als verzamellijst.
+ * Toont ALTIJD maar één ding: het meest urgente probleem, in de vaste
+ * volgorde hieronder. Is dat probleem persoonsgebonden (openstaand,
+ * geen ticket, zonder telefoon), dan brengt de tegel je DIRECT naar
+ * díe persoon — niet naar de algemene Leden-lijst. Is het probleem
+ * opgelost, dan verdwijnt de tegel (of springt door naar het
+ * volgende) vanzelf, zonder dat er iets weggeklikt hoeft te worden —
+ * gewoon opnieuw op de tegel drukken lost het volgende geval op.
  *
- * Volgorde is op urgentie: wat het meest blokkeert en het minst kan
- * wachten staat bovenaan, een proces-nudge zonder specifiek lid staat
- * onderaan.
+ * BEWUST NIET meegeteld: leden in de wachtrij — dat lost zichzelf
+ * vanzelf op zodra er gewonnen wordt, vraagt niets van de beheerder,
+ * en hoort dus bij status, niet bij "aandacht vereist" (blijft gewoon
+ * zichtbaar via het filter op de Leden-pagina).
+ *
+ * Volgorde (vast, op urgentie): trekking niet ingevoerd → openstaand
+ * → geen ticket → zonder telefoon → Tikkie lang niet gecheckt.
+ * "In verificatie" bestaat bewust niet meer als check — die status
+ * kan in de huidige app niet meer ontstaan (bevestigBetaling is op
+ * 25 juli verwijderd).
  */
 function VereistAandachtKaart() {
   const [leden, setLeden] = useState<User[]>([]);
@@ -91,26 +101,40 @@ function VereistAandachtKaart() {
     .sort((a, b) => (b.datum?.toMillis() ?? 0) - (a.datum?.toMillis() ?? 0))[0];
   const tikkieVerouderd = !laatsteStorting || (Date.now() - (laatsteStorting.datum?.toMillis() ?? 0)) > DRIE_DAGEN_MS;
 
-  const delen: string[] = [];
-  if (trekkingOntbreekt) delen.push('trekking niet ingevoerd');
-  if (openstaand > 0) delen.push(`${openstaand} openstaand`);
-  if (zonderTicket > 0) delen.push(`${zonderTicket} zonder ticket`);
-  if (zonderTelefoon > 0) delen.push(`${zonderTelefoon} zonder telefoon`);
-  if (tikkieVerouderd) delen.push('Tikkie lang niet gecheckt');
+  // Precies één probleem kiezen, in de vaste prioriteitsvolgorde.
+  // Persoonsgebonden problemen leveren het LID zelf op (voor de
+  // directe link naar zijn detailpagina); de twee proces-problemen
+  // (trekking, Tikkie) hebben geen lid, die gaan naar hun eigen pagina.
+  let lidMetProbleem: User | null = null;
+  let reden: string | null = null;
+  let href: string | null = null;
 
-  if (delen.length === 0) return null;
+  if (trekkingOntbreekt) {
+    href = '/trekkingen';
+    reden = 'Trekking nog niet ingevoerd';
+  } else {
+    const openstaandLid = nietWachtend.find(l => betalingPerLid.get(l.id)?.status !== 'betaald');
+    const zonderTicketLid = !openstaandLid ? nietWachtend.find(l => (l.tickets?.length ?? 0) === 0) : null;
+    const zonderTelefoonLid = !openstaandLid && !zonderTicketLid ? actieveLeden.find(l => !l.telefoon) : null;
 
-  const totaal = (trekkingOntbreekt ? 1 : 0) + openstaand + zonderTicket + zonderTelefoon + (tikkieVerouderd ? 1 : 0);
+    if (openstaandLid) {
+      lidMetProbleem = openstaandLid;
+      reden = 'Nog niet betaald deze week';
+    } else if (zonderTicketLid) {
+      lidMetProbleem = zonderTicketLid;
+      reden = 'Geen ticket ingesteld';
+    } else if (zonderTelefoonLid) {
+      lidMetProbleem = zonderTelefoonLid;
+      reden = 'Geen telefoonnummer bekend';
+    } else if (tikkieVerouderd) {
+      href = '/kashouder/financieel';
+      reden = 'Tikkie al een tijd niet gecontroleerd';
+    }
 
-  // Eén tegel, één bestemming, in prioriteitsvolgorde:
-  // 1. Trekking ontbreekt — /leden lost dat toch niet op.
-  // 2. Alleen de Tikkie-check staat nog open — dat is een bulkactie
-  //    op Financieel, niet iets per lid; naar Leden sturen zou hier
-  //    fout zijn.
-  // 3. Anders: Leden — daar zijn Storten/Verreken/telefoon nu ook
-  //    direct per lid te regelen.
-  const alleenTikkie = !trekkingOntbreekt && openstaand === 0 && zonderTicket === 0 && zonderTelefoon === 0 && tikkieVerouderd;
-  const href = trekkingOntbreekt ? '/trekkingen' : alleenTikkie ? '/kashouder/financieel' : '/leden';
+    if (lidMetProbleem) href = `/leden/${lidMetProbleem.id}`;
+  }
+
+  if (!href || !reden) return null;
 
   return (
     <div style={{ padding: '0 20px', marginBottom: 14 }}>
@@ -125,8 +149,10 @@ function VereistAandachtKaart() {
       >
         <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,170,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>⚠️</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--warning)', marginBottom: 3 }}>Vereist aandacht — {totaal}</div>
-          <div style={{ fontSize: 11, color: '#c99a52' }}>{delen.join(' · ')}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--warning)', marginBottom: 3 }}>
+            {lidMetProbleem ? `⚠️ ${lidMetProbleem.naam}` : 'Vereist aandacht'}
+          </div>
+          <div style={{ fontSize: 11, color: '#c99a52' }}>{reden}</div>
         </div>
         <div style={{ fontSize: 15, color: 'var(--warning)', flexShrink: 0 }}>›</div>
       </Link>
