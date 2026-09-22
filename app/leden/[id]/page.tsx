@@ -185,6 +185,40 @@ function LidDetailContent() {
     }
   };
 
+  // Vrij bedrag storten — de TWEEDE storten-variant die elders al
+  // bestaat (Financieel → LottoSaldo, "Bedrag dat je in Tikkie ziet…"),
+  // voor als iemand meer dan één week ineens vooruitstort. Los van de
+  // knop hierboven (die is altijd precies standaardInleg, voor de
+  // snelle "één week"-situatie) — en bewust NIET verstopt achter
+  // "nog niet betaald deze week", want vooruitstorten kan ook als
+  // deze week al wél betaald is.
+  const [vrijBedrag, setVrijBedrag] = useState('');
+  const [vrijBezig, setVrijBezig] = useState(false);
+  const [vrijOk, setVrijOk] = useState(false);
+  const [vrijFout, setVrijFout] = useState<string | null>(null);
+
+  const handleVrijStorten = async () => {
+    if (!user || !profile || !lid) return;
+    const bedrag = parseFloat(vrijBedrag.replace(',', '.'));
+    if (isNaN(bedrag) || bedrag <= 0) {
+      setVrijFout('Vul een geldig bedrag in (groter dan 0).');
+      return;
+    }
+    setVrijFout(null);
+    setVrijBezig(true);
+    setVrijOk(false);
+    try {
+      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, bedrag, { uid: user.uid, naam: profile.naam });
+      setVrijBedrag('');
+      setVrijOk(true);
+      setTimeout(() => setVrijOk(false), 3000);
+    } catch (e) {
+      setVrijFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
+    } finally {
+      setVrijBezig(false);
+    }
+  };
+
   const handleVerreken = async () => {
     if (!user || !profile || !lid) return;
     const bevestigd = window.confirm(`${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`);
@@ -481,6 +515,32 @@ function LidDetailContent() {
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* Vrij bedrag storten — voor vooruitbetalen (meerdere
+                  weken ineens), los van de betaalstatus van déze week. */}
+              <div className="card" style={{ padding: 14 }}>
+                <div className="section-title" style={{ marginBottom: 4 }}>LottoSaldo aanvullen</div>
+                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                  Voor een vrij bedrag — bijv. als iemand meerdere weken ineens vooruitstort. Huidig saldo: €{(lid.lottoSaldo ?? 0).toFixed(2)}.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={vrijBedrag}
+                    onChange={e => setVrijBedrag(e.target.value)}
+                    placeholder="Bedrag dat je in Tikkie ziet…"
+                    inputMode="decimal"
+                    style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: 'var(--white)', fontFamily: "'DM Sans',sans-serif" }}
+                  />
+                  <button
+                    onClick={handleVrijStorten}
+                    disabled={vrijBezig}
+                    style={{ background: vrijOk ? 'var(--success)' : 'var(--accent)', color: 'white', border: 'none', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: vrijBezig ? 0.6 : 1, flexShrink: 0 }}
+                  >
+                    {vrijOk ? '✓' : vrijBezig ? '…' : 'Storten'}
+                  </button>
+                </div>
+                {vrijFout && <div style={{ fontSize: 11.5, color: 'var(--error)', marginTop: 8 }}>⚠️ {vrijFout}</div>}
               </div>
 
               <div className="card" style={{ padding: 14 }}>
