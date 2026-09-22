@@ -60,6 +60,28 @@ export function subscribeTrekking(trekkingId: string, callback: (trekking: Trekk
   );
 }
 
+function mapResultaat(d: { id: string; data: () => Record<string, unknown> }): Resultaat {
+  const data = d.data();
+  return {
+    id: d.id,
+    userId: data.userId,
+    userNaam: data.userNaam,
+    ticketId: data.ticketId,
+    ticketNaam: data.ticketNaam,
+    rondeId: data.rondeId,
+    seizoenId: data.seizoenId,
+    trekkingId: data.trekkingId,
+    nummersGoed: data.nummersGoed ?? [],
+    matchedNumbers: data.matchedNumbers ?? [],
+    aantalGoed: data.aantalGoed ?? 0,
+    bonusGoed: data.bonusGoed ?? false,
+    punten: data.punten ?? 0,
+    isWinnaar: data.isWinnaar ?? false,
+    prijsBedrag: data.prijsBedrag ?? null,
+    verwerktOp: data.verwerktOp ?? null,
+  } as Resultaat;
+}
+
 export function subscribeResultaten(trekkingId: string, callback: (resultaten: Resultaat[]) => void) {
   const q = query(
     collection(db, 'resultaten'),
@@ -68,27 +90,7 @@ export function subscribeResultaten(trekkingId: string, callback: (resultaten: R
   return onSnapshot(
     q,
     (snap) => {
-      const resultaten = snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          userId: data.userId,
-          userNaam: data.userNaam,
-          ticketId: data.ticketId,
-          ticketNaam: data.ticketNaam,
-          rondeId: data.rondeId,
-          seizoenId: data.seizoenId,
-          trekkingId: data.trekkingId,
-          nummersGoed: data.nummersGoed ?? [],
-          matchedNumbers: data.matchedNumbers ?? [],
-          aantalGoed: data.aantalGoed ?? 0,
-          bonusGoed: data.bonusGoed ?? false,
-          punten: data.punten ?? 0,
-          isWinnaar: data.isWinnaar ?? false,
-          prijsBedrag: data.prijsBedrag ?? null,
-          verwerktOp: data.verwerktOp ?? null,
-        } as Resultaat;
-      });
+      const resultaten = snap.docs.map(d => mapResultaat(d as Parameters<typeof mapResultaat>[0]));
       // Sorteer: winnaars eerst, dan op punten desc
       resultaten.sort((a, b) => {
         if (a.isWinnaar !== b.isWinnaar) return a.isWinnaar ? -1 : 1;
@@ -96,6 +98,26 @@ export function subscribeResultaten(trekkingId: string, callback: (resultaten: R
       });
       callback(resultaten);
     },
+    () => callback([])
+  );
+}
+
+/**
+ * ALLE resultaten van één lid, over de volledige geschiedenis (niet
+ * beperkt tot één trekking) — nodig voor een lid-detailpagina
+ * (Gewonnen X keer, Totaal winst, Recente resultaten). Bewust geen
+ * orderBy() (architectuurregel 1); de aanroeper sorteert zelf op
+ * trekkingdatum, met behulp van trekkingId → datum uit
+ * subscribeAlleTrekkingen().
+ */
+export function subscribeUserResultaten(userId: string, callback: (resultaten: Resultaat[]) => void) {
+  const q = query(
+    collection(db, 'resultaten'),
+    where('userId', '==', userId)
+  );
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map(d => mapResultaat(d as Parameters<typeof mapResultaat>[0]))),
     () => callback([])
   );
 }
