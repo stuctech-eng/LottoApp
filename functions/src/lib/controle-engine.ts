@@ -75,11 +75,20 @@ function berekenMatches(
   vorigeMatches: number[]
 ): { nieuweMatches: number[]; matchedNumbers: number[] } {
   const getrokkenSet = new Set(getrokken);
-  const vorigeSet = new Set(vorigeMatches);
+  const ticketSet = new Set(ticketNummers);
+  // BUGFIX: vorigeMatches werd voorheen blind meegenomen, ook als een
+  // lid tussentijds zijn ticketnummers had gewijzigd — waardoor oude
+  // voortgang op getallen die niet meer op het ticket staan alsnog
+  // meetelde in aantalGoed (en dus isWinnaar). Alleen vorige matches
+  // die nog daadwerkelijk op het HUIDIGE ticket voorkomen blijven
+  // meetellen; de rest vervalt, net als bij een lid dat voor het
+  // eerst met die combinatie speelt.
+  const geldigeVorigeMatches = vorigeMatches.filter(n => ticketSet.has(n));
+  const vorigeSet = new Set(geldigeVorigeMatches);
   const nieuweMatches = ticketNummers.filter(n => getrokkenSet.has(n) && !vorigeSet.has(n));
   return {
     nieuweMatches,
-    matchedNumbers: [...vorigeMatches, ...nieuweMatches],
+    matchedNumbers: [...geldigeVorigeMatches, ...nieuweMatches],
   };
 }
 
