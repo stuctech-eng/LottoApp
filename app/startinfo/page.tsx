@@ -170,7 +170,7 @@ function StartinfoContent() {
                 <Info tekst="Je startscherm: de actuele prijzenpot van deze speelreeks, je LottoSaldo, en of je deze week al bevestigd bent voor de trekking." />
               </Blok>
               <Blok titel="🎱 Trekkingen">
-                <Info tekst="Alle trekkingen op een rij, met per trekking welke nummers zijn gevallen en welke daarvan jij al had verzameld." />
+                <Info tekst="Alle trekkingen op een rij, met per trekking welke nummers zijn gevallen en welke daarvan jij al had verzameld. Is er gewonnen, dan blijft het gewonnen bedrag hier permanent zichtbaar naast de winnaar(s)." />
               </Blok>
               <Blok titel="📈 Ranglijst & Hall of Fame">
                 <Info tekst="De ranglijst toont iedereens punten in de huidige speelreeks. De Hall of Fame houdt all-time records bij, zoals de snelste winnaar ooit." />

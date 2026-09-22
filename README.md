@@ -114,10 +114,32 @@ Trekking 3:    18 - 23 - 31 - 40 - 42 - 45  →  3 nieuw   → totaal 6/6 → WI
 
 ### Correctietools (Beheerder)
 - **Financieel → LottoSaldo → potloodje (✎)** → saldo direct zetten, geen kasmutatie.
-- **Financieel → Betaling corrigeren** → status naar `'gecorrigeerd'`, met **"↺ Herstel"**. Nooit door elkaar gebruiken met de saldo-correctie voor hetzelfde incident.
+- **Financieel → Betaling corrigeren** → status naar `'gecorrigeerd'`, met **"↺ Herstel"**. Nooit door elkaar gebruiken met de saldo-correctie voor hetzelfde incident. **Corrigeert alléén de betaalstatus, nooit het saldo of de kas** — zie architectuurregel 12.
+- **Financieel → Openstaand → 🔁 Verreken** (nieuw, 22 september 2026) → verrekent bestaand LottoSaldo met een openstaande week, boekt géén nieuw geld. Voor als een lid al genoeg saldo heeft liggen maar een eerdere verrekening naar de verkeerde week ging (zie het Kees-incident, `docs/changelog.md`).
+- **Beheer → Admin → Historisch prijsbedrag invullen / Alle winnaars herberekenen / Bekijk berekening laatste winnaar** (nieuw, 20-22 september 2026) — zie "Prijsbedrag bij winst" hieronder.
 
 ### Tikkie laatst gecontroleerd (15 augustus 2026)
 Financieel-pagina toont bovenaan *"💳 Tikkie laatst gecontroleerd: [datum/tijd]"* — puur afgeleid uit de meest recente `'inleg'`-kasmutatie, geen aparte knop of veld nodig. Elke storting-registratie is zelf al het bewijs dat Tikkie is gecheckt.
+
+---
+
+## Prijsbedrag bij winst (20-22 september 2026)
+
+**Wat een winnaar krijgt te zien is het eigen aandeel in de prijzenpot van déze speelreeks — nooit het totale kassaldo.** Vóór deze sessie gebruikten `WinnaarScherm`, de winst-pushmelding, én (indirect) de kas-weergave alle drie het totale, cumulatieve kassaldo — een te hoog, misleidend bedrag zodra er al vooruitbetaald LottoSaldo voor toekomstige weken in de kas zat. Zie `docs/changelog.md` voor de volledige root-cause-analyse (drie losse incidenten).
+
+### Hoe het nu werkt
+1. `berekenPrijzenpotServerSide()` (server-side, admin-SDK-variant van de al bestaande client-functie `berekenActuelePrijzenpot()`) rekent de pot uit: som van bevestigde, niet-storting-betalingen sinds de laatste winnende trekking.
+2. Bij een winnaar wordt dit bedrag, **gedeeld door het aantal winnaars**, als `prijsBedrag` vastgelegd op elk winnend `resultaat` — in `onTrekkingVerwerkt`, vóór de resultaten-batch (zodat de eigen winst nog niet meetelt bij het bepalen van de speelreeks-grens).
+3. Vastgelegd = blijvend correct, ook als er daarna nieuwe stortingen binnenkomen. `WinnaarScherm`, de trekking-detailpagina en de dashboard-winnaarskaart tonen allemaal `resultaat.prijsBedrag`, nooit een live herberekend bedrag.
+4. Zelfde logica in `herberekenSpeelreeks`, voor consistentie bij een handmatige herberekening.
+
+### Beheerder-tools (Beheer → Admin)
+- **💰 Historisch prijsbedrag invullen** — eenmalige backfill voor winnaars van vóór dit veld bestond. Vult alleen ontbrekende bedragen.
+- **♻️ Alle winnaars herberekenen** — herberekent iedereen opnieuw, ook winnaars met een al ingevuld bedrag. Nodig na een correctie in de brondata (bijv. een foutieve betaling die alsnog is gecorrigeerd).
+- **🔍 Bekijk berekening laatste winnaar** — alleen-lezen, itemized lijst van elke meegetelde betaling (week + lid + bedrag). Gebouwd om een onverwacht bedrag te kunnen controleren zonder door het auditlog te hoeven scrollen.
+
+### Bekende, geaccepteerde aanname
+Bij meerdere winnaars in dezelfde trekking krijgt elk zijn eigen, gedeelde aandeel — dit is een expliciete bevestiging van de beheerder tijdens overleg (matcht ook de bestaande tekst op `/startinfo`: "wordt de pot gelijk verdeeld"), geen zelfstandige aanname.
 
 ---
 
@@ -250,6 +272,9 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 ### 11. Eén service worker per origin voor push + caching (nieuw, 15 augustus 2026)
 **Registreer nooit een tweede, aparte service worker naast de PWA-caching-worker voor iets anders (zoals push-meldingen).** Meerdere actieve service workers op hetzelfde origin/dezelfde scope verdringen elkaar als "controller" — vooral met `skipWaiting: true` + `clientsClaim: true` (nodig voor een PWA die altijd de nieuwste cache-versie wil) kan de ene worker de andere onopgemerkt buitenspel zetten. Gevolg was hier: de server meldde succesvolle verzending, maar er verscheen nooit een melding — geen foutmelding nergens, want de techniek "werkte" gewoon, alleen niet de juiste worker was er nog om te reageren. **Vuistregel**: alle service-worker-functionaliteit (caching, push, sync) hoort in **één** bestand, of expliciet in bewust verschillende scopes met een duidelijke reden.
 
+### 12. Geldstroom-berekeningen altijd club-breed, nooit per-lid gescoped (nieuw, 22 september 2026)
+**Elke functie die "welke week/periode is nu relevant" bepaalt (`relevanteTrekkingWeek()` en soortgelijke) moet club-brede data gebruiken, nooit alleen de data van het ene lid waar de actie voor is.** Reden: een lid zonder eigen betaalhistorie (nieuw lid, of een lid met een oude/onvolledige historie) geeft een misleidend, leeg of verouderd resultaat als de functie alleen naar *zijn eigen* data kijkt — met als concreet gevolg het Kees-incident (een storting werd verrekend met een allang-gepasseerde week, zie `docs/changelog.md`). Verwante valkuil, zelfde categorie: een vrije kas-correctie (`registreerCorrectie`) raakt nooit de onderliggende `betalingen`-status — die twee systemen (kasmutaties vs. betalingen) moeten expliciet allebei gecorrigeerd worden, nooit ervan uitgaan dat het ene het andere automatisch bijwerkt (zie het "dubbele-markering"-incident, `docs/changelog.md`).
+
 ---
 
 ## Firestore Structuur
@@ -286,7 +311,10 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 /resultaten/{id}
   userId, userNaam, ticketId, ticketNaam,
   nummersGoed[], matchedNumbers[], aantalGoed, bonusGoed, punten,
-  isWinnaar, trekkingId, seizoenId, verwerktOp
+  isWinnaar, prijsBedrag (optioneel, alleen bij isWinnaar — eigen
+    aandeel in de pot, gedeeld door aantal winnaars, vastgelegd op
+    het moment van winnen, zie "Prijsbedrag bij winst" hieronder),
+  trekkingId, seizoenId, verwerktOp
 
 /betalingen/{id}
   userId, userNaam, bedrag, omschrijving, provider, status,
@@ -332,7 +360,9 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `onTrekkingHerinnering` | Zaterdag 19:30 | Push naar beheerders |
 | `onBetalingenAanmaken` | Trekking verwerkt | Nieuwe week: LottoSaldo-check per lid, **slaat wachtende leden over** |
 | `onTikkieLinkVerval` | Wekelijks | Push naar beheerders bij oude Tikkie-link |
-| `herberekenSpeelreeks` | Callable, alleen beheerder | Herberekent de huidige speelreeks |
+| `herberekenSpeelreeks` | Callable, alleen beheerder | Herberekent de huidige speelreeks — inclusief `prijsBedrag` bij een gevonden winnaar |
+| `vulHistorischPrijsBedragIn` | Callable, alleen beheerder | Vult `prijsBedrag` in bij winnaars van vóór dit veld bestond. `forceer: true` berekent ook al-ingevulde bedragen opnieuw (na een correctie) |
+| `bekijkPrijzenpotDetails` | Callable, alleen beheerder | Alleen-lezen: itemized overzicht van welke betalingen precies zijn meegeteld in de prijzenpot van een winnende trekking |
 | `verzilverUitnodiging` | Callable, ingelogde gebruikers | Valideert + verzilvert een uitnodigingstoken, bepaalt `wachtOpNieuweSpeelreeks` |
 | `stuurTestNotificatie` | Callable, ingelogde gebruikers | Testmelding naar het eigen account, met zichtbare foutmelding i.p.v. generiek "internal" |
 | `stuurTestNotificatieMetNotificationVeld` | Callable, ingelogde gebruikers | Tijdelijke diagnosefunctie (notification-veld i.p.v. data-only) — kan weg zodra de SW-fix structureel bevestigd is |
@@ -354,11 +384,11 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `/geen-toegang` | Ingelogd maar geen geldig/actief profiel |
 | `/dashboard` | Lid — wachtrij-banner indien van toepassing, prijzenpot, "Mijn LottoSaldo" |
 | `/betalen` | Lid — puur informatief, directe Tikkie-storten-knop |
-| `/trekkingen`, `/trekkingen/[id]` | Lid+ |
+| `/trekkingen`, `/trekkingen/[id]` | Lid+ — invoerformulier (beheerder) ondersteunt sinds 22 september plakken van de volledige uitslag in één keer |
 | `/startinfo` | Lid — samengevoegde informatiepagina (8 tabs) |
 | `/spelregels`, `/help`, `/debug-fcm` | Redirects (naar `/startinfo` resp. `/profiel/notificaties`) |
 | `/profiel` | Lid — naam, ticket, telefoon, link naar Notificaties |
-| **`/profiel/notificaties`** | **Lid — nieuw: Instellingen-tab (per categorie) + Test-tab (diagnostiek, testmelding, zaterdag-trigger beheerder-only)** |
+| `/profiel/notificaties` | Lid — Instellingen-tab (per categorie, voor iedereen). **Test-tab: beheerder-only sinds 22 september 2026** (was eerder voor iedereen zichtbaar, alleen de zaterdag-trigger erin was al beheerder-only) |
 | `/profiel/voorwaarden` | Lid — Voorwaarden & Privacy, dynamisch bedrag en namen |
 | `/kas` | Alle rollen — alleen-lezen kasoverzicht |
 | `/kashouder`, `/kashouder/financieel` | Kashouder(+) — inclusief "Tikkie laatst gecontroleerd" |
@@ -369,22 +399,26 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 
 ---
 
-## STATUS PER 15 AUGUSTUS 2026
+## STATUS PER 22 SEPTEMBER 2026
 
 ### Volledig werkend ✅ (bevestigd via testen)
 - Ledenuitnodigingensysteem, onboarding, Startinfo & Speluitleg
 - Leden verwijderen (soft-delete + definitief), heractiveren
 - Betaalsysteem, storting-verrekening, Tikkie-laatst-gecontroleerd
 - Wachtrij voor nieuwe leden — inclusief de gefixte storting-verrekening-check
+- **Eerste échte winnaar meegemaakt (Ing, trekking 2026-W38)** — wachtrij-vrijgave, betaalcyclus-doorstart, en (na deze sessie se fixes) een correct prijsbedrag zijn nu allemaal in de praktijk bevestigd, niet alleen getest
 - Notificaties, alle drie de bugs — token-opschoning, automatische verversing, én de service worker-samenvoeging: **bevestigd met een geslaagde testmelding op `/profiel/notificaties`** (Test-tab), ná het samenvoegen van de twee service workers. De hele keten (toestemming → token → server → aflevering → weergave) is nu end-to-end bewezen werkend
 - Cumulatieve spelmodus, rol-afhankelijke navigatie
 - Voorwaarden & Privacy-pagina, met dynamisch bedrag en namen
+- **Prijsbedrag bij winst** — server-side vastgelegd, gedeeld bij meerdere winnaars, backfill voor Ing bevestigd correct (€176, na het rechtzetten van een los, ouder boekhoudincident)
+- **Week-scoping-fix** (het Kees-incident) — bevestigd correct na herverrekening
+- **Wachtrij-check in de deelnemers-bepaling** — code-wijziging, geen incident om te bevestigen (was preventief)
 
 ### Openstaand ⏳
 - **Geplande notificaties (Beheer → Notificaties)** — kernlogica geïsoleerd getest (9/9 geslaagd) en de Cloud Function compileert schoon, maar nog niet bevestigd met een daadwerkelijk aangemaakte en aangekomen melding in productie
-- Eerste automatische vrijgave van wachtende leden bij een echte winnaar — nog niet meegemaakt (moet nog een winnaar vallen)
 - Eerste volledige run van `onZaterdagSaldoHerinnering` op de geplande tijd (i.p.v. handmatig getriggerd) nog niet apart bevestigd
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen
+- **Volgende winnaar, volledig live** (zonder handmatige backfill-tussenkomst) nog niet meegemaakt — Ing was de enige tot nu toe, en die liep via de reconstructietool, niet het live pad zelf
 - Geen automatische tests — alles handmatig, stap-voor-stap getest
 
 ---

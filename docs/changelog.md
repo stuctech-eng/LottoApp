@@ -4,6 +4,52 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 20-22 september 2026 — Prijsbedrag bij winst (drie losse bugs), wachtrij-gat, week-scoping-bug, plakken bij trekking invoeren
+
+Aanleiding: de eerste échte winnaar van de club (Ing, trekking 2026-W38) kreeg géén bedrag te zien — nergens in de app stond hoeveel hij had gewonnen. Uitzoeken hiervan legde uiteindelijk **vier losse, onafhankelijke problemen** bloot, elk in een aparte sessie/ronde gevonden en gefixt. Vaste regel vanaf nu: bij elke update README + changelog + een apart beheerder-only interne-werking-document + Startinfo bijwerken.
+
+### 1. Plakken bij trekking invoeren
+
+Klein, direct verzoek: de winnende getallen van de officiële uitslagpagina kopiëren en in één keer plakken i.p.v. los overtypen. `app/trekkingen/page.tsx` kreeg een `onPaste`-handler op elk bal-invoerveld: bij 2+ herkende getallen in de plaktekst wordt het hele formulier (6 nummers + bonusbal) in één keer gevuld, gesplitst op scheidingstekens (spatie/komma) — werkt ongeacht of een getal 1 of 2 cijfers heeft, want de splitsing gebeurt op scheiding, niet op karakterpositie.
+
+### 2. Prijsbedrag bij winst — root cause: drie plekken gebruikten het verkeerde bedrag
+
+**Root cause**: `WinnaarScherm` (dashboard), de winst-pushmelding (Cloud Function), én de "Huidige pot"-weergave op Kas/Financieel gebruikten alle drie `berekenKasSaldo()` — het **totale, cumulatieve kassaldo** (incl. al bevestigde stortingen voor toekomstige weken). Er bestond al een apart correcte functie, `berekenActuelePrijzenpot()` (speelreeks-gebonden, met uitgebreide code-commentaar die precies dit onderscheid uitlegt), maar die werd nergens gebruikt op het moment dat er ook daadwerkelijk gewonnen werd.
+
+**Fix — bedrag vastleggen i.p.v. steeds opnieuw live berekenen**: nieuw veld `prijsBedrag` op `Resultaat` (optioneel — `lib/controle-engine.ts` blijft bewust ongewijzigd, vult dit veld niet, het wordt pas ná de controle-engine toegevoegd bij het wegschrijven). Server-side variant `berekenPrijzenpotServerSide()` toegevoegd in `functions/src/index.ts` (admin-SDK, kan geen client-code importeren), aangeroepen in `onTrekkingVerwerkt` vóór de resultaten-batch — zodat de winnaars van déze trekking zelf nog niet meetellen bij het bepalen van de speelreeks-grens. Zelfde logica ook toegevoegd aan `herberekenSpeelreeks`.
+
+**Bij meerdere winnaars wordt de pot gedeeld** — `prijsBedrag = prijzenpot / aantal winnaars`, niet de volle pot voor iedereen (bevestigd door de beheerder tijdens overleg, matcht ook wat `/startinfo` al beloofde aan leden: "wordt de pot gelijk verdeeld").
+
+**Zichtbaarheid**: `WinnaarScherm`, de trekking-detailpagina (permanent, ook na het sluiten van het confetti-scherm) en de dashboard-winnaarskaart tonen nu `resultaat.prijsBedrag` i.p.v. het kassaldo.
+
+**Backfill voor Ing** (er bestond al een winnaar vóórdat dit veld bestond): nieuwe beheerder-only Cloud Function `vulHistorischPrijsBedragIn` (optioneel `forceer: true` om ook al-ingevulde bedragen opnieuw te berekenen — nodig na latere correcties) en `bekijkPrijzenpotDetails` (alleen-lezen, toont per betaling wat er precies is meegeteld — gebouwd nadat handmatig door het auditlog scrollen niet ver genoeg terugging).
+
+### 3. Het "dubbele-markering"-incident — root cause van een €4-afwijking
+
+Ing's eerste berekende bedrag (€180) klopte niet met de handmatige telling (€176). Root cause, gevonden via `bekijkPrijzenpotDetails`: week 2026-W27 had zowel "Dick Veerman Beheerder" als "Dick Veerman Speler" als bevestigde betaling staan — een eerdere kas-correctie ("foutieve dubbele markering 23 juli") had toen alleen het **kassaldo** gecorrigeerd, niet de onderliggende `betalingen`-registratie zelf. Correcties via een vrije kasmutatie raken dus nooit de betaalstatus-administratie — dat is een structureel gegeven van het systeem (zie architectuurregel 12), geen eenmalige fout.
+
+Hersteld: de foutieve W27-betaling alsnog via de bestaande "Corrigeer"-knop op status gezet, daarna `vulHistorischPrijsBedragIn` met `forceer: true` opnieuw gedraaid → €176, bevestigd correct met `bekijkPrijzenpotDetails`.
+
+### 4. Wachtrij-gat — gevonden tijdens overleg, geen live incident
+
+Bij het doorpraten over "heractiveren" bleek: `verwijderLid`/`heractiveerLid` raken alleen `actief`, nooit `wachtOpNieuweSpeelreeks` of `tickets`. De `deelnemers`-bepaling in zowel `onTrekkingVerwerkt` als `herberekenSpeelreeks` checkte dat vlaggetje nergens expliciet — het werkte tot nu toe alleen omdat een wachtend lid toevallig altijd een lege tickets-lijst had. Een heractiveerd lid met een bewaard, niet-leeg ticket zou dat toevalligheid kunnen omzeilen. **Beide plekken kregen alsnog een expliciete check** — geen live bug geweest, wel een structureel gat.
+
+### 5. Het Kees-incident — root cause: kalenderweek-fallback, per-lid i.p.v. club-breed
+
+Een nieuw lid (Kees Sier, geactiveerd op een zondag) stortte voor het eerst geld; de storting werd verrekend met **2026-W38** (de al-afgelopen, gewonnen week) in plaats van **2026-W39** (de lopende). Root cause, in twee lagen:
+1. `relevanteTrekkingWeek()` valt bij een lid **zonder enige eigen betaalhistorie** terug op de kale kalender-ISO-week van vandaag — en zondag hoort kalendertechnisch nog bij dezelfde week als de zaterdag ervóór, ook al is de trekking allang verwerkt en is de rest van de club administratief al bij de volgende week.
+2. `verrekenLottoSaldoMetOpenstaandeWeek` riep deze functie op met **alleen dit ene lid se eigen betalingen** i.p.v. club-breed (zoals dashboard en kashouder-financieel dat via `subscribeBetalingen` altijd al deden) — voor een gloednieuw lid dus per definitie een lege lijst, en dus altijd de kalender-fallback.
+
+**Fix**: `verrekenLottoSaldoMetOpenstaandeWeek` bepaalt de week nu club-breed (alle betalingen, niet alleen die van dit lid) — zolang er ook maar één ander lid al een betaling voor de nieuwe week heeft (vrijwel altijd het geval), wordt de kalender-fallback nooit meer geraakt. Nieuwe architectuurregel (12) hieraan gewijd.
+
+**Herstel voor Kees**: zijn foutieve W38-betaling gecorrigeerd (via bestaande knop), maar dat corrigeert alléén de betaalstatus, niet het saldo zelf — vandaar een **nieuwe correctietool**, `herverrekenLottoSaldo()` (client, `lib/firestore-payments.ts`) + een 🔁 Verreken-knop op Financieel, die bestaand LottoSaldo verrekent met een openstaande week zónder nieuw geld te boeken (de eerder verwijderde `markeerBetaaldDoorKashouder`-route bestond hier niet meer voor). Zijn resterende saldo-tekort van €4 (het bedrag dat aan de foutieve W38-registratie "verloren" ging) is met de bestaande saldo-correctie-knop rechtgezet.
+
+### 6. Notificaties: Test-tab verborgen voor leden
+
+`/profiel/notificaties` toonde het Test-tabblad (diagnostiek, ruwe logs, testmeldingen) aan **iedereen** — bedoeld voor de beheerder. Nu achter `isBeheerder` (zowel de tab-knop als de tab-inhoud), consistent met het patroon dat al bestond voor het onderste stukje van diezelfde tab (de zaterdag-herinnering-trigger).
+
+---
+
 ## 2, 7 en 15 augustus 2026 — Wachtrij voor nieuwe leden, leden definitief verwijderen, en een lange notificatie-speurtocht
 
 Meerdere sessies, samengevoegd tot één overzicht per onderwerp. De grootste, meest tijdrovende sessie was 15 augustus: een grondig regressieonderzoek naar "notificaties werkten eerder wel" dat drie losse, onafhankelijke bugs blootlegde.
