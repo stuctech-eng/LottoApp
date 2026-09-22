@@ -4,6 +4,29 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 22 september 2026 — Ticket-wijzigen-sluitingsvenster, en een echte bug in de controle-engine ontdekt tijdens het bouwen ervan
+
+Aanleiding: een vraag over wannéér een lid zijn Lotto-nummers eigenlijk mag wijzigen, legde bloot dat daar **helemaal geen beperking op zat** — op elk moment, zelfs midden in een speelreeks. Bij het uitzoeken bleek dat geen kosmetisch gaatje, maar een echte fout in de scoretelling zelf.
+
+### De bug — matchedNumbers werd blind overgenomen, ongeacht het huidige ticket
+
+`berekenMatches()` in `lib/controle-engine.ts` nam cumulatieve matches van vóór een trekking altijd volledig over (`[...vorigeMatches, ...nieuweMatches]`), zonder te checken of die getallen nog wel op het HUIDIGE ticket stonden. Omdat het bewerken van een ticket hetzelfde `ticket.id` behoudt (`TicketEditorModal.tsx`: `id: ticket?.id ?? ...`), koppelt de engine oude voortgang aan dat ID — dus een lid dat halverwege een speelreeks zijn 6 nummers wijzigde, behield ten onrechte de oude, opgebouwde matches (tot en met een vals `isWinnaar` als het toevallig op 6 uitkwam).
+
+**Gefixt**, identiek in `lib/controle-engine.ts` én `functions/src/lib/controle-engine.ts` (architectuurregel 5): oude matches tellen alleen nog mee als ze nog daadwerkelijk op het huidige ticket voorkomen (`vorigeMatches.filter(n => ticketSet.has(n))`). Nagerekend, niet aangenomen: met deze fix is vrij wisselen sowieso nooit meer exploitbaar, omdat elke week alleen tegen de getallen van díe specifieke trekking wordt gecheckt en historische resultaten nooit met terugwerkende kracht veranderen.
+
+### De regel zelf — een sportiviteitskeuze, geen technische noodzaak (meer)
+
+Na de fix was een sluitingsvenster dus niet meer technisch nódig, maar wel gewenst: wijzigen mag alleen in de **eerste week van een speelreeks** (vanaf een winnaar tot de eerstvolgende trekking), sluit **vrijdag 24:00**, en staat daarna vast voor de rest van de hele speelreeks tot de volgende winnaar. Geldt alleen voor het wijzigen van een bestaand ticket — een eerste ticket aanmaken blijft altijd mogelijk.
+
+**Implementatie in twee helften**, omdat de volledige check data nodig heeft die niet overal voorhanden is:
+- Dag-check (puur): `magTicketWijzigenOpDezeDag()` in `lib/constants.ts`
+- Reeks-check (vereist trekking-/resultaatdata): bepaald in `app/profiel/page.tsx` zelf, dezelfde grenslogica in principe als de bestaande `heeftHuidigeSpeelreeksAlTrekkingen()` (Cloud Function, wachtrij), hier client-side afgeleid uit data die de pagina toch al ophaalt
+- `TicketEditorModal.tsx` blijft zelf datavrij: neemt een kant-en-klare `kanWijzigen`-boolean aan als prop, blokkeert dan opslaan + toont een lock-melding — nooit van toepassing op een nieuw ticket
+
+Ook toegevoegd: een uitleg-blok in de spelregels op `/startinfo`, en een statusregeltje op `/profiel` zelf dat al vóór het openen van de editor laat zien of wijzigen nu wel of niet kan.
+
+---
+
 ## 20-22 september 2026 — Prijsbedrag bij winst (drie losse bugs), wachtrij-gat, week-scoping-bug, plakken bij trekking invoeren
 
 Aanleiding: de eerste échte winnaar van de club (Ing, trekking 2026-W38) kreeg géén bedrag te zien — nergens in de app stond hoeveel hij had gewonnen. Uitzoeken hiervan legde uiteindelijk **vier losse, onafhankelijke problemen** bloot, elk in een aparte sessie/ronde gevonden en gefixt. Vaste regel vanaf nu: bij elke update README + changelog + een apart beheerder-only interne-werking-document + Startinfo bijwerken.

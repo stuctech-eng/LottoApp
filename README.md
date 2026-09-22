@@ -62,6 +62,22 @@ Een écht nieuw lid (geen testaccount) kreeg ondanks de wachtrij-vlag toch €4 
 
 ---
 
+## Ticket wijzigen — sluitingsvenster (22 september 2026)
+
+**Een lid mag zijn ticketnummers alleen wijzigen in de EERSTE week van een speelreeks** — vanaf het moment dat er een winnaar valt, tot en met de eerstvolgende trekking. Binnen die week sluit wijzigen op **vrijdag 24:00** (= zaterdag 00:00). Zodra die eerste trekking is geweest (winnaar of rollover, maakt niet uit), staat het ticket vast voor de **rest van de hele speelreeks**, ongeacht de dag — tot de volgende winnaar.
+
+Geldt uitsluitend voor het **wijzigen** van een al-bestaand ticket. Een eerste ticket aanmaken blijft altijd mogelijk — dat is geen wijziging en benadeelt niemand.
+
+### Waarom dit een bugfix vooraf nodig had
+Bij het bouwen van deze regel bleek de controle-engine zelf een echte fout te bevatten: `matchedNumbers: [...vorigeMatches, ...nieuweMatches]` in `berekenMatches()` nam eerdere cumulatieve matches **blindelings** over, zonder te checken of die getallen nog wel op het (mogelijk inmiddels gewijzigde) huidige ticket stonden — met hetzelfde `ticket.id` (bewerken behoudt het ID, zie `TicketEditorModal.tsx`). Een lid dat halverwege een speelreeks zijn nummers wijzigde, behield zo ten onrechte oude voortgang, tot en met een vals `isWinnaar`. **Gefixt** (in zowel `lib/controle-engine.ts` als `functions/src/lib/controle-engine.ts`, identiek): oude matches tellen alleen nog mee als ze nog daadwerkelijk op het huidige ticket voorkomen (`vorigeMatches.filter(n => ticketSet.has(n))`). Na deze fix is vrij wisselen sowieso al nooit meer exploitbaar — het sluitingsvenster hierboven is dus een bewuste spelregel/sportiviteitskeuze, geen noodzakelijke technische beperking.
+
+### Implementatie — twee helften, want de check heeft data nodig die niet overal beschikbaar is
+- **Dag-helft** (puur, geen Firestore): `magTicketWijzigenOpDezeDag()` in `lib/constants.ts` — maandag t/m vrijdag.
+- **Reeks-helft** (vereist trekking-/resultaatdata): bepaald in `app/profiel/page.tsx` zelf — `!laatsteTrekking || resultatenLaatsteTrekking.some(r => r.isWinnaar)`. Dezelfde grensbepaling in principe als `heeftHuidigeSpeelreeksAlTrekkingen()` (Cloud Function, wachtrij), maar hier client-side afgeleid uit data die de pagina toch al nodig heeft, i.p.v. een aparte serveraanroep.
+- `TicketEditorModal.tsx` blijft zelf datavrij — neemt een kant-en-klare `kanWijzigen`-boolean als prop aan van de aanroepende pagina, en blokkeert dan de opslaan-knop + toont een lock-melding. Geldt nooit voor een nieuw ticket (`ticket === null`).
+
+---
+
 ## Leden verwijderen — twee niveaus (27 juli + 15 augustus 2026)
 
 **Niveau 1 — soft-delete (❌, iedereen):** Leden → ❌ naast een actief lid (beheerder-only, niet bij jezelf) → `actief: false`. Account en alle historische data blijven volledig bewaard. Terugkeren via de **"Heractiveren"**-knop (niet via een nieuwe uitnodiging — dat zou altijd worden geweigerd, want `verzilverUitnodiging` staat nooit een tweede profiel voor hetzelfde account toe).
@@ -92,6 +108,7 @@ Een écht nieuw lid (geen testaccount) kreeg ondanks de wachtrij-vlag toch €4 
 8. **Ranglijstpunten** gebaseerd op alleen de nieuwe matches die trekking, niet het cumulatieve totaal.
 9. **Storten mag alleen maandag t/m zaterdag 18:00.**
 10. **Nieuwe leden wachten op de eerstvolgende winnaar** als ze instappen tijdens een lopende reeks — zie hierboven.
+11. **Ticketnummers wijzigen mag alleen in de eerste week van een speelreeks** (tot de eerstvolgende trekking), sluit vrijdag 24:00 — zie "Ticket wijzigen" hieronder.
 
 ### Voorbeeld
 ```
@@ -387,7 +404,7 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `/trekkingen`, `/trekkingen/[id]` | Lid+ — invoerformulier (beheerder) ondersteunt sinds 22 september plakken van de volledige uitslag in één keer |
 | `/startinfo` | Lid — samengevoegde informatiepagina (8 tabs) |
 | `/spelregels`, `/help`, `/debug-fcm` | Redirects (naar `/startinfo` resp. `/profiel/notificaties`) |
-| `/profiel` | Lid — naam, ticket, telefoon, link naar Notificaties |
+| `/profiel` | Lid — naam, ticket (wijzigen op slot buiten het sluitingsvenster, zie hierboven), telefoon, link naar Notificaties |
 | `/profiel/notificaties` | Lid — Instellingen-tab (per categorie, voor iedereen). **Test-tab: beheerder-only sinds 22 september 2026** (was eerder voor iedereen zichtbaar, alleen de zaterdag-trigger erin was al beheerder-only) |
 | `/profiel/voorwaarden` | Lid — Voorwaarden & Privacy, dynamisch bedrag en namen |
 | `/kas` | Alle rollen — alleen-lezen kasoverzicht |
@@ -413,12 +430,14 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - **Prijsbedrag bij winst** — server-side vastgelegd, gedeeld bij meerdere winnaars, backfill voor Ing bevestigd correct (€176, na het rechtzetten van een los, ouder boekhoudincident)
 - **Week-scoping-fix** (het Kees-incident) — bevestigd correct na herverrekening
 - **Wachtrij-check in de deelnemers-bepaling** — code-wijziging, geen incident om te bevestigen (was preventief)
+- **matchedNumbers-bugfix in de controle-engine** — code-wijziging, geen incident om te bevestigen (preventief gevonden tijdens het bouwen van het ticket-wijzigen-sluitingsvenster, nooit misgegaan in productie)
 
 ### Openstaand ⏳
 - **Geplande notificaties (Beheer → Notificaties)** — kernlogica geïsoleerd getest (9/9 geslaagd) en de Cloud Function compileert schoon, maar nog niet bevestigd met een daadwerkelijk aangemaakte en aangekomen melding in productie
 - Eerste volledige run van `onZaterdagSaldoHerinnering` op de geplande tijd (i.p.v. handmatig getriggerd) nog niet apart bevestigd
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen
 - **Volgende winnaar, volledig live** (zonder handmatige backfill-tussenkomst) nog niet meegemaakt — Ing was de enige tot nu toe, en die liep via de reconstructietool, niet het live pad zelf
+- **Ticket-wijzigen-sluitingsvenster** — code compileert schoon (strict, echte project-types), maar nog niet in de praktijk bevestigd rond een echte reeks-grens (nieuwe winnaar → eerste week open → trekking → op slot)
 - Geen automatische tests — alles handmatig, stap-voor-stap getest
 
 ---

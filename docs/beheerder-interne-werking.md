@@ -87,6 +87,16 @@ Verwijdert en herberekent alle resultaten van de **huidige, nog lopende** speelr
 
 ---
 
+## Ticket wijzigen — het sluitingsvenster (22 september 2026)
+
+- Een lid mag zijn ticketnummers alleen wijzigen in de **eerste week van een speelreeks** (vanaf een winnaar tot de eerstvolgende trekking), en dat sluit al op **vrijdag 24:00** — dus eerder dan de storten-deadline (zaterdag 18:00).
+- Zodra die eerste trekking is geweest — winnaar of rollover, maakt niet uit — staat het ticket vast voor de **rest van de hele speelreeks**, ongeacht de dag, tot de volgende winnaar.
+- Geldt alleen voor **wijzigen**. Een lid dat nog geen ticket heeft, kan er altijd één aanmaken, ook in het weekend of midden in een speelreeks — dat is geen wijziging en benadeelt niemand.
+- **Zelfde grens-gedachte als de wachtrij hierboven** ("heeft de huidige speelreeks al een trekking gehad"), maar hier bewust client-side herleid in `app/profiel/page.tsx` uit data die de pagina toch al nodig heeft, i.p.v. een losse aanroep van de Cloud-Function-variant.
+- **Los van deze regel, en los van elkaar te zien**: vóór deze regel bestond, kon een lid dat halverwege een speelreeks zijn nummers wijzigde eigenlijk al profiteren van een echte bug in de scoretelling (oude matches bleven ten onrechte meetellen). Die bug is apart gefixt in `lib/controle-engine.ts`/`functions/src/lib/controle-engine.ts` — zie README. Het sluitingsvenster hierboven is dus een bewuste spelregel, geen noodzakelijke lapmiddel voor die bug.
+
+---
+
 ## Prijzenpot — welke week telt mee, en welke niet
 
 - De pot = som van bevestigde (`status: 'betaald'`) betalingen, **niet** zelf een storting (`isSaldoStorting`, in de praktijk niet meer relevant — nergens meer gezet), vanaf de week ná de laatste winnende trekking.
@@ -102,6 +112,8 @@ Verwijdert en herberekent alle resultaten van de **huidige, nog lopende** speelr
 **Een specifieke week is ten onrechte als betaald gemarkeerd** → "Corrigeer" op die betaling, dan navragen of het bijbehorende geld/saldo ook gecorrigeerd moet worden.
 
 **Een lid heeft al genoeg saldo maar staat nog als "Openstaand"** → 🔁 Verreken, nooit 💰 Storten.
+
+**Een lid klaagt dat hij zijn nummers niet kan wijzigen** → normaal gedrag als de speelreeks al een trekking heeft gehad, of als het weekend/na vrijdag 24:00 is. Geen correctietool voor nodig — dit is een bewuste spelregel, geen fout.
 
 **Een prijsbedrag klopt niet** → eerst 🔍 Bekijken om de oorzaak te vinden, dan de onderliggende betaling/kasmutatie corrigeren, dan pas ♻️ Alle winnaars herberekenen.
 
