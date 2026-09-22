@@ -339,7 +339,7 @@ function DashboardPageContent() {
     <>
       <div className="bg-grid" />
       <div className="page">
-        <div style={{ padding: 'max(16px, env(safe-area-inset-top, 16px)) 20px 16px' }}>
+        <div style={{ padding: 'max(22px, env(safe-area-inset-top, 22px)) 20px 18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.5px' }}>
               {new Date().getHours() < 12 ? 'Goedemorgen 👋' : new Date().getHours() < 18 ? 'Goedemiddag 👋' : 'Goedenavond 👋'}
@@ -365,19 +365,21 @@ function DashboardPageContent() {
           </div>
         )}
 
-        {/* Prijzenpot — bovenaan, hoogste prioriteit */}
-        <div style={{ padding: '0 20px', marginBottom: 10 }}>
-          <Link href="/kas" style={{ ...tapCard, textAlign: 'center', padding: '16px 18px', background: 'linear-gradient(135deg,rgba(240,192,96,0.14),rgba(240,192,96,0.03)), var(--surface)', borderColor: 'rgba(240,192,96,0.32)' }}>
+        {/* Prijzenpot — bovenaan, hoogste prioriteit. Bewust GEEN link
+            (verwees eerder naar /kas — dat scherm is voor de financiën
+            van de club, niet bedoeld voor leden en zorgde voor verwarring) */}
+        <div style={{ padding: '0 20px', marginBottom: 14 }}>
+          <div style={{ ...tapCard, textAlign: 'center', padding: '16px 18px', background: 'linear-gradient(135deg,rgba(240,192,96,0.14),rgba(240,192,96,0.03)), var(--surface)', borderColor: 'rgba(240,192,96,0.32)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 4 }}>🏆 Te winnen deze speelreeks</div>
             <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 40, letterSpacing: -1.5, color: 'var(--gold)', lineHeight: 1.05 }}>
               {laden || prijzenpot === null ? '…' : `€${prijzenpot.toFixed(0)}`}
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>Groeit elke week zonder winnaar</div>
-          </Link>
+          </div>
         </div>
 
         {/* Mijn LottoSaldo */}
-        <div style={{ padding: '0 20px', marginBottom: 10 }}>
+        <div style={{ padding: '0 20px', marginBottom: 14 }}>
           {(() => {
             const lottoSaldo = profile?.lottoSaldo ?? 0;
             const wekenTegoed = Math.floor(lottoSaldo / standaardInleg);
@@ -409,7 +411,7 @@ function DashboardPageContent() {
         {/* Mijn betaalstatus — direct onder LottoSaldo; ja, enigszins
             dubbel met het puntje hierboven, maar dit blok geeft leden
             in één oogopslag zekerheid, los van het saldo-cijfer zelf */}
-        <div style={{ padding: '0 20px', marginBottom: 10 }}>
+        <div style={{ padding: '0 20px', marginBottom: 14 }}>
           {inVerificatie ? (
             <Link href="/betalen" style={{ ...tapCard, padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 9, background: 'var(--warning-soft)', borderColor: 'rgba(255,170,51,0.28)' }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
@@ -432,7 +434,7 @@ function DashboardPageContent() {
         </div>
 
         {/* Volgende trekking + eigen nummers */}
-        <div style={{ padding: '0 20px', marginBottom: 10 }}>
+        <div style={{ padding: '0 20px', marginBottom: 14 }}>
           <Link href="/trekkingen" style={{ ...tapCard, padding: '13px 16px', display: 'block' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase' }}>⏰ Volgende trekking</div>
@@ -454,7 +456,7 @@ function DashboardPageContent() {
 
         {/* Laatste trekking / winnaar */}
         {laatsteTrekking ? (
-          <div style={{ padding: '0 20px', marginBottom: 10 }}>
+          <div style={{ padding: '0 20px', marginBottom: 14 }}>
             <Link href={`/trekkingen/${laatsteTrekking.id}`} style={{ ...tapCard, padding: '13px 16px', display: 'block', background: winnaarResultaat ? 'linear-gradient(135deg,rgba(240,192,96,0.1),rgba(240,192,96,0.02)), var(--surface)' : tapCard.background, borderColor: winnaarResultaat ? 'rgba(240,192,96,0.28)' : 'var(--border)' }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: winnaarResultaat ? 'var(--gold)' : 'var(--muted)', textTransform: 'uppercase', marginBottom: 8 }}>
                 Laatste trekking — {formatDatum(laatsteTrekking.datum)}
@@ -474,13 +476,13 @@ function DashboardPageContent() {
             </Link>
           </div>
         ) : !laden && (
-          <div style={{ padding: '0 20px', marginBottom: 10 }}>
+          <div style={{ padding: '0 20px', marginBottom: 14 }}>
             <div style={{ ...tapCard, padding: '16px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Nog geen trekkingen dit seizoen.</div>
           </div>
         )}
 
         {/* Deelnemers — betaalstatus van de club zit hierin verwerkt */}
-        <div style={{ padding: '0 20px', marginBottom: 8 }}>
+        <div style={{ padding: '0 20px', marginBottom: 20 }}>
           <Link href="/deelnemers" style={{ ...tapCard, padding: '13px 16px', display: 'block' }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 2 }}>Deelnemers</div>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--success)', marginBottom: 10 }}>
