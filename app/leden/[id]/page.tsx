@@ -520,9 +520,13 @@ function LidDetailContent() {
               {/* Vrij bedrag storten — voor vooruitbetalen (meerdere
                   weken ineens), los van de betaalstatus van déze week. */}
               <div className="card" style={{ padding: 14 }}>
-                <div className="section-title" style={{ marginBottom: 4 }}>LottoSaldo aanvullen</div>
+                <div className="section-title" style={{ marginBottom: 6 }}>LottoSaldo aanvullen</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, color: 'var(--gold)' }}>€{(lid.lottoSaldo ?? 0).toFixed(2)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>huidig saldo</div>
+                </div>
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
-                  Voor een vrij bedrag — bijv. als iemand meerdere weken ineens vooruitstort. Huidig saldo: €{(lid.lottoSaldo ?? 0).toFixed(2)}.
+                  Voor een vrij bedrag — bijv. als iemand meerdere weken ineens vooruitstort.
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
