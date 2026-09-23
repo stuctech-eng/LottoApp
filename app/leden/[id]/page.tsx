@@ -1,5 +1,6 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
@@ -113,6 +114,9 @@ function LidDetailContent() {
 
   const [bezig, setBezig] = useState(false);
   const [foutmelding, setFoutmelding] = useState<string | null>(null);
+  // Eén gedeelde dialoog-state voor alle bevestigingen op deze
+  // pagina — vervangt window.confirm() overal (zie ConfirmDialog.tsx).
+  const [confirmDialog, setConfirmDialog] = useState<{ bericht: string; destructief?: boolean; onBevestig: () => void } | null>(null);
 
   const handleRolChange = async (nieuweRol: Rol) => {
     if (!user || !profile || !lid || nieuweRol === lid.rol) return;
@@ -130,16 +134,21 @@ function LidDetailContent() {
     }
   };
 
-  const handleVerwijderen = async () => {
+  const handleVerwijderen = () => {
     if (!user || !profile || !lid) return;
-    const bevestigd = window.confirm(`${lid.naam} verwijderen uit de club? Het account en alle historische data blijven bewaard — je kunt dit altijd ongedaan maken via 'Heractiveren'.`);
-    if (!bevestigd) return;
-    setBezig(true);
-    try {
-      await verwijderLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
-    } finally {
-      setBezig(false);
-    }
+    setConfirmDialog({
+      bericht: `${lid.naam} verwijderen uit de club? Het account en alle historische data blijven bewaard — je kunt dit altijd ongedaan maken via 'Heractiveren'.`,
+      destructief: true,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setBezig(true);
+        try {
+          await verwijderLid({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+        } finally {
+          setBezig(false);
+        }
+      },
+    });
   };
 
   const handleHeractiveren = async () => {
@@ -152,16 +161,21 @@ function LidDetailContent() {
     }
   };
 
-  const handleDefinitiefVerwijderen = async () => {
+  const handleDefinitiefVerwijderen = () => {
     if (!user || !profile || !lid) return;
-    const bevestigd = window.confirm(`${lid.naam} DEFINITIEF verwijderen? Dit kan niet ongedaan worden gemaakt. Gebruik dit alleen voor test-accounts, nooit voor een lid dat echt heeft meegespeeld.`);
-    if (!bevestigd) return;
-    setBezig(true);
-    try {
-      await verwijderLidDefinitief({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
-    } finally {
-      setBezig(false);
-    }
+    setConfirmDialog({
+      bericht: `${lid.naam} DEFINITIEF verwijderen? Dit kan niet ongedaan worden gemaakt. Gebruik dit alleen voor test-accounts, nooit voor een lid dat echt heeft meegespeeld.`,
+      destructief: true,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setBezig(true);
+        try {
+          await verwijderLidDefinitief({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+        } finally {
+          setBezig(false);
+        }
+      },
+    });
   };
 
   // Storten + Verreken — stonden eerder alleen op Financieel/kashouder-
@@ -170,19 +184,23 @@ function LidDetailContent() {
   const [betaalBezig, setBetaalBezig] = useState(false);
   const [betaalFout, setBetaalFout] = useState<string | null>(null);
 
-  const handleStorten = async () => {
+  const handleStorten = () => {
     if (!user || !profile || !lid) return;
-    const bevestigd = window.confirm(`€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
-    if (!bevestigd) return;
-    setBetaalFout(null);
-    setBetaalBezig(true);
-    try {
-      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, { uid: user.uid, naam: profile.naam });
-    } catch (e) {
-      setBetaalFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
-    } finally {
-      setBetaalBezig(false);
-    }
+    setConfirmDialog({
+      bericht: `€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setBetaalFout(null);
+        setBetaalBezig(true);
+        try {
+          await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, { uid: user.uid, naam: profile.naam });
+        } catch (e) {
+          setBetaalFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
+        } finally {
+          setBetaalBezig(false);
+        }
+      },
+    });
   };
 
   // Vrij bedrag storten — de TWEEDE storten-variant die elders al
@@ -219,19 +237,23 @@ function LidDetailContent() {
     }
   };
 
-  const handleVerreken = async () => {
+  const handleVerreken = () => {
     if (!user || !profile || !lid) return;
-    const bevestigd = window.confirm(`${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`);
-    if (!bevestigd) return;
-    setBetaalFout(null);
-    setBetaalBezig(true);
-    try {
-      await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
-    } catch (e) {
-      setBetaalFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
-    } finally {
-      setBetaalBezig(false);
-    }
+    setConfirmDialog({
+      bericht: `${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setBetaalFout(null);
+        setBetaalBezig(true);
+        try {
+          await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, { uid: user.uid, naam: profile.naam });
+        } catch (e) {
+          setBetaalFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
+        } finally {
+          setBetaalBezig(false);
+        }
+      },
+    });
   };
 
   // Telefoonnummer toevoegen/wijzigen — ontbrak eerder volledig op de
@@ -626,6 +648,15 @@ function LidDetailContent() {
 
         </div>
       </div>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          bericht={confirmDialog.bericht}
+          destructief={confirmDialog.destructief}
+          onBevestig={confirmDialog.onBevestig}
+          onAnnuleer={() => setConfirmDialog(null)}
+        />
+      )}
     </>
   );
 }

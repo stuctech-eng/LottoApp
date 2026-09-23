@@ -1,5 +1,6 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -54,6 +55,8 @@ function AdminPageContent() {
   const [seizoenen, setSeizoenen] = useState<Seizoen[]>([]);
   const [actiefsSeizoen, setActiefSeizoen] = useState<Seizoen | null>(null);
   const [nieuwSeizoenNaam, setNieuwSeizoenNaam] = useState('');
+  // Vervangt window.confirm() overal op deze pagina — zie ConfirmDialog.tsx.
+  const [confirmDialog, setConfirmDialog] = useState<{ bericht: string; destructief?: boolean; onBevestig: () => void } | null>(null);
   const [spelBezig, setSpelBezig] = useState(false);
   const [spelOk, setSpelOk] = useState(false);
   const [herberekenBezig, setHerberekenBezig] = useState(false);
@@ -116,31 +119,32 @@ function AdminPageContent() {
     }
   };
 
-  const handleHerbereken = async () => {
+  const handleHerbereken = () => {
     if (!actiefsSeizoen) return;
-    const bevestigd = window.confirm(
-      'Dit verwijdert alle resultaten van de HUIDIGE speelreeks en berekent ze opnieuw vanaf de eerste trekking van die speelreeks. Oudere, al afgesloten speelreeksen blijven ongewijzigd. Doorgaan?'
-    );
-    if (!bevestigd) return;
-
-    setHerberekenBezig(true);
-    setHerberekenError(null);
-    setHerberekenResultaat(null);
-    try {
-      const result = await herberekenHuidigeSpeelreeks(actiefsSeizoen.id);
-      if (result.herberekend === 0) {
-        setHerberekenResultaat(result.bericht ?? 'Geen trekkingen om te herberekenen.');
-      } else {
-        const winnaarsTekst = result.winnaars && result.winnaars.length > 0
-          ? ` Winnaar(s): ${result.winnaars.join(', ')}.`
-          : ' Nog geen winnaar.';
-        setHerberekenResultaat(`✓ ${result.herberekend} trekking(en) opnieuw verwerkt.${winnaarsTekst}`);
-      }
-    } catch (err) {
-      setHerberekenError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
-    } finally {
-      setHerberekenBezig(false);
-    }
+    setConfirmDialog({
+      bericht: 'Dit verwijdert alle resultaten van de HUIDIGE speelreeks en berekent ze opnieuw vanaf de eerste trekking van die speelreeks. Oudere, al afgesloten speelreeksen blijven ongewijzigd. Doorgaan?',
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setHerberekenBezig(true);
+        setHerberekenError(null);
+        setHerberekenResultaat(null);
+        try {
+          const result = await herberekenHuidigeSpeelreeks(actiefsSeizoen.id);
+          if (result.herberekend === 0) {
+            setHerberekenResultaat(result.bericht ?? 'Geen trekkingen om te herberekenen.');
+          } else {
+            const winnaarsTekst = result.winnaars && result.winnaars.length > 0
+              ? ` Winnaar(s): ${result.winnaars.join(', ')}.`
+              : ' Nog geen winnaar.';
+            setHerberekenResultaat(`✓ ${result.herberekend} trekking(en) opnieuw verwerkt.${winnaarsTekst}`);
+          }
+        } catch (err) {
+          setHerberekenError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
+        } finally {
+          setHerberekenBezig(false);
+        }
+      },
+    });
   };
 
   const handleVulPrijsBedragIn = async () => {
@@ -162,27 +166,29 @@ function AdminPageContent() {
     }
   };
 
-  const handleHerberekenPrijsBedrag = async () => {
-    const bevestigd = window.confirm(
-      'Dit berekent het prijsbedrag van ALLE winnaars opnieuw, ook degenen die al een bedrag hebben — bijv. na het corrigeren van een foutieve betaling. Doorgaan?'
-    );
-    if (!bevestigd) return;
-    setPrijsBedragBezig(true);
-    setPrijsBedragError(null);
-    setPrijsBedragResultaat(null);
-    try {
-      const result = await vulHistorischPrijsBedragIn(true);
-      if (result.bijgewerkt === 0) {
-        setPrijsBedragResultaat('Geen winnaars gevonden om te herberekenen.');
-      } else {
-        const regels = result.details.map(d => `${d.userNaam}: €${d.prijsBedrag.toFixed(0)}`).join(', ');
-        setPrijsBedragResultaat(`✓ (herberekend) ${result.bijgewerkt} winnaar-resultaat(en). ${regels}`);
-      }
-    } catch (err) {
-      setPrijsBedragError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
-    } finally {
-      setPrijsBedragBezig(false);
-    }
+  const handleHerberekenPrijsBedrag = () => {
+    setConfirmDialog({
+      bericht: 'Dit berekent het prijsbedrag van ALLE winnaars opnieuw, ook degenen die al een bedrag hebben — bijv. na het corrigeren van een foutieve betaling. Doorgaan?',
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setPrijsBedragBezig(true);
+        setPrijsBedragError(null);
+        setPrijsBedragResultaat(null);
+        try {
+          const result = await vulHistorischPrijsBedragIn(true);
+          if (result.bijgewerkt === 0) {
+            setPrijsBedragResultaat('Geen winnaars gevonden om te herberekenen.');
+          } else {
+            const regels = result.details.map(d => `${d.userNaam}: €${d.prijsBedrag.toFixed(0)}`).join(', ');
+            setPrijsBedragResultaat(`✓ (herberekend) ${result.bijgewerkt} winnaar-resultaat(en). ${regels}`);
+          }
+        } catch (err) {
+          setPrijsBedragError(err instanceof Error ? err.message : 'Herberekenen mislukt.');
+        } finally {
+          setPrijsBedragBezig(false);
+        }
+      },
+    });
   };
 
   const handleBekijkDetails = async () => {
@@ -371,11 +377,16 @@ function AdminPageContent() {
     }
   };
 
-  const handleNotifVerwijderen = async (n: GeplandeNotificatie) => {
+  const handleNotifVerwijderen = (n: GeplandeNotificatie) => {
     if (!user || !profile) return;
-    const bevestigd = window.confirm(`"${n.titel}" verwijderen? Dit kan niet ongedaan worden gemaakt.`);
-    if (!bevestigd) return;
-    await verwijderGeplandeNotificatie(n.id, n.titel, { uid: user.uid, naam: profile.naam });
+    setConfirmDialog({
+      bericht: `"${n.titel}" verwijderen? Dit kan niet ongedaan worden gemaakt.`,
+      destructief: true,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        await verwijderGeplandeNotificatie(n.id, n.titel, { uid: user.uid, naam: profile.naam });
+      },
+    });
   };
 
   const handleNotifToggleActief = async (n: GeplandeNotificatie) => {
@@ -930,6 +941,15 @@ function AdminPageContent() {
           </Link>
         ))}
       </nav>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          bericht={confirmDialog.bericht}
+          destructief={confirmDialog.destructief}
+          onBevestig={confirmDialog.onBevestig}
+          onAnnuleer={() => setConfirmDialog(null)}
+        />
+      )}
     </>
   );
 }

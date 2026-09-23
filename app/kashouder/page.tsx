@@ -1,5 +1,6 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
@@ -83,37 +84,47 @@ function KashouderPageContent() {
   const openBetalingen = actieveLeden.filter(l => !betaaldeLeden.has(l.id));
 
   const [markeerFout, setMarkeerFout] = useState<string | null>(null);
+  // Vervangt window.confirm() overal op deze pagina — zie ConfirmDialog.tsx.
+  const [confirmDialog, setConfirmDialog] = useState<{ bericht: string; onBevestig: () => void } | null>(null);
 
-  const handleMarkeerBetaald = async (lid: User) => {
+  const handleMarkeerBetaald = (lid: User) => {
     const au = actieUser();
     if (!au) return;
-    const bevestigd = window.confirm(`€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
-    if (!bevestigd) return;
-    setMarkeerFout(null);
-    try {
-      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, au);
-    } catch (e) {
-      setMarkeerFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
-      setTimeout(() => setMarkeerFout(null), 5000);
-    }
+    setConfirmDialog({
+      bericht: `€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setMarkeerFout(null);
+        try {
+          await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, au);
+        } catch (e) {
+          setMarkeerFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
+          setTimeout(() => setMarkeerFout(null), 5000);
+        }
+      },
+    });
   };
 
   // Zelfde knop als op Financieel — voor als een lid al genoeg
   // LottoSaldo heeft liggen. Boekt geen nieuw geld, gebruikt puur
   // bestaand saldo. Stond hier eerder niet, alleen op de aparte
   // Financieel-pagina — nu op allebei de plekken consistent.
-  const handleHerverreken = async (lid: User) => {
+  const handleHerverreken = (lid: User) => {
     const au = actieUser();
     if (!au) return;
-    const bevestigd = window.confirm(`${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`);
-    if (!bevestigd) return;
-    setMarkeerFout(null);
-    try {
-      await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, au);
-    } catch (e) {
-      setMarkeerFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
-      setTimeout(() => setMarkeerFout(null), 5000);
-    }
+    setConfirmDialog({
+      bericht: `${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setMarkeerFout(null);
+        try {
+          await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, au);
+        } catch (e) {
+          setMarkeerFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
+          setTimeout(() => setMarkeerFout(null), 5000);
+        }
+      },
+    });
   };
 
   return (
@@ -248,6 +259,14 @@ function KashouderPageContent() {
           </Link>
         ))}
       </nav>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          bericht={confirmDialog.bericht}
+          onBevestig={confirmDialog.onBevestig}
+          onAnnuleer={() => setConfirmDialog(null)}
+        />
+      )}
     </>
   );
 }

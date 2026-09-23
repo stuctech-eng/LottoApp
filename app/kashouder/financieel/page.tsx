@@ -1,5 +1,6 @@
 'use client';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
@@ -133,38 +134,48 @@ function FinancieelPageContent() {
     .sort((a, b) => (b.datum?.toMillis() ?? 0) - (a.datum?.toMillis() ?? 0))[0];
 
   const [markeerFout, setMarkeerFout] = useState<string | null>(null);
+  // Vervangt window.confirm() overal op deze pagina — zie ConfirmDialog.tsx.
+  const [confirmDialog, setConfirmDialog] = useState<{ bericht: string; onBevestig: () => void } | null>(null);
 
   const actieUser = () => user && profile ? { uid: user.uid, naam: profile.naam } : null;
 
-  const handleMarkeerBetaald = async (lid: User) => {
+  const handleMarkeerBetaald = (lid: User) => {
     const au = actieUser();
     if (!au) return;
-    const bevestigd = window.confirm(`€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`);
-    if (!bevestigd) return;
-    setMarkeerFout(null);
-    try {
-      await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, au);
-    } catch (e) {
-      setMarkeerFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
-      setTimeout(() => setMarkeerFout(null), 5000);
-    }
+    setConfirmDialog({
+      bericht: `€${standaardInleg.toFixed(2)} storten namens ${lid.naam}? Gebruik dit alleen als je het zelf in Tikkie hebt gezien.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setMarkeerFout(null);
+        try {
+          await stortLottoSaldo({ id: lid.id, naam: lid.naam }, standaardInleg, au);
+        } catch (e) {
+          setMarkeerFout(e instanceof Error ? e.message : 'Storting registreren is mislukt.');
+          setTimeout(() => setMarkeerFout(null), 5000);
+        }
+      },
+    });
   };
 
   // Alleen voor als een lid al genoeg LottoSaldo heeft liggen (bijv.
   // na het corrigeren van een verkeerd-verrekende oudere week) — dit
   // boekt GEEN nieuw geld, gebruikt puur bestaand saldo.
-  const handleHerverreken = async (lid: User) => {
+  const handleHerverreken = (lid: User) => {
     const au = actieUser();
     if (!au) return;
-    const bevestigd = window.confirm(`${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`);
-    if (!bevestigd) return;
-    setMarkeerFout(null);
-    try {
-      await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, au);
-    } catch (e) {
-      setMarkeerFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
-      setTimeout(() => setMarkeerFout(null), 5000);
-    }
+    setConfirmDialog({
+      bericht: `${lid.naam}'s bestaande LottoSaldo verrekenen met de openstaande week? Er wordt geen nieuw geld bijgeboekt.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setMarkeerFout(null);
+        try {
+          await herverrekenLottoSaldo({ id: lid.id, naam: lid.naam }, au);
+        } catch (e) {
+          setMarkeerFout(e instanceof Error ? e.message : 'Herverrekenen is mislukt.');
+          setTimeout(() => setMarkeerFout(null), 5000);
+        }
+      },
+    });
   };
 
   const handleUitbetaling = async () => {
@@ -681,6 +692,14 @@ function FinancieelPageContent() {
           </Link>
         ))}
       </nav>
+
+      {confirmDialog && (
+        <ConfirmDialog
+          bericht={confirmDialog.bericht}
+          onBevestig={confirmDialog.onBevestig}
+          onAnnuleer={() => setConfirmDialog(null)}
+        />
+      )}
     </>
   );
 }
