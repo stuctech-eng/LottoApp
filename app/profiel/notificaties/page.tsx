@@ -26,12 +26,13 @@ interface ZaterdagStatus {
   details?: { userId: string; naam: string; reden: string }[];
 }
 
-const CATEGORIEEN: { key: keyof NotificationSettings; label: string; uitleg: string }[] = [
+const CATEGORIEEN: { key: keyof NotificationSettings; label: string; uitleg: string; beheerderOnly?: boolean }[] = [
   { key: 'trekkingResultaten', label: '🎱 Trekkingsuitslagen', uitleg: 'Na elke trekking: jouw resultaat en of er een winnaar is' },
   { key: 'betalingBevestigd', label: '✅ Betaling bevestigd', uitleg: 'Zodra de kashouder jouw storting heeft verwerkt' },
   { key: 'herinneringen', label: '⏰ Herinneringen', uitleg: 'Betaalherinneringen, laag saldo, zaterdag-saldo-check' },
   { key: 'winnaars', label: '🎉 Winnaars', uitleg: 'Als er een winnaar valt (ook als jij het niet was)' },
   { key: 'ranglijstUpdates', label: '📈 Ranglijst-updates', uitleg: 'Wijzigingen in de ranglijst (standaard uit)' },
+  { key: 'nieuweLeden', label: '👋 Nieuwe leden', uitleg: 'Zodra iemand een uitnodiging verzilvert — alleen beheerder', beheerderOnly: true },
 ];
 
 function NotificatiesContent() {
@@ -289,7 +290,7 @@ function NotificatiesContent() {
             {!notifActief && (
               <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Zet eerst notificaties helemaal aan hierboven — dan kun je hieronder per soort kiezen.</div>
             )}
-            {CATEGORIEEN.map(cat => (
+            {CATEGORIEEN.filter(cat => !cat.beheerderOnly || isBeheerder).map(cat => (
               <div key={cat.key} className="card" style={{ padding: '13px 16px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: notifActief ? 1 : 0.5 }}>
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{cat.label}</div>

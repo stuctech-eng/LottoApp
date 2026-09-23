@@ -49,6 +49,10 @@ export interface NotificationSettings {
   herinneringen: boolean;
   winnaars: boolean;
   ranglijstUpdates: boolean;
+  /** Alleen relevant/zichtbaar voor de rol beheerder — puur
+   *  informatief (geen actie vereist), vandaar bewust GEEN plek in de
+   *  "Vereist aandacht"-kaart. Zie docs/changelog.md. */
+  nieuweLeden: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -57,6 +61,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   herinneringen: true,
   winnaars: true,
   ranglijstUpdates: false,
+  nieuweLeden: true,
 };
 
 export interface Ticket {

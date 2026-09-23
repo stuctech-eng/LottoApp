@@ -59,6 +59,8 @@ export interface NotificationSettings {
   herinneringen: boolean;
   winnaars: boolean;
   ranglijstUpdates: boolean;
+  /** Zie lib/types.ts — identieke definitie. */
+  nieuweLeden: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -67,4 +69,5 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   herinneringen: true,
   winnaars: true,
   ranglijstUpdates: false,
+  nieuweLeden: true,
 };
