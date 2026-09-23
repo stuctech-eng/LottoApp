@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   updateDoc,
@@ -10,6 +11,7 @@ import {
 import { db } from './firebase';
 import { User, Ticket, Rol } from './types';
 import { logAudit } from './firestore-audit';
+import { herverrekenLottoSaldo } from './firestore-payments';
 
 export function normaliseerRol(raw: unknown): Rol {
   const waarde = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
@@ -56,6 +58,24 @@ export function subscribeAllUsers(
 
 export async function updateUserTickets(uid: string, tickets: Ticket[]) {
   await updateDoc(doc(db, 'users', uid), { tickets });
+  // BUGFIX: een derde plek (naast stortLottoSaldo en corrigeerLottoSaldo)
+  // die een vastzittende betaling kan "ontgrendelen" — een lid dat al
+  // saldo had liggen vóórdat hij zijn eerste ticket aanmaakte, bleef
+  // anders voor altijd "niks doen" tonen totdat iemand toevallig op
+  // Verreken drukte (zie het Emma-incident, docs/changelog.md).
+  // Alleen bij een niet-lege tickets-lijst — een leeg ticket
+  // (verwijderen) hoeft niets te ontgrendelen.
+  if (tickets.length > 0) {
+    const snap = await getDoc(doc(db, 'users', uid));
+    const naam = (snap.data()?.naam as string | undefined) ?? 'Onbekend';
+    try {
+      await herverrekenLottoSaldo({ id: uid, naam }, { uid, naam });
+    } catch {
+      // Nooit het ticket-opslaan zelf laten mislukken op een
+      // verrekenprobleem — dat lost zich anders alsnog op via de
+      // wekelijkse vrijdagcontrole.
+    }
+  }
 }
 
 export async function updateUserTelefoon(uid: string, telefoon: string) {
