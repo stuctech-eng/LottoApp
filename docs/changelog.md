@@ -4,6 +4,52 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 22-23 september 2026 — Dashboard/Deelnemers/Leden volledig herontwerp, Vereist Aandacht, verplichte onboarding
+
+Grote sessie, in stappen opgebouwd via previews op een canvas voordat er iets werd gebouwd. Samengevat: leden en beheerder kregen hetzelfde, "vak-als-knop" dashboard; Deelnemers en Leden werden allebei herbouwd rond een detailpagina per persoon; en nieuwe leden kunnen niet meer per ongeluk zonder ticket/telefoon het dashboard in.
+
+### Gedeeld dashboard — `components/SpelerDashboard.tsx`
+
+Leden en beheerder gebruiken nu **letterlijk dezelfde component**. `app/dashboard/page.tsx` en `app/beheerder/page.tsx` zijn allebei dunne laagjes (rol-redirect) die `<SpelerDashboardContent allowedRoles={[...]} extraTop={...} />` renderen. Reden: twee losse, bijna-identieke kopieën zouden onherroepelijk uit elkaar gaan groeien — precies het patroon dat al eerder deze sessie een bug veroorzaakte (het "Herinner"-knopje dat op twee plekken los stond).
+
+**Bijgevangen tijdens het uitsplitsen**: een `useState`-aanroep die ná een voorwaardelijke `return` stond — een harde schending van React's hooks-regels, die de pagina kon laten crashen zodra `profileLoading` van `true` naar `false` wisselde. Nooit een gemeld incident geweest, preventief gevonden en gefixt.
+
+De bottom-nav highlight ("welke tab is actief") was voorheen hardcoded op Dashboard — nu via `usePathname()`, want het component draait nu op twee verschillende routes.
+
+### Beheerder-dashboard = ledendashboard + "Vereist aandacht"
+
+Beheerder speelt ook mee, dus ziet nu exact hetzelfde als een lid — plus één kaart bovenaan. Deze kaart heeft een eigen ontwikkelgeschiedenis binnen deze sessie, het vermelden waard omdat elke stap een echte correctie was, geen smaakkeuze:
+
+1. **Eerste versie**: een verzamel-tegel met een totaalcijfer en een opsomming (bijv. "3 — 1 in wachtrij · 1 zonder telefoon · 1 openstaand").
+2. **Wachtrij eruit gehaald**: een wachtrij-lid vereist geen actie — dat lost zichzelf op zodra er gewonnen wordt. Meetellen als "aandacht vereist" zou het woord uithollen.
+3. **Volledige inventarisatie**: uitgebreid naar 6 checks (trekking niet ingevoerd, in verificatie, openstaand, geen ticket, zonder telefoon, Tikkie lang niet gecheckt), in prioriteitsvolgorde.
+4. **"In verificatie" weer verwijderd**: bleek een **onbereikbare status** — de functies die 'm ooit aanmaakten (`meldBetaling`, `meldLottoSaldoStorting`) en bevestigden (`bevestigBetaling`) waren al op 25 juli verwijderd. Een check op iets dat niet meer kan gebeuren is dode code.
+5. **Omgebouwd naar "probleem voor probleem"**: op verzoek — niet langer een verzamellijst, maar altijd precies één probleem tegelijk, in vaste volgorde. Bij een persoonsgebonden probleem (openstaand, geen ticket, zonder telefoon) linkt de tegel **direct naar die ene persoon** met zijn naam erop, niet naar de algemene lijst. Bij de twee proces-problemen (trekking, Tikkie) blijft de link naar de bijbehorende pagina zelf. Oplossen → tegel verdwijnt of springt door naar het volgende, zonder wegklikken.
+
+### Deelnemers — herontwerp + nieuwe detailpagina
+
+`app/deelnemers/page.tsx`: gesorteerd op aantal goed i.p.v. willekeurige lijstvolgorde, ballen met highlighting van geraakte nummers, betaalstatus per persoon, eigen rij gemarkeerd. Voor de beheerder verschijnt er een tabbalk ("Deelnemers" / "👑 Administratief") die naar de Leden-pagina leidt — voor leden en kashouder onzichtbaar.
+
+**Nieuw**: `app/deelnemers/[id]/page.tsx` — tikken op een naam geeft een detailpagina met historische winst-statistieken (`Gewonnen X keer`, `Totaal winst`, `Laatst gewonnen`), die **over de volledige geschiedenis** gaan, niet alleen de laatste trekking. Daarvoor is `subscribeUserResultaten()` toegevoegd aan `lib/firestore-trekkingen.ts` (bewust geen `orderBy()`, architectuurregel 1 — sorteren gebeurt client-side via een trekkingId→datum-koppeling).
+
+### Leden Administratie — volledige overhaul
+
+`app/leden/page.tsx`: van een statische lijst met losse rol-dropdown + rood kruisje per rij, naar tegel-als-knop-rijen met een wachtrij-filter en -badge. Rol wijzigen en verwijderen zijn van de rij af verhuisd.
+
+**Nieuw**: `app/leden/[id]/page.tsx` — 4 tabs (Overzicht, Ticket, Betalingen, Acties). Gebouwd in meerdere rondes na expliciete controle van wat er al **niet** werkte:
+
+- **Eerste versie** had alleen Rol wijzigen, Saldo corrigeren, en Status (verwijderen/heractiveren).
+- **Gecontroleerd of "Vereist aandacht" ook echt oploste wat het beloofde** — bleek voor 4 van de 6 problemen niet zo: geen Bevestigen-knop voor verificatie (die overigens sowieso niet meer kan voorkomen, zie boven), geen Storten/Verreken, geen manier om een ontbrekend telefoonnummer toe te voegen, en "Tikkie" hoorde daar sowieso niet thuis.
+- **Storten + Verreken toegevoegd** aan de Acties-tab, met een **"Betaalstatus deze week"**-check die pas laat zien wat nodig is — een bug onderweg gevonden en gefixt: de Verreken-knop verscheen eerder zodra saldo toereikend was, ook als iemand al gewoon betaald had. Nu eerst checken of er deze week al `'betaald'` is (club-breed bepaald, architectuurregel 12 — nooit alleen op basis van dit ene lid se eigen historie).
+- **Telefoon bewerkbaar gemaakt** in Overzicht — loste het "dode spoor" op waarbij een ontbrekend nummer wél zichtbaar was, maar nergens aan te passen.
+- **"LottoSaldo aanvullen" toegevoegd** — een tweede, apart storten-pad met een vrij bedrag (naast de vaste-bedrag-knop), voor vooruitbetalen van meerdere weken ineens. Bestond al op Financieel (`handleStorting`), was hier vergeten. Bewust **niet** verstopt achter "nog niet betaald" — vooruitstorten kan ook als deze week al betaald is. Saldo staat er nu ook prominent bovenaan, niet meer weggestopt in een zin.
+
+### Verplichte onboarding — telefoon + ticket
+
+`app/welkom/page.tsx` kreeg een 6e, verplichte stap. Eerder stond er alleen **tekst** die aanraadde een ticket in te stellen en te storten — niets hield een nieuw lid tegen om direct door te klikken naar het dashboard zonder telefoonnummer of ticket. Nu blijft de knop "Naar het dashboard" uitgeschakeld totdat beide geldig zijn ingevuld. Geldt voor elke nieuwe uitnodiging vanaf nu, ook voor wie in de wachtrij terechtkomt (doorloopt dezelfde flow).
+
+---
+
 ## 22 september 2026 — Ticket-wijzigen-sluitingsvenster, en een echte bug in de controle-engine ontdekt tijdens het bouwen ervan
 
 Aanleiding: een vraag over wannéér een lid zijn Lotto-nummers eigenlijk mag wijzigen, legde bloot dat daar **helemaal geen beperking op zat** — op elk moment, zelfs midden in een speelreeks. Bij het uitzoeken bleek dat geen kosmetisch gaatje, maar een echte fout in de scoretelling zelf.

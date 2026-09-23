@@ -134,6 +134,7 @@ Trekking 3:    18 - 23 - 31 - 40 - 42 - 45  →  3 nieuw   → totaal 6/6 → WI
 - **Financieel → Betaling corrigeren** → status naar `'gecorrigeerd'`, met **"↺ Herstel"**. Nooit door elkaar gebruiken met de saldo-correctie voor hetzelfde incident. **Corrigeert alléén de betaalstatus, nooit het saldo of de kas** — zie architectuurregel 12.
 - **Financieel → Openstaand → 🔁 Verreken** (nieuw, 22 september 2026) → verrekent bestaand LottoSaldo met een openstaande week, boekt géén nieuw geld. Voor als een lid al genoeg saldo heeft liggen maar een eerdere verrekening naar de verkeerde week ging (zie het Kees-incident, `docs/changelog.md`).
 - **Beheer → Admin → Historisch prijsbedrag invullen / Alle winnaars herberekenen / Bekijk berekening laatste winnaar** (nieuw, 20-22 september 2026) — zie "Prijsbedrag bij winst" hieronder.
+- **`/leden/[id]` → Acties** (nieuw, 23 september 2026) — dezelfde Storten/Verreken als hierboven, plus een vrij-bedrag-storting en Saldo corrigeren, nu allemaal **per lid**, zonder tussen Leden en Financieel te hoeven schakelen. Toont alleen wat er echt te doen is — "Betaalstatus deze week" checkt eerst of er al `'betaald'` is (club-breed bepaald) vóórdat Storten/Verreken überhaupt zichtbaar worden.
 
 ### Tikkie laatst gecontroleerd (15 augustus 2026)
 Financieel-pagina toont bovenaan *"💳 Tikkie laatst gecontroleerd: [datum/tijd]"* — puur afgeleid uit de meest recente `'inleg'`-kasmutatie, geen aparte knop of veld nodig. Elke storting-registratie is zelf al het bewijs dat Tikkie is gecheckt.
@@ -157,6 +158,46 @@ Financieel-pagina toont bovenaan *"💳 Tikkie laatst gecontroleerd: [datum/tijd
 
 ### Bekende, geaccepteerde aanname
 Bij meerdere winnaars in dezelfde trekking krijgt elk zijn eigen, gedeelde aandeel — dit is een expliciete bevestiging van de beheerder tijdens overleg (matcht ook de bestaande tekst op `/startinfo`: "wordt de pot gelijk verdeeld"), geen zelfstandige aanname.
+
+---
+
+## Dashboard & Leden Administratie — gedeeld component, Vereist Aandacht (22-23 september 2026)
+
+### `components/SpelerDashboard.tsx` — één component, twee routes
+`/dashboard` (lid) en `/beheerder` (beheerder) renderen **dezelfde** `SpelerDashboardContent` — beide pagina's zijn zelf alleen nog een dun laagje met de rol-redirect. Reden: de beheerder speelt ook mee en wil dus hetzelfde zien als een lid, en twee losse, bijna-identieke kopieën groeien onvermijdelijk uit elkaar (zie het eerdere "Herinner"-knopje-incident, dat exact dit patroon was).
+
+- `allowedRoles: Rol[]` prop bepaalt de laad-spinner-gate; de daadwerkelijke redirect voor een verkeerde rol blijft in de aanroepende pagina zelf.
+- `extraTop?: ReactNode` prop rendert extra inhoud direct na de wachtrij-banner, vóór de prijzenpot — hier gebruikt voor de "Vereist aandacht"-kaart op `/beheerder`.
+- Bottom-nav "actief"-highlight gaat nu via `usePathname()`, niet meer hardcoded.
+- **Bugfix onderweg gevonden**: een `useState`-aanroep stond ná een voorwaardelijke `return` — een harde schending van React's hooks-regels (kan de pagina laten crashen zodra `profileLoading` wisselt van `true` naar `false`). Verplaatst naar bovenaan, bij de andere hooks.
+
+### "Vereist aandacht" — probleem voor probleem, nooit een verzamellijst
+Op `/beheerder`, boven de prijzenpot. Toont **altijd precies één probleem**, in vaste prioriteitsvolgorde:
+
+1. Trekking niet ingevoerd (alleen relevant ná de trekkingsavond: zaterdag vanaf 20:00, of zondag) → `/trekkingen`
+2. Eerste lid zonder betaling deze week → **direct naar dat lid**, `/leden/[id]`
+3. Eerste lid zonder ticket → **direct naar dat lid**
+4. Eerste lid zonder telefoonnummer → **direct naar dat lid**
+5. Tikkie al >3 dagen niet gecontroleerd (zelfde afleiding als "Tikkie laatst gecontroleerd") → `/kashouder/financieel`
+
+Bij een persoonsgebonden probleem toont de tegel meteen de naam ("⚠️ Emma Sier — Geen ticket ingesteld"). Opgelost → de tegel herberekent live en springt door naar het volgende (of verdwijnt helemaal) — niets om weg te klikken.
+
+**Bewust géén "in verificatie"-check**: die status kan in de huidige app niet meer ontstaan — de functies die 'm aanmaakten (`meldBetaling`, `meldLottoSaldoStorting`) en bevestigden (`bevestigBetaling`) zijn al op 25 juli verwijderd. Stond er tijdelijk wél in, tot dit tijdens het bouwen aan het licht kwam; een check op een onbereikbare status is dode code.
+
+**Bewust géén wachtrij-check**: dat lost zichzelf vanzelf op zodra er gewonnen wordt en vraagt niets van de beheerder — hoort bij status, niet bij "aandacht vereist". Blijft gewoon zichtbaar via het wachtrij-filter op `/leden`.
+
+### `/leden/[id]` — alles per lid op één plek
+Vervangt de losse rol-dropdown + rood kruisje die eerder rechtstreeks op de rij in `/leden` stonden. 4 tabs:
+- **Overzicht** — e-mail, telefoon (bewerkbaar, was eerder nergens aan te passen vanaf de adminkant), lid sinds, saldo, rangorde (zelfde sortering als Deelnemers), wachtrij-status, Bericht sturen.
+- **Ticket** — huidige nummers met highlighting.
+- **Betalingen** — volledige betaalhistorie (`subscribeUserBetalingen`).
+- **Acties** — Betaalstatus deze week (Storten/Verreken, **alleen zichtbaar als er nog niet betaald is** — club-breed bepaald via `relevanteTrekkingWeek`, architectuurregel 12), LottoSaldo aanvullen (vrij bedrag, altijd beschikbaar — ook als deze week al betaald is), Saldo corrigeren, Rol wijzigen, Verwijderen/Heractiveren.
+
+### `/deelnemers/[id]` — hetzelfde idee, voor leden
+Nieuwe detailpagina, bereikbaar door op een naam in Deelnemers te tikken. Toont, over de **volledige geschiedenis** (niet alleen de laatste trekking): `Gewonnen X keer`, `Totaal winst`, `Laatst gewonnen`, recente resultaten. Daarvoor is `subscribeUserResultaten(userId)` toegevoegd aan `lib/firestore-trekkingen.ts` — bewust geen `orderBy()` (architectuurregel 1), de aanroeper sorteert zelf via een trekkingId→datum-koppeling uit `subscribeAlleTrekkingen()`.
+
+### Verplichte onboarding (`/welkom`, stap 6 van 6)
+Was 5 stappen, allemaal informatief. Stap 6 is nieuw en **verplicht**: telefoonnummer + de 6 ticketnummers. "Naar het dashboard" blijft uitgeschakeld tot `valideerTicketNummers()` geen fout teruggeeft én het telefoonnummer is ingevuld. Voorheen stond er alleen tekst die dit aanraadde — niets hield een nieuw lid tegen om zonder een van beide door te klikken.
 
 ---
 
@@ -397,29 +438,33 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 |---|---|
 | `/` | Publiek — inloggen, geen registratie-optie |
 | `/uitnodiging/[token]` | Publiek — enige plek waar een nieuw lid kan toetreden |
-| `/welkom` | Nieuw lid, eenmalig — 5-stappen-onboarding, met wachtrij-bevestiging op de laatste stap |
+| `/welkom` | Nieuw lid, eenmalig — 6-stappen-onboarding (was 5): stap 6 (telefoon + ticket) is **verplicht**, "Naar het dashboard" blijft uitgeschakeld tot beide geldig zijn |
 | `/geen-toegang` | Ingelogd maar geen geldig/actief profiel |
-| `/dashboard` | Lid — wachtrij-banner indien van toepassing, prijzenpot, "Mijn LottoSaldo" |
+| `/dashboard` | Lid — dun laagje om `components/SpelerDashboard.tsx`, zie hieronder |
+| `/beheerder` | Beheerder — **hetzelfde** `SpelerDashboardContent` als `/dashboard`, plus de "Vereist aandacht"-kaart bovenaan (probleem-voor-probleem, zie architectuur hieronder) |
 | `/betalen` | Lid — puur informatief, directe Tikkie-storten-knop |
 | `/trekkingen`, `/trekkingen/[id]` | Lid+ — invoerformulier (beheerder) ondersteunt sinds 22 september plakken van de volledige uitslag in één keer |
 | `/startinfo` | Lid — samengevoegde informatiepagina (8 tabs) |
 | `/spelregels`, `/help`, `/debug-fcm` | Redirects (naar `/startinfo` resp. `/profiel/notificaties`) |
 | `/profiel` | Lid — naam, ticket (wijzigen op slot buiten het sluitingsvenster, zie hierboven), telefoon, link naar Notificaties |
-| `/profiel/notificaties` | Lid — Instellingen-tab (per categorie, voor iedereen). **Test-tab: beheerder-only sinds 22 september 2026** (was eerder voor iedereen zichtbaar, alleen de zaterdag-trigger erin was al beheerder-only) |
+| `/profiel/notificaties` | Lid — Instellingen-tab (per categorie, voor iedereen). Test-tab: beheerder-only |
 | `/profiel/voorwaarden` | Lid — Voorwaarden & Privacy, dynamisch bedrag en namen |
 | `/kas` | Alle rollen — alleen-lezen kasoverzicht |
 | `/kashouder`, `/kashouder/financieel` | Kashouder(+) — inclusief "Tikkie laatst gecontroleerd" |
-| `/leden` | Kashouder+ — uitnodigen, ❌ soft-delete, 🗑️ definitief verwijderen (bij inactief), Heractiveren |
-| `/beheerder`, `/beheerder/admin` | Beheerder — Instellingen, Spel, Prijzen, Seizoen, **Notificaties (nieuw)**, Audit log |
+| `/deelnemers` | Lid+ — gesorteerd op aantal goed, ballen met highlighting, betaalstatus. Beheerder ziet een extra tab "👑 Administratief" → `/leden` |
+| `/deelnemers/[id]` | **Nieuw** — detailpagina per lid: ticket, historische winst-stats (`subscribeUserResultaten`), recente resultaten, Bericht sturen |
+| `/leden` | Kashouder+ — herontworpen: tegel-als-knop-rijen, wachtrij-filter en -badge. Rol wijzigen/verwijderen zijn verhuisd naar `/leden/[id]` |
+| `/leden/[id]` | **Nieuw** — 4 tabs: Overzicht (incl. bewerkbaar telefoonnummer), Ticket, Betalingen, Acties (Storten, Verreken, vrij-bedrag storten, Saldo corrigeren, Rol wijzigen, Verwijderen/Heractiveren) |
+| `/beheerder/admin` | Beheerder — Instellingen, Spel, Prijzen, Seizoen, Notificaties, Audit log |
 | `/ranglijst`, `/hall-of-fame` | Alle rollen |
 | `/offline`, `/serwist/[path]` | PWA-ondersteuning, geen UI |
 
 ---
 
-## STATUS PER 22 SEPTEMBER 2026
+## STATUS PER 23 SEPTEMBER 2026
 
 ### Volledig werkend ✅ (bevestigd via testen)
-- Ledenuitnodigingensysteem, onboarding, Startinfo & Speluitleg
+- Ledenuitnodigingensysteem, onboarding (incl. de nieuwe verplichte stap 6), Startinfo & Speluitleg
 - Leden verwijderen (soft-delete + definitief), heractiveren
 - Betaalsysteem, storting-verrekening, Tikkie-laatst-gecontroleerd
 - Wachtrij voor nieuwe leden — inclusief de gefixte storting-verrekening-check
@@ -431,6 +476,7 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - **Week-scoping-fix** (het Kees-incident) — bevestigd correct na herverrekening
 - **Wachtrij-check in de deelnemers-bepaling** — code-wijziging, geen incident om te bevestigen (was preventief)
 - **matchedNumbers-bugfix in de controle-engine** — code-wijziging, geen incident om te bevestigen (preventief gevonden tijdens het bouwen van het ticket-wijzigen-sluitingsvenster, nooit misgegaan in productie)
+- **De Verreken-knop op `/leden/[id]` toonde zich onterecht bij een al-betaald lid** (Jan Runderkamp, meerdere leden) — gevonden en gefixt, bevestigd correct nadat het opnieuw bekeken is
 
 ### Openstaand ⏳
 - **Geplande notificaties (Beheer → Notificaties)** — kernlogica geïsoleerd getest (9/9 geslaagd) en de Cloud Function compileert schoon, maar nog niet bevestigd met een daadwerkelijk aangemaakte en aangekomen melding in productie
@@ -438,6 +484,8 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen
 - **Volgende winnaar, volledig live** (zonder handmatige backfill-tussenkomst) nog niet meegemaakt — Ing was de enige tot nu toe, en die liep via de reconstructietool, niet het live pad zelf
 - **Ticket-wijzigen-sluitingsvenster** — code compileert schoon (strict, echte project-types), maar nog niet in de praktijk bevestigd rond een echte reeks-grens (nieuwe winnaar → eerste week open → trekking → op slot)
+- **Dashboard/Deelnemers/Leden-herontwerp en de "Vereist aandacht"-kaart** — allemaal schoon gecompileerd met de echte project-types, maar nog niet in de praktijk doorlopen op een telefoon (elke route, elke tab, elke actieknop)
+- **De verplichte onboarding-stap** — nog niet bevestigd met een echte, nieuwe uitnodiging die iemand doorloopt
 - Geen automatische tests — alles handmatig, stap-voor-stap getest
 
 ---

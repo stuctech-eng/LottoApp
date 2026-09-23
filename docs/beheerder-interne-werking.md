@@ -52,6 +52,13 @@ Boekt een vrije, handmatige aanpassing op de kas — voor als er simpelweg een f
 - **Raakt aan**: alléén een nieuwe kasmutatie. **Nooit een betaling, nooit een saldo.**
 - Dit is precies het mechanisme dat bij het "dubbele-markering"-incident gebruikt werd om alleen de kas te repareren — waardoor de onderliggende betaling per ongeluk bleef staan. **Vraag jezelf bij elke kascorrectie af: hoort hier ook een betaling-correctie bij?**
 
+### `/leden/[id]` → Acties (nieuw, 23 september 2026)
+Dezelfde functies als hierboven, nu per lid op één pagina in plaats van los op Financieel:
+- **Betaalstatus deze week** (Storten/Verreken) — verschijnt **alleen** als dit lid deze week nog niet `'betaald'` staat. Al betaald? Dan zie je gewoon "✓ Al betaald deze week — niets te doen", geen knoppen. Dit voorkwam een bug waarbij Verreken zich liet zien puur op basis van voldoende saldo, ook als er niks te verrekenen viel.
+- **LottoSaldo aanvullen** — een vrij bedrag, los van de betaalstatus van deze week (dus ook bruikbaar als iemand al betaald heeft maar vooruit wil storten voor komende weken). Zelfde onderliggende functie (`stortLottoSaldo`) als de knop hierboven, alleen met een zelf ingevuld bedrag i.p.v. altijd precies de standaardinleg.
+- **Saldo corrigeren, Rol wijzigen, Verwijderen/Heractiveren** — zelfde functies als altijd, nu hier gebundeld.
+- **Telefoon bewerken** (Overzicht-tab) — nieuw; hiervoor kon een ontbrekend telefoonnummer wel gezien maar niet aangepast worden vanaf de adminkant.
+
 ### Financieel → Uitbetaling registreren (`registreerUitbetaling`)
 Boekt geld dat de kas verlaat — bijv. een winnaar uitbetalen.
 - **Raakt aan**: alléén een nieuwe (negatieve) kasmutatie, zichtbaar onder "Uitbetaald deze maand".
@@ -105,6 +112,22 @@ Verwijdert en herberekent alle resultaten van de **huidige, nog lopende** speelr
 
 ---
 
+## "Vereist aandacht" (beheerder-dashboard) — hoe de tegel kiest wat hij toont
+
+Toont **nooit** een verzamellijst — altijd precies één probleem, in deze vaste volgorde (stopt bij het eerste dat van toepassing is):
+
+1. **Trekking niet ingevoerd** — alleen ná de trekkingsavond (zaterdag vanaf 20:00, of zondag). Tegel gaat naar `/trekkingen`.
+2. **Eerste lid zonder betaling deze week** — tegel gaat direct naar dát lid (`/leden/[id]`), niet naar de algemene lijst.
+3. **Eerste lid zonder ticket.**
+4. **Eerste lid zonder telefoonnummer.**
+5. **Tikkie al >3 dagen niet gecontroleerd** — tegel gaat naar `/kashouder/financieel`, want dit is geen per-lid-actie.
+
+**Wachtrij-leden tellen bewust niet mee** bij punt 2-4 (zij spelen deze week toch niet mee) — blijven wel gewoon zichtbaar via het wachtrij-filter op `/leden`. Los één probleem op, en de tegel herberekent zichzelf live — springt door naar het volgende, of verdwijnt als er niets meer is.
+
+**"In verificatie" staat er bewust niet in** — die betaalstatus kan in de huidige app niet meer ontstaan (zie hierboven, "Betaling corrigeren").
+
+---
+
 ## Wanneer moet je wát draaien — een korte beslisboom
 
 **Een lid heeft te veel/te weinig LottoSaldo, maar de betalingen zelf kloppen** → alleen de saldo-correctie (✎).
@@ -118,3 +141,7 @@ Verwijdert en herberekent alle resultaten van de **huidige, nog lopende** speelr
 **Een prijsbedrag klopt niet** → eerst 🔍 Bekijken om de oorzaak te vinden, dan de onderliggende betaling/kasmutatie corrigeren, dan pas ♻️ Alle winnaars herberekenen.
 
 **Een winnaar is uitbetaald** → altijd Uitbetaling registreren, ook al voelt het alsof "het geld toch al weg is" — zonder deze stap klopt de kas niet meer met de werkelijkheid.
+
+**Een lid ontbreekt telefoonnummer** → `/leden/[id]` → Overzicht → er direct op tikken om te bewerken. Hoeft niet meer via het lid zelf te lopen.
+
+**Je wilt meerdere weken vooruit storten voor iemand** → `/leden/[id]` → Acties → "LottoSaldo aanvullen" (vrij bedrag), niet de vaste-bedrag-knop erboven.
