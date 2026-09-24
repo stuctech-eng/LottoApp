@@ -162,8 +162,12 @@ function StartinfoContent() {
               <Blok titel="🔄 Automatische wekelijkse afschrijving">
                 <Info tekst={`Zolang er genoeg LottoSaldo op je account staat, wordt elke nieuwe speelweek automatisch €${standaardInleg} afgeschreven — geen actie nodig. Is je saldo niet meer toereikend, dan stort je gewoon opnieuw.`} />
               </Blok>
+              <Blok titel="⏰ Deadline: zaterdag 18:00">
+                <Info tekst="Nieuw geld storten kan altijd, ook na 18:00 — dat komt gewoon op je LottoSaldo. Alleen: na zaterdag 18:00 wordt een nieuwe storting niet meer automatisch gekoppeld aan de trekking van diezelfde avond. Het bedrag blijft gewoon staan en telt vanzelf mee voor de trekking van de week erna." />
+                <Info tekst="Heb je al vóór de deadline genoeg saldo op je account staan, dan verandert er voor jou niets — dat wordt gewoon automatisch gebruikt, ongeacht hoe laat het is." />
+              </Blok>
               <Tip tekst="Stort in één keer een groter bedrag om meerdere weken vooruit te spelen zonder er nog aan te hoeven denken." />
-              <Waarschuwing tekst="Nog geen saldo en niet gestort vóór de eerstvolgende trekking? Dan tellen de getrokken nummers van die week niet mee voor jouw verzameling." />
+              <Waarschuwing tekst="Nog geen saldo staan en niet vóór zaterdag 18:00 gestort? Dan tellen de getrokken nummers van die avond niet mee voor jouw verzameling." />
             </>
           )}
 

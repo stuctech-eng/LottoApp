@@ -223,13 +223,24 @@ Verving zowel de losse toggle op Profiel als de aparte, beheerder-only `/debug-f
 
 ---
 
-## Zaterdag-saldo-herinnering (15 augustus 2026)
+## Zaterdag-saldo-herinnering (15 augustus 2026, doelgroep aangepast 23 september 2026)
 
-Elke zaterdag 12:00 (`onZaterdagSaldoHerinnering`) — persoonlijk bericht per spelend lid (niet-wachtend), gebaseerd op actueel saldo:
-- Genoeg saldo: *"🎱 Vanavond vallen de ballen! Je saldo staat op €X — genoeg om mee te doen! 🍀"*
-- Te weinig: *"...dat is niet genoeg. Stort vóór 18:00 vandaag via Tikkie om mee te doen!"*
+Elke zaterdag 12:00 (`onZaterdagSaldoHerinnering`) — sinds 23 september **uitsluitend** naar spelende leden (niet-wachtend) die op dat moment nog te weinig saldo hebben: *"🔴 LottoSaldo bijna op — Je LottoSaldo is bijna op. Vul het vandaag nog aan als je deze week wilt blijven meespelen."* Wie al genoeg saldo heeft, krijgt sinds de woensdagmelding (zie hieronder) niets meer — dat was overbodige ruis geworden.
 
-Schrijft een volledig statusverslag naar `debug/zaterdagSaldoHerinnering` (per-lid reden zichtbaar: verstuurd/geen ticket/wacht op speelreeks/geen token), zichtbaar op `/profiel/notificaties` (Test-tab, beheerder) — inclusief een knop om **handmatig** te triggeren zonder een week te hoeven wachten.
+Schrijft een volledig statusverslag naar `debug/zaterdagSaldoHerinnering` (per-lid reden zichtbaar: verstuurd/geen ticket/wacht op speelreeks/geen token/genoeg saldo), zichtbaar op `/profiel/notificaties` (Test-tab, beheerder) — inclusief een knop om **handmatig** te triggeren zonder een week te hoeven wachten.
+
+---
+
+## Stort-deadline & drie nieuwe meldingen (23 september 2026)
+
+Zie `docs/changelog.md` voor de volledige, gefaseerde toelichting (fase A/C, elk apart geaudit en getest). Samengevat:
+
+- **Harde deadline, zaterdag 18:00:00** — geldt uitsluitend voor níeuw geld (`stortLottoSaldo`). Ná de deadline komt een storting nog gewoon op het LottoSaldo, maar wordt niet meer automatisch aan de lopende trekking gekoppeld — telt vanzelf mee voor de volgende week. Bestaand saldo (Verreken, Saldo corrigeren, ticket-aanmaken) wordt hier **nooit** door geraakt — de check zit op precies één plek in de code (`stortingIsNaDeadline()`, alleen aangeroepen vanuit `stortLottoSaldo`). Weekbepaling via `zaterdagDeadlineVanWeek()` (nieuw, puur, `lib/firestore-payments.ts`) — géén simpele dag-check, want die zou ook zondag ná een al-ingevoerde trekking onterecht blokkeren.
+- **Banner op `/betalen`** — puur informatief, blokkeert niets. Twee teksten (normaal / na de deadline), eigen club-brede weekbepaling.
+- **`onOnboardingVoltooid`** (nieuw) — welkomstmelding zodra de verplichte onboarding (telefoon+ticket) is afgerond, twee varianten op basis van `wachtOpNieuweSpeelreeks`.
+- **`onWoensdagSaldoHerinnering`** (nieuw, woensdag 09:00) — algemene vroege herinnering, zelfde detectie als de vrijdagmelding.
+
+**Bekende, nog openstaande kwestie:** de zelfhelende vrijdagherinnering-fix (uit een eerdere sessie) bleek bij audit **nooit gedeployed**, ondanks een aangeleverde zip. Bewust niet alsnog meegenomen in deze sessie om scope-vermenging te voorkomen — staat apart gepland, eerst een losse audit tegen de dan-actuele live-versie.
 
 ---
 
@@ -412,9 +423,11 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 |---|---|---|
 | `onTrekkingVerwerkt` | Nieuwe trekking | Cumulatieve controle-engine, resultaten, punten, push, **geeft wachtende leden vrij bij een winnaar** |
 | `onBetalingBevestigd` | Betaling → betaald (update) | Push naar lid |
+| `onOnboardingVoltooid` | `onboardingCompleted` false→true | **Nieuw** (23 sep) — welkomstmelding, twee varianten op `wachtOpNieuweSpeelreeks` |
+| `onWoensdagSaldoHerinnering` | Woensdag 09:00 | **Nieuw** (23 sep) — algemene vroege saldo-herinnering, zelfde detectie als vrijdag |
 | `onBetalingsHerinnering` | Vrijdag 09:00 | Push naar wie deze week nog open staat |
 | `onTikkieCheckHerinnering` | Vrijdag 20:00 | Push naar kashouder/beheerder |
-| `onZaterdagSaldoHerinnering` | Zaterdag 12:00 | Persoonlijke saldo-herinnering naar spelende leden, met statusverslag naar `/debug/zaterdagSaldoHerinnering` |
+| `onZaterdagSaldoHerinnering` | Zaterdag 12:00 | **Sinds 23 sep alleen naar wie nog te weinig saldo heeft** (was: iedereen), rustigere tekst. Statusverslag naar `/debug/zaterdagSaldoHerinnering` |
 | `onTrekkingHerinnering` | Zaterdag 19:30 | Push naar beheerders |
 | `onBetalingenAanmaken` | Trekking verwerkt | Nieuwe week: LottoSaldo-check per lid, **slaat wachtende leden over** |
 | `onTikkieLinkVerval` | Wekelijks | Push naar beheerders bij oude Tikkie-link |
@@ -442,7 +455,7 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `/geen-toegang` | Ingelogd maar geen geldig/actief profiel |
 | `/dashboard` | Lid — dun laagje om `components/SpelerDashboard.tsx`, zie hieronder |
 | `/beheerder` | Beheerder — **hetzelfde** `SpelerDashboardContent` als `/dashboard`, plus de "Vereist aandacht"-kaart bovenaan (probleem-voor-probleem, zie architectuur hieronder) |
-| `/betalen` | Lid — puur informatief, directe Tikkie-storten-knop |
+| `/betalen` | Lid — puur informatief, directe Tikkie-storten-knop. **Sinds 23 sep**: deadline-banner (zaterdag 18:00), twee teksten voor/na |
 | `/trekkingen`, `/trekkingen/[id]` | Lid+ — invoerformulier (beheerder) ondersteunt sinds 22 september plakken van de volledige uitslag in één keer |
 | `/startinfo` | Lid — samengevoegde informatiepagina (8 tabs) |
 | `/spelregels`, `/help`, `/debug-fcm` | Redirects (naar `/startinfo` resp. `/profiel/notificaties`) |
@@ -479,6 +492,8 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - **De Verreken-knop op `/leden/[id]` toonde zich onterecht bij een al-betaald lid** (Jan Runderkamp, meerdere leden) — gevonden en gefixt, bevestigd correct nadat het opnieuw bekeken is
 
 ### Openstaand ⏳
+- **Zelfhelende vrijdagherinnering-fix (eerdere sessie) staat niet live** — zip was aangeleverd maar nooit gedeployed, ontdekt bij audit op 23 september. Apart gepland, bewust niet meegenomen in de deadline/meldingen-sessie
+- **Stort-deadline (zaterdag 18:00), de banner, en de drie meldingen (onboarding/woensdag/zaterdag)** — allemaal geïsoleerd getest (10/10 voor de deadline-logica) en schoon gecompileerd, maar nog niet in de praktijk meegemaakt rond een echte zaterdag-18:00-grens
 - **Geplande notificaties (Beheer → Notificaties)** — kernlogica geïsoleerd getest (9/9 geslaagd) en de Cloud Function compileert schoon, maar nog niet bevestigd met een daadwerkelijk aangemaakte en aangekomen melding in productie
 - Eerste volledige run van `onZaterdagSaldoHerinnering` op de geplande tijd (i.p.v. handmatig getriggerd) nog niet apart bevestigd
 - Backfill voor leden die een ticket toevoegen ná het aanmaken van de weekbetalingen

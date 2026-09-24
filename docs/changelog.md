@@ -4,6 +4,35 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 23 september 2026 — Harde stort-deadline (zaterdag 18:00), drie nieuwe meldingen
+
+Aanleiding: een vraag over of leden nog "de ballen konden zien" vóórdat de trekking werd ingevoerd, en dan snel nog konden storten om alsnog mee te tellen — een maas die kon ontstaan omdat er voorheen geen harde grens was, alleen "wanneer de beheerder toevallig invoert". Uitgewerkt in expliciet afgebakende fases, elke fase eerst geaudit en getest vóór de volgende begon.
+
+### Fase A — de deadline zelf, alleen in `stortLottoSaldo`
+Nieuw géld (storten) wordt na zaterdag 18:00 van de betreffende speelweek niet meer automatisch aan die trekking gekoppeld — het bedrag komt wél gewoon op het LottoSaldo, blijft daar staan, en wordt automatisch gebruikt zodra de volgende week begint. **Bestaand saldo wordt hier nooit door geraakt**: Verreken, Saldo corrigeren en de ticket-aanmaken-trigger roepen de gedeelde verrekenfunctie allemaal rechtstreeks aan, zonder deze check — blijven dus altijd beschikbaar, ook ná de deadline. De check zit daardoor **op precies één plek** in de code.
+
+Grens: **18:00:00 zelf telt al als gesloten** (niet pas 18:00:01) — expliciet zo aangescherpt na een eerste review.
+
+Weekbepaling is bewust géén simpele "is het nu zaterdag na 18:00"-vlag — die zou ook de hele zondag blokkeren. In plaats daarvan: bepaal via `relevanteTrekkingWeek()` (club-breed, architectuurregel 12) vóór welke speelweek de storting geldt, en vergelijk met de zaterdag-18:00 van precies díe week (`zaterdagDeadlineVanWeek()`, nieuw, puur — hergebruikt dezelfde week-1-ankerlogica als `weekStringNaarDatum()`). Zodra de beheerder de trekking heeft ingevoerd en de nieuwe week is begonnen, werkt storten voor die nieuwe week direct weer door, ook op zondag.
+
+Getest met een geïsoleerd script (`test-lottosaldo-deadline.js`, geen Firestore) vóór dit in de echte functie bleef staan — 6/6 scenario's geslaagd: vóór de deadline, exact op de grens, ruim erna, zondag-voor-trekking-invoer, zondag-na-trekking-invoer, en codecontrole dat Verreken/corrigeren/ticket-trigger allemaal ongemoeid blijven.
+
+### Fase C — banner op `/betalen`
+Puur informatief, blokkeert nooit het storten zelf. Normaal: "Alle betalingen moeten vóór zaterdag 18:00 binnen zijn i.v.m. de trekking van die avond." Ná de deadline: legt uit dat een nieuwe storting nog gewoon op het saldo komt, maar niet meer voor vanavond meetelt. Eigen, club-brede weekbepaling — bewust niet de al-bestaande, per-lid-gescoped `week`-variabele op deze pagina hergebruikt. 10/10 tests (6 uit fase A + 4 banner-specifieke, zelfde geteste kernfunctie). Herberekent bij elke render, niet live tikkend — bewust zo gelaten, geen toegevoegde waarde tegen extra complexiteit voor een puur informatief element.
+
+### Drie nieuwe meldingen
+- **Welkomstmelding** — nieuw, `onOnboardingVoltooid` (Firestore-trigger op `users/{userId}`, `onboardingCompleted` false→true — dus ná de verplichte telefoon+ticket-stap, niet bij het aanmaken van het account). Twee varianten op basis van `wachtOpNieuweSpeelreeks`: wie meteen meedoet krijgt een concrete oproep vóór de deadline; wie nog wacht krijgt een andere boodschap zónder die druk (voor hen geldt de deadline niet). Categorie: bestaande `herinneringen`.
+- **Woensdag 09:00** — nieuw, algemene vroege herinnering ("Vergeet je LottoSaldo niet aan te vullen voor deze week"). Zelfde detectie als de bestaande vrijdagmelding (open betalingen huidige week) — **bewust niet de zelfhelende variant**, die fix staat apart gepland (zie hieronder) en is hier niet stilzwijgend meegenomen, voor traceerbaarheid.
+- **Zaterdag 12:00** — bestond al, **tekst en doelgroep aangepast**: stuurde eerder naar íedereen (met een positieve tekst bij genoeg saldo, een waarschuwing bij te weinig). Sinds woensdag erbij kwam, is de "goed bezig!"-variant overbodige ruis geworden — stuurt nu **uitsluitend** naar wie op dat moment nog te weinig saldo heeft, met rustigere tekst ("Je LottoSaldo is bijna op...") i.p.v. de oude "nog exact 6 uur"-urgentie.
+
+### Belangrijk: audit tijdens deze sessie ontdekt
+Bij het bouwen van de meldingen bleek een eerder gebouwde fix — de zelfhelende vrijdagherinnering (checkt zelf eerst of iemand stiekem al genoeg saldo heeft vóór hij een "nog niet betaald"-melding stuurt) — **nooit gedeployed**, ondanks dat de zip wel was aangeleverd. Bewust **niet** alsnog stilzwijgend meegenomen in deze sessie, ook al werd toch hetzelfde bestand aangepast — dat zou de scope onnodig vermengen en de traceerbaarheid schaden. Staat apart gepland: eerst een losse audit tegen de dan-actuele live-versie, dan pas bouwen.
+
+### Documentatie
+`/startinfo` (tab Betalen) kreeg een nieuw blok "⏰ Deadline: zaterdag 18:00" met de exacte regel in gewone taal, en de bestaande waarschuwing is scherper gemaakt (was: vaag "vóór de trekking", nu: concreet "vóór zaterdag 18:00").
+
+---
+
 ## 22-23 september 2026 — Dashboard/Deelnemers/Leden volledig herontwerp, Vereist Aandacht, verplichte onboarding
 
 Grote sessie, in stappen opgebouwd via previews op een canvas voordat er iets werd gebouwd. Samengevat: leden en beheerder kregen hetzelfde, "vak-als-knop" dashboard; Deelnemers en Leden werden allebei herbouwd rond een detailpagina per persoon; en nieuwe leden kunnen niet meer per ongeluk zonder ticket/telefoon het dashboard in.
