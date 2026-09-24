@@ -448,6 +448,53 @@ export async function herstelBetalingGecorrigeerd(
  * telt gewoon mee in het saldo en wordt later, samen met een volgende
  * storting, alsnog gebruikt zodra het genoeg is voor een hele week.
  */
+/**
+ * Geeft zaterdag 18:00 (lokale tijd) van een ISO-weeknotatie terug als
+ * Date — de stort-deadline voor die speelweek. Zelfde week-1-anker-
+ * logica als weekStringNaarDatum() hierboven (bewust ongewijzigd
+ * gelaten, wordt elders voor weergave gebruikt), maar geeft een Date
+ * terug i.p.v. een opgemaakte string, op 18:00 i.p.v. 00:00.
+ *
+ * Puur, geen Firestore — apart getest, zie test-lottosaldo-deadline.js.
+ */
+export function zaterdagDeadlineVanWeek(weekString: string): Date {
+  const [jaarStr, weekStr] = weekString.split('-W');
+  const jaar = parseInt(jaarStr, 10);
+  const weekNr = parseInt(weekStr, 10);
+  const vierJan = new Date(Date.UTC(jaar, 0, 4));
+  const dayNumVierJan = vierJan.getUTCDay() || 7;
+  const maandagWeek1 = new Date(vierJan);
+  maandagWeek1.setUTCDate(vierJan.getUTCDate() - dayNumVierJan + 1);
+  const zaterdagUTC = new Date(maandagWeek1);
+  zaterdagUTC.setUTCDate(maandagWeek1.getUTCDate() + (weekNr - 1) * 7 + 5);
+  // Zelfde jaar/maand/dag, maar als LOKALE datum om 18:00 — "zaterdag
+  // 18:00" moet lokale avondtijd betekenen voor wie de app gebruikt,
+  // niet UTC 18:00 (dat zou in NL-zomertijd 20:00 lokaal zijn).
+  return new Date(
+    zaterdagUTC.getUTCFullYear(),
+    zaterdagUTC.getUTCMonth(),
+    zaterdagUTC.getUTCDate(),
+    18, 0, 0, 0
+  );
+}
+
+/**
+ * Geldt UITSLUITEND voor nieuw geld (stortLottoSaldo) — nooit voor
+ * bestaand saldo. Verreken, corrigeerLottoSaldo en de ticket-
+ * aanmaken-trigger roepen verrekenLottoSaldoMetOpenstaandeWeek allemaal
+ * rechtstreeks aan, zonder deze check — dus altijd beschikbaar, ook ná
+ * de deadline, precies zoals afgesproken.
+ */
+async function stortingIsNaDeadline(): Promise<boolean> {
+  const alleBetalingenSnap = await getDocs(query(collection(db, 'betalingen')));
+  const alleBetalingen = alleBetalingenSnap.docs.map(d => d.data() as Betaling);
+  const week = relevanteTrekkingWeek(alleBetalingen);
+  const deadline = zaterdagDeadlineVanWeek(week);
+  // Grens aangescherpt: 18:00:00 zelf telt al als "na" — niet pas
+  // 18:00:01. Zaterdag 18:00:00 is het sluitingsmoment zelf.
+  return new Date() >= deadline;
+}
+
 export async function stortLottoSaldo(
   lid: { id: string; naam: string },
   bedrag: number,
@@ -456,6 +503,8 @@ export async function stortLottoSaldo(
   if (bedrag <= 0) {
     throw new Error('Bedrag moet groter dan €0 zijn.');
   }
+  // Storten zelf wordt NOOIT geweigerd — het geld gaat hier altijd op
+  // het saldo, ongeacht de deadline.
   await updateDoc(doc(db, 'users', lid.id), {
     lottoSaldo: increment(bedrag),
   });
@@ -466,13 +515,26 @@ export async function stortLottoSaldo(
     userId: lid.id,
     aangemaaktDoor: kashouder.uid,
   });
+
+  const naDeadline = await stortingIsNaDeadline();
+
   await logAudit(
     'lottosaldo_storting',
-    `${kashouder.naam} registreerde een storting van €${bedrag.toFixed(2)} op het LottoSaldo van ${lid.naam}`,
+    naDeadline
+      ? `${kashouder.naam} registreerde een storting van €${bedrag.toFixed(2)} op het LottoSaldo van ${lid.naam} — na de zaterdag-18:00-deadline, blijft als saldo staan voor de volgende week`
+      : `${kashouder.naam} registreerde een storting van €${bedrag.toFixed(2)} op het LottoSaldo van ${lid.naam}`,
     kashouder,
     { doelUserId: lid.id }
   );
-  await verrekenLottoSaldoMetOpenstaandeWeek(lid.id, lid.naam, kashouder);
+
+  // Alleen automatisch koppelen aan de lopende trekking als de
+  // storting vóór de deadline van die speelweek binnenkwam. Ná de
+  // deadline: geld staat op het saldo (hierboven al gebeurd), maar
+  // wordt niet meer automatisch aan déze week gekoppeld — telt
+  // vanzelf mee voor de volgende week zodra die begint.
+  if (!naDeadline) {
+    await verrekenLottoSaldoMetOpenstaandeWeek(lid.id, lid.naam, kashouder);
+  }
 }
 
 /**
