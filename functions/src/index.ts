@@ -520,6 +520,94 @@ export const onBetalingsHerinnering = functions.scheduler.onSchedule(
   }
 );
 
+// ─────────────────────── onOnboardingVoltooid ───────────────────────
+
+/**
+ * Welkomstmelding zodra een nieuw lid de VERPLICHTE onboarding heeft
+ * afgerond (telefoon + ticket, app/welkom/page.tsx stap 6) — bewust
+ * niet bij het aanmaken van het account zelf (verzilverUitnodiging),
+ * want op dat moment heeft het lid nog geen van beide.
+ *
+ * Twee varianten, op basis van wachtOpNieuweSpeelreeks: wie meteen
+ * mag meedoen krijgt een concrete oproep om te storten vóór de
+ * zaterdag-18:00-deadline; wie nog moet wachten krijgt een andere
+ * boodschap zónder die druk — voor hen geldt die deadline nu niet.
+ */
+export const onOnboardingVoltooid = functions.firestore.onDocumentUpdated(
+  'users/{userId}',
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+    if (before.onboardingCompleted === true) return;
+    if (after.onboardingCompleted !== true) return;
+
+    const userId = event.params.userId;
+    const naam = (after.naam as string | undefined) ?? 'daar';
+    const voornaam = naam.split(' ')[0];
+    const wacht = after.wachtOpNieuweSpeelreeks === true;
+
+    const tokens = await getFcmTokens(userId, 'herinneringen');
+    if (tokens.length === 0) {
+      functions.logger.info(`Welkomstmelding overgeslagen voor ${naam} — geen (geldig) FCM-token of 'herinneringen' staat uit.`);
+      return;
+    }
+
+    const standaardInleg = await getStandaardInleg();
+    const body = wacht
+      ? `Hoi ${voornaam}! Je speelreeks begint zodra er een winnaar valt — zet je saldo en ticket nu alvast klaar, dan doe je automatisch mee zodra het zover is.`
+      : `Hoi ${voornaam}! Stort €${standaardInleg.toFixed(2)} (of vul je LottoSaldo aan) om deze week al mee te spelen — vóór zaterdag 18:00.`;
+
+    await sendToTokens(userId, tokens, {
+      title: '🎉 Welkom bij LottoClub!',
+      body,
+    }, { path: '/betalen' });
+
+    functions.logger.info(`Welkomstmelding verstuurd naar ${naam} (${wacht ? 'wachtend' : 'niet-wachtend'}).`);
+  }
+);
+
+// ─────────────────────── onWoensdagSaldoHerinnering ───────────────────────
+
+/**
+ * Elke woensdag 09:00 — vroege, algemene herinnering om het
+ * LottoSaldo op orde te brengen voor deze week. Los van, en
+ * aanvullend op, de bestaande vrijdag-09:00- en zaterdag-12:00-
+ * meldingen — elk moment heeft zijn eigen doel en toon (zie
+ * docs/changelog.md): woensdag is vriendelijk en algemeen, vrijdag
+ * een concrete herinnering, zaterdag een gerichte laatste-kans-melding
+ * alleen voor wie dan nog te weinig saldo heeft.
+ *
+ * Zelfde detectie als de bestaande vrijdagmelding (open betalingen
+ * van de huidige week). Bewust NIET de zelfhelende variant — die fix
+ * staat apart gepland (nog niet live) en wordt hier niet stilzwijgend
+ * meegenomen, zie het overleg hierover in docs/changelog.md.
+ */
+export const onWoensdagSaldoHerinnering = functions.scheduler.onSchedule(
+  {
+    schedule: '0 9 * * 3', // elke woensdag 09:00
+    timeZone: 'Europe/Amsterdam',
+  },
+  async () => {
+    functions.logger.info('Woensdag-saldo-herinnering versturen…');
+    const huidigeWeek = getTrekkingWeek(new Date());
+    const openBetalingen = await db.collection('betalingen')
+      .where('status', '==', 'open')
+      .where('trekkingWeek', '==', huidigeWeek)
+      .get();
+    const userIds = [...new Set(openBetalingen.docs.map(d => d.data().userId as string))];
+    for (const userId of userIds) {
+      const tokens = await getFcmTokens(userId, 'herinneringen');
+      if (tokens.length === 0) continue;
+      await sendToTokens(userId, tokens, {
+        title: '💰 LottoSaldo',
+        body: 'Vergeet je LottoSaldo niet aan te vullen voor deze week.',
+      }, { path: '/betalen' });
+    }
+    functions.logger.info(`Woensdagherinnering verstuurd naar ${userIds.length} leden.`);
+  }
+);
+
 // ─────────────────────── onTrekkingHerinnering ───────────────────────
 
 export const onTrekkingHerinnering = functions.scheduler.onSchedule(
@@ -1367,10 +1455,13 @@ export const stuurTestNotificatieMetNotificationVeld = functions.https.onCall(as
 // ─────────────────────── onZaterdagSaldoHerinnering ───────────────────────
 
 /**
- * Elke zaterdag 12:00 — een leuk, persoonlijk duwtje richting de
- * trekking van diezelfde avond, met een concrete actie eraan
- * gekoppeld: wie te weinig saldo heeft, heeft dan nog exact 6 uur om
- * te storten vóór de 18:00-deadline (zie app/betalen/page.tsx).
+ * Elke zaterdag 12:00 — een gerichte, rustige laatste-kans-melding,
+ * UITSLUITEND voor leden die op dít moment nog te weinig saldo hebben
+ * voor de deadline van diezelfde avond (18:00, zie
+ * app/betalen/page.tsx). Wie al genoeg saldo heeft, krijgt niets meer
+ * — dat werd sinds de nieuwe woensdagmelding overbodige ruis (zie
+ * docs/changelog.md voor de volledige afweging tussen deze twee
+ * meldingen).
  *
  * Alleen voor leden die daadwerkelijk meespelen — leden die nog op de
  * nieuwe speelreeks wachten (wachtOpNieuweSpeelreeks) doen vanavond
@@ -1424,12 +1515,20 @@ async function voerZaterdagSaldoHerinneringUit() {
       const saldo = (data.lottoSaldo as number | undefined) ?? 0;
       const genoegSaldo = saldo >= standaardInleg;
 
-      const title = '🎱 Vanavond vallen de ballen!';
-      const body = genoegSaldo
-        ? `Je saldo staat op €${saldo.toFixed(2)} — genoeg om mee te doen! 🍀`
-        : `Je saldo staat op €${saldo.toFixed(2)} — dat is niet genoeg. Stort vóór 18:00 vandaag via Tikkie om mee te doen!`;
+      // Sinds de woensdagmelding erbij kwam: alleen nog een gerichte,
+      // rustige laatste-kans-melding voor wie dan nog te weinig saldo
+      // heeft — geen "goed bezig!"-bevestiging meer naar iedereen die
+      // toch al voldoende saldo heeft, dat hoort niet meer bij het
+      // doel van dít moment (zie docs/changelog.md).
+      if (genoegSaldo) {
+        details.push({ userId: userDoc.id, naam, reden: `genoeg saldo (€${saldo.toFixed(2)}) — geen melding nodig` });
+        continue;
+      }
 
-      await sendToTokens(userDoc.id, tokens, { title, body }, { path: '/betalen' });
+      await sendToTokens(userDoc.id, tokens, {
+        title: '🔴 LottoSaldo bijna op',
+        body: 'Je LottoSaldo is bijna op. Vul het vandaag nog aan als je deze week wilt blijven meespelen.',
+      }, { path: '/betalen' });
       details.push({ userId: userDoc.id, naam, reden: `verstuurd (saldo €${saldo.toFixed(2)})` });
       aantalVerstuurd++;
     }
