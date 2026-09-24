@@ -3,7 +3,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { subscribeUserBetalingen, relevanteTrekkingWeek, weekStringNaarDatum, markeerLottoSaldoIntroGezien } from '@/lib/firestore-payments';
+import { subscribeUserBetalingen, subscribeBetalingen, relevanteTrekkingWeek, weekStringNaarDatum, markeerLottoSaldoIntroGezien, zaterdagDeadlineVanWeek } from '@/lib/firestore-payments';
 import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-payment-config';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { Betaling, PaymentConfig } from '@/lib/types';
@@ -25,6 +25,11 @@ function BetalenPageContent() {
   const [betalingen, setBetalingen] = useState<Betaling[]>([]);
   const [laden, setLaden] = useState(true);
   const [introGezien, setIntroGezien] = useState(false);
+  // Club-breed, uitsluitend voor de deadline-banner (fase C) — bewust
+  // NIET de bestaande `week`-variabele hieronder hergebruikt, die is
+  // per-lid gescoped (pre-existing, hier ongemoeid gelaten). Een
+  // deadline-bepaling moet altijd club-breed (architectuurregel 12).
+  const [alleBetalingenClub, setAlleBetalingenClub] = useState<Betaling[]>([]);
 
   const tikkieLink = config.tikkieLink || undefined;
 
@@ -47,6 +52,11 @@ function BetalenPageContent() {
     return unsub;
   }, [user]);
 
+  useEffect(() => {
+    const unsub = subscribeBetalingen(setAlleBetalingenClub);
+    return unsub;
+  }, []);
+
   if (laden) {
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -61,6 +71,12 @@ function BetalenPageContent() {
   // de nieuwe week toont in plaats van de zojuist-afgelopen.
   const week = relevanteTrekkingWeek(betalingen);
   const huidigeBetaling = betalingen.find(b => b.trekkingWeek === week);
+
+  // Fase C — deadline-banner, puur informatief. Club-brede week (zie
+  // toelichting bij alleBetalingenClub hierboven), losstaand van de
+  // per-lid `week` hierboven.
+  const clubWeek = relevanteTrekkingWeek(alleBetalingenClub);
+  const naDeadline = new Date() >= zaterdagDeadlineVanWeek(clubWeek);
 
   const heeftBetaaldDezeWeek = huidigeBetaling?.status === 'betaald';
   const lottoSaldo = profile?.lottoSaldo ?? 0;
@@ -84,6 +100,24 @@ function BetalenPageContent() {
           <button onClick={() => router.push('/dashboard')} style={{ width: 36, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, cursor: 'pointer', color: 'var(--white)', flexShrink: 0 }}>←</button>
           <div style={{ fontFamily: "'DM Serif Display',serif", fontSize: 24, letterSpacing: -0.3 }}>Betalen</div>
         </div>
+
+        {/* Deadline-banner (fase C) — puur informatief, blokkeert
+            nooit het storten zelf; de Tikkie-knop blijft hieronder
+            altijd gewoon werken, ongeacht welke tekst hier staat. */}
+        {naDeadline ? (
+          <div style={{ margin: '0 20px 12px', background: 'var(--warning-soft)', border: '1px solid rgba(255,170,51,0.25)', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning)', marginBottom: 4 }}>⏰ Deadline voor vanavond is voorbij</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+              De sluitingstijd (zaterdag 18:00) voor de trekking van vanavond is al geweest. Stort je nu nog geld, dan komt dat gewoon op je LottoSaldo — het telt alleen niet meer mee voor vanavond, maar automatisch wél voor volgende week.
+            </div>
+          </div>
+        ) : (
+          <div style={{ margin: '0 20px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
+              ⏰ Alle betalingen moeten vóór <strong style={{ color: 'var(--white)' }}>zaterdag 18:00</strong> binnen zijn i.v.m. de trekking van die avond.
+            </div>
+          </div>
+        )}
 
         {/* Betaalstatus deze week — klein label, blokkeert nooit het storten */}
         {heeftBetaaldDezeWeek && huidigeBetaling?.trekkingWeek && (() => {
