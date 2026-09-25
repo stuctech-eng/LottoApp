@@ -1,6 +1,6 @@
 'use client';
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Rol } from '@/lib/types';
 
@@ -32,11 +32,34 @@ interface ProtectedRouteProps {
  * naar '/dashboard', wat hier weer zou worden afgekeurd: een
  * oneindige redirect-lus. In plaats daarvan: een aparte, duidelijke
  * pagina.
+ *
+ * Verplichte onboarding (23 september 2026) — voorheen bestond de
+ * enige "poort" naar de verplichte stap-6-onboarding (telefoon +
+ * ticket) uit één eenmalige navigatie, direct na het verzilveren van
+ * een uitnodiging, beveiligd met een useRef-vlaggetje tegen een
+ * race-conditie. Die bescherming werkt alleen binnen dezelfde
+ * paginasessie: sluit iemand de app af vlak vóórdat die navigatie
+ * vuurt, dan bestaat het profiel al (onboardingCompleted: false) en
+ * kwam niets hem alsnog naar /welkom sturen — hij belandde gewoon op
+ * elke andere beveiligde pagina. Bevestigd via codecontrole: nergens
+ * anders in de app werd dit veld ooit gecheckt. Dit is nu de blijvende
+ * vangrail, voor alle rollen (dit gaat over onboardingstatus, niet
+ * over rol) — bij ELKE beveiligde pagina-load opnieuw gecontroleerd,
+ * niet alleen bij die ene eerste navigatiepoging.
+ *
+ * Expliciet `=== false`, nooit `!profile.onboardingCompleted` — een
+ * ontbrekend veld (elk lid van vóór dit systeem bestond) betekent
+ * "niet van toepassing", niet "nog niet afgerond". Wordt maar op twee
+ * plekken ooit geschreven (verzilverUitnodiging zet 'm op false,
+ * /welkom zet 'm op true bij afronden) — dus dit onderscheid is
+ * betrouwbaar.
  */
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, loading, profile, profileLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const heeftGeldigProfiel = !!profile && profile.actief !== false;
+  const onboardingNietAfgerond = heeftGeldigProfiel && profile!.onboardingCompleted === false;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -47,12 +70,20 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
       router.replace('/geen-toegang');
       return;
     }
+    // /welkom zelf uitgezonderd — anders ontstaat een redirect-lus.
+    if (!loading && !profileLoading && onboardingNietAfgerond && pathname !== '/welkom') {
+      router.replace('/welkom');
+      return;
+    }
     if (allowedRoles && !loading && !profileLoading && profile && !allowedRoles.includes(profile.rol)) {
       router.replace('/dashboard');
     }
-  }, [user, loading, profile, profileLoading, heeftGeldigProfiel, allowedRoles, router]);
+  }, [user, loading, profile, profileLoading, heeftGeldigProfiel, onboardingNietAfgerond, pathname, allowedRoles, router]);
 
-  const klaar = !loading && user && !profileLoading && heeftGeldigProfiel;
+  // Zolang de onboarding-redirect nog moet vuren (en we niet al op
+  // /welkom zelf zijn): spinner tonen, nooit even de echte pagina
+  // laten flitsen.
+  const klaar = !loading && user && !profileLoading && heeftGeldigProfiel && !(onboardingNietAfgerond && pathname !== '/welkom');
   const toegestaan = !allowedRoles || (profile && allowedRoles.includes(profile.rol));
 
   if (!klaar || !toegestaan) {
