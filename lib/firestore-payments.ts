@@ -392,6 +392,62 @@ export async function markeerLottoSaldoIntroGezien(userId: string) {
  * Financieel → Kascorrectie. Deze functie corrigeert alleen de
  * betaalstatus-administratie.
  */
+/**
+ * Corrigeert het BEDRAG van een al-bevestigde betaling zelf — anders
+ * dan markeerBetalingGecorrigeerd hieronder (die alleen een statusvlag
+ * zet, geen bedrag verandert) raakt dit precies het veld aan dat de
+ * prijzenpot-berekening optelt (berekenActuelePrijzenpot /
+ * berekenPrijzenpotServerSide lezen betalingen.bedrag rechtstreeks).
+ *
+ * Gebruik dit dus specifiek als het geregistreerde BEDRAG fout was
+ * (bijv. de standaardinleg wijzigde halverwege een week, en iemand
+ * betaalde nog het oude bedrag) — niet voor een betaling die
+ * volledig ongeldig was (dubbele boeking e.d.), daarvoor blijft
+ * markeerBetalingGecorrigeerd het juiste gereedschap.
+ *
+ * Het verschil (oud bedrag − nieuw bedrag) wordt bijgeschreven op het
+ * LottoSaldo van het lid — dat telt dan vanzelf mee voor een volgende
+ * week. De kas wordt hier BEWUST niet aangeraakt: er is echt dat
+ * geld binnengekomen via Tikkie, dat blijft feitelijk kloppen; alleen
+ * *voor welke week* het telt, verandert.
+ */
+export async function corrigeerBetalingBedrag(
+  betaling: Betaling,
+  nieuwBedrag: number,
+  reden: string,
+  beheerder: ActieUser
+) {
+  if (nieuwBedrag < 0) {
+    throw new Error('Bedrag kan niet negatief zijn.');
+  }
+  const verschil = betaling.bedrag - nieuwBedrag;
+
+  await updateDoc(doc(db, 'betalingen', betaling.id), {
+    bedrag: nieuwBedrag,
+  });
+
+  if (verschil !== 0) {
+    await updateDoc(doc(db, 'users', betaling.userId), {
+      lottoSaldo: increment(verschil),
+    });
+  }
+
+  await logAudit(
+    'betaling_bedrag_gecorrigeerd',
+    `${beheerder.naam} corrigeerde het bedrag van ${betaling.userNaam}'s betaling (${betaling.trekkingWeek ?? 'geen week'}): €${betaling.bedrag.toFixed(2)} → €${nieuwBedrag.toFixed(2)}` +
+      (verschil !== 0 ? `, verschil (€${verschil.toFixed(2)}) bijgeschreven op LottoSaldo` : '') +
+      ` — reden: ${reden}`,
+    beheerder,
+    { doelUserId: betaling.userId }
+  );
+
+  // Zelfde patroon als overal elders waar saldo kan stijgen: meteen
+  // checken of dit een openstaande week alsnog dekt.
+  if (verschil > 0) {
+    await verrekenLottoSaldoMetOpenstaandeWeek(betaling.userId, betaling.userNaam, beheerder);
+  }
+}
+
 export async function markeerBetalingGecorrigeerd(
   betaling: Betaling,
   reden: string,

@@ -10,10 +10,11 @@ import { subscribePaymentConfig, DEFAULT_PAYMENT_CONFIG } from '@/lib/firestore-
 import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelconfig';
 import { subscribeVerenigingConfig, updateVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { subscribeAllUsers } from '@/lib/firestore-users';
+import { subscribeBetalingen, corrigeerBetalingBedrag } from '@/lib/firestore-payments';
 import { subscribeAlleSeizoenen, subscribeSeizoen, maakSeizoen, sluitSeizoen } from '@/lib/firestore-seizoenen';
 import { herberekenHuidigeSpeelreeks, vulHistorischPrijsBedragIn, bekijkPrijzenpotDetails } from '@/lib/firestore-herberekening';
 import { PAYMENT_PROVIDERS } from '@/lib/providers/payments';
-import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User, GeplandeNotificatie, NotificatieDoelgroep, NotificatieHerhaling } from '@/lib/types';
+import { AuditLogEntry, PaymentConfig, SpelConfig, Seizoen, User, GeplandeNotificatie, NotificatieDoelgroep, NotificatieHerhaling, Betaling } from '@/lib/types';
 import { subscribeGeplandeNotificaties, maakGeplandeNotificatie, updateGeplandeNotificatie, verwijderGeplandeNotificatie } from '@/lib/firestore-geplande-notificaties';
 import { httpsCallable } from 'firebase/functions';
 import { functionsInstance } from '@/lib/firebase';
@@ -28,7 +29,7 @@ const NAV = [
   { href: '/beheerder/admin', icon: '⚙️', label: 'Beheer', active: true },
 ];
 
-type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'notificaties'|'audit';
+type Tab = 'instellingen'|'spel'|'prijzen'|'seizoen'|'notificaties'|'betalingen'|'audit';
 
 function AdminPageContent() {
   const { user, profile } = useAuth();
@@ -57,6 +58,46 @@ function AdminPageContent() {
   const [nieuwSeizoenNaam, setNieuwSeizoenNaam] = useState('');
   // Vervangt window.confirm() overal op deze pagina — zie ConfirmDialog.tsx.
   const [confirmDialog, setConfirmDialog] = useState<{ bericht: string; destructief?: boolean; onBevestig: () => void } | null>(null);
+
+  // Betalingen-tab — verplaatst hierheen vanaf Financieel (was
+  // "Betaling corrigeren", een statusvlag-tool zonder bedrag-wijziging).
+  // Hier zit nu corrigeerBetalingBedrag: verandert het bedrag zelf,
+  // precies het veld dat de prijzenpot-berekening optelt.
+  const [betalingen, setBetalingen] = useState<Betaling[]>([]);
+  const [betZoekTerm, setBetZoekTerm] = useState('');
+  const [betCorrigerenId, setBetCorrigerenId] = useState<string | null>(null);
+  const [betNieuwBedrag, setBetNieuwBedrag] = useState('');
+  const [betReden, setBetReden] = useState('');
+  const [betBezig, setBetBezig] = useState(false);
+  const [betError, setBetError] = useState<string | null>(null);
+  const [betOk, setBetOk] = useState<string | null>(null);
+
+  const handleCorrigeerBetalingBedrag = (betaling: Betaling) => {
+    const nieuw = parseFloat(betNieuwBedrag.replace(',', '.'));
+    if (isNaN(nieuw) || nieuw < 0) { setBetError('Vul een geldig bedrag in (0 of hoger).'); return; }
+    if (!betReden.trim()) { setBetError('Vul een reden in — komt in het auditlog.'); return; }
+    if (!user || !profile) return;
+    setBetError(null);
+    setConfirmDialog({
+      bericht: `${betaling.userNaam}'s betaling (${betaling.trekkingWeek ?? 'geen week'}) van €${betaling.bedrag.toFixed(2)} naar €${nieuw.toFixed(2)} corrigeren? Het verschil wordt bijgeschreven op het LottoSaldo.`,
+      onBevestig: async () => {
+        setConfirmDialog(null);
+        setBetBezig(true);
+        try {
+          await corrigeerBetalingBedrag(betaling, nieuw, betReden.trim(), { uid: user.uid, naam: profile.naam });
+          setBetCorrigerenId(null);
+          setBetNieuwBedrag('');
+          setBetReden('');
+          setBetOk(betaling.id);
+          setTimeout(() => setBetOk(null), 3000);
+        } catch (e) {
+          setBetError(e instanceof Error ? e.message : 'Corrigeren is mislukt.');
+        } finally {
+          setBetBezig(false);
+        }
+      },
+    });
+  };
   const [spelBezig, setSpelBezig] = useState(false);
   const [spelOk, setSpelOk] = useState(false);
   const [herberekenBezig, setHerberekenBezig] = useState(false);
@@ -105,7 +146,8 @@ function AdminPageContent() {
     });
     const u8 = subscribeAllUsers(setLeden);
     const u9 = subscribeGeplandeNotificaties(setGeplandeNotificaties);
-    return () => { u1(); u2(); u3(); u5(); u6(); u7(); u8(); u9(); };
+    const u10 = subscribeBetalingen(setBetalingen);
+    return () => { u1(); u2(); u3(); u5(); u6(); u7(); u8(); u9(); u10(); };
   }, []);
 
   const handleSpelConfigSave = async () => {
@@ -320,7 +362,7 @@ function AdminPageContent() {
     </button>
   );
 
-  const tabs: {id:Tab,label:string}[] = [{id:'instellingen',label:'⚙️ Instellingen'},{id:'spel',label:'🎱 Spel'},{id:'prijzen',label:'💰 Prijzen'},{id:'seizoen',label:'🏆 Seizoen'},{id:'notificaties',label:'🔔 Notificaties'},{id:'audit',label:'📋 Audit log'}];
+  const tabs: {id:Tab,label:string}[] = [{id:'instellingen',label:'⚙️ Instellingen'},{id:'spel',label:'🎱 Spel'},{id:'prijzen',label:'💰 Prijzen'},{id:'seizoen',label:'🏆 Seizoen'},{id:'notificaties',label:'🔔 Notificaties'},{id:'betalingen',label:'💳 Betalingen'},{id:'audit',label:'📋 Audit log'}];
 
   const resetNotifForm = () => {
     setNotifBewerkId(null);
@@ -779,6 +821,86 @@ function AdminPageContent() {
                   </div>
                 ))}
               </>
+            )}
+          </div>
+        )}
+
+        {/* BETALINGEN */}
+        {tab === 'betalingen' && (
+          <div style={{ padding: '0 20px 24px' }}>
+            <div className="section-title">Betaling corrigeren</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              Verkeerd bedrag geregistreerd (bijv. een prijswijziging die halverwege een week inging)? Corrigeer hier het bedrag zelf — dit is het veld dat de prijzenpot optelt, dus dit fixt de pot direct. Het verschil wordt bijgeschreven op het LottoSaldo van het lid. De kas wordt niet aangeraakt — er kwam echt dat geld binnen, alleen welke week het dekt verandert.
+            </div>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Zoek op naam…"
+              value={betZoekTerm}
+              onChange={e => setBetZoekTerm(e.target.value)}
+              style={{ marginBottom: 12 }}
+            />
+            {betalingen
+              .filter(b => b.status === 'betaald')
+              .filter(b => !betZoekTerm.trim() || b.userNaam.toLowerCase().includes(betZoekTerm.trim().toLowerCase()))
+              .sort((a, b) => (b.bevestigd?.toMillis() ?? 0) - (a.bevestigd?.toMillis() ?? 0))
+              .slice(0, 20)
+              .map(b => {
+                const inBewerking = betCorrigerenId === b.id;
+                const zojuistGecorrigeerd = betOk === b.id;
+                return (
+                  <div key={b.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
+                    {!inBewerking ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 500 }}>{b.userNaam}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                            €{b.bedrag.toFixed(2)} · {b.trekkingWeek ?? (b.isSaldoStorting ? 'storting' : '—')} · {b.bevestigd ? b.bevestigd.toDate().toLocaleDateString('nl-NL') : '—'}
+                          </div>
+                        </div>
+                        {zojuistGecorrigeerd ? (
+                          <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Gecorrigeerd</span>
+                        ) : (
+                          <button
+                            onClick={() => { setBetCorrigerenId(b.id); setBetNieuwBedrag(''); setBetReden(''); setBetError(null); }}
+                            style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: 'var(--warning)', flexShrink: 0 }}
+                          >
+                            Corrigeer
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{b.userNaam} — huidig €{b.bedrag.toFixed(2)}</div>
+                        <label className="form-label">Nieuw bedrag in euro's</label>
+                        <input
+                          type="text" inputMode="decimal" className="form-input" value={betNieuwBedrag}
+                          onChange={e => { setBetNieuwBedrag(e.target.value); setBetError(null); }}
+                          placeholder="Bijv. 2.00"
+                          style={{ marginBottom: 8 }}
+                          autoFocus
+                        />
+                        <label className="form-label">Reden (verplicht, komt in auditlog)</label>
+                        <input
+                          type="text" className="form-input" value={betReden}
+                          onChange={e => { setBetReden(e.target.value); setBetError(null); }}
+                          placeholder="Bijv. prijswijziging €4→€2 halverwege de week"
+                          style={{ marginBottom: 8, borderColor: betError ? 'var(--error)' : undefined }}
+                        />
+                        {betError && <div style={{ fontSize: 11, color: 'var(--error)', marginBottom: 8 }}>⚠️ {betError}</div>}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => setBetCorrigerenId(null)} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--white)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer' }}>Annuleren</button>
+                          <button onClick={() => handleCorrigeerBetalingBedrag(b)} disabled={betBezig} style={{ flex: 1, background: 'var(--warning)', border: 'none', color: 'var(--navy)', borderRadius: 10, padding: 10, fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: 'pointer', opacity: betBezig ? 0.6 : 1 }}>
+                            {betBezig ? 'Bezig…' : 'Bevestigen'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            {betalingen.filter(b => b.status === 'betaald').length === 0 && (
+              <div className="card" style={{ padding: '16px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Nog geen betalingen.</div>
             )}
           </div>
         )}

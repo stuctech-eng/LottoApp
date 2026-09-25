@@ -205,6 +205,7 @@ export type AuditAction =
   | 'uitbetaling_geregistreerd'
   | 'kascorrectie'
   | 'betaling_gecorrigeerd'
+  | 'betaling_bedrag_gecorrigeerd'
   | 'uitnodiging_aangemaakt'
   | 'uitnodiging_verzilverd'
   | 'lid_verwijderd'
