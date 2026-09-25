@@ -68,6 +68,7 @@ function RanglijstPageContent() {
             <Link href={dashboardHref} style={{ width: 38, height: 38, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, textDecoration: 'none', color: 'var(--white)', flexShrink: 0 }}>←</Link>
           </div>
         </div>
+        <div style={{ padding: '0 20px 16px', fontSize: 11.5, color: 'var(--muted)' }}>Dit seizoen — hoeveel verschillende nummers iemand al goed had</div>
 
         {laden && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
@@ -98,7 +99,7 @@ function RanglijstPageContent() {
                     {isFirst && <div style={{ position: 'absolute', top: -14, fontSize: 18 }}>👑</div>}
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', color: 'var(--white)' }}>{entry.user.naam.split(' ')[0]}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{entry.totaalPunten} pt</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{entry.totaalTreffers} treffers</div>
                   <div style={{ width: '100%', height: podiumH[rangIdx], borderRadius: '12px 12px 0 0', background: `rgba(${rangIdx===0?'240,192,96':rangIdx===1?'192,200,208':'192,128,80'},0.15)`, border: `1px solid ${posColor[rangIdx]}30`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <span style={{ fontSize: 16, fontWeight: 800, color: posColor[rangIdx] }}>{rangIdx + 1}</span>
                   </div>
@@ -132,8 +133,8 @@ function RanglijstPageContent() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                      <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--white)' }}>{entry.totaalPunten}</span>
-                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>punten</span>
+                      <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--white)' }}>{entry.totaalTreffers}</span>
+                      <span style={{ fontSize: 10, color: 'var(--muted)' }}>treffers</span>
                     </div>
                   </div>
                 );

@@ -2,7 +2,7 @@
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { haalHallOfFameOp, subscribeRanglijst, HallOfFameRecord, RanglijstEntry } from '@/lib/firestore-ranglijst';
+import { haalHallOfFameOp, HallOfFameData } from '@/lib/firestore-ranglijst';
 
 const NAV = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -12,19 +12,20 @@ const NAV = [
   { href: '/profiel', icon: '👤', label: 'Profiel' },
 ];
 
+const DREMPEL_LABEL: Record<number, string> = { 3: 'Eerste op 3/6', 4: 'Eerste op 4/6', 5: 'Eerste op 5/6' };
+
 function HallOfFameContent() {
-  const [records, setRecords] = useState<HallOfFameRecord[]>([]);
-  const [topLeden, setTopLeden] = useState<RanglijstEntry[]>([]);
+  const [data, setData] = useState<HallOfFameData | null>(null);
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
-    haalHallOfFameOp().then(data => {
-      setRecords(data);
+    haalHallOfFameOp().then(d => {
+      setData(d);
       setLaden(false);
     });
-    const unsub = subscribeRanglijst(entries => setTopLeden(entries.slice(0, 3)));
-    return unsub;
   }, []);
+
+  const records = data?.hoofdrecords ?? [];
 
   return (
     <>
@@ -49,16 +50,14 @@ function HallOfFameContent() {
 
         {/* Records */}
         {records.length > 0 && (
-          <div style={{ padding: '0 20px', marginBottom: 24 }}>
-            <div className="section-title">All-time records</div>
-            <div style={{ display: 'grid', gridTemplateColumns: records.length >= 2 ? '1fr 1fr' : '1fr', gap: 12 }}>
+          <div style={{ padding: '0 20px', marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {records.map(r => (
-                <div key={r.categorie} style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.08),var(--surface))', border: '1px solid rgba(240,192,96,0.2)', borderRadius: 18, padding: 16, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>{r.icoon}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>{r.categorie}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--white)', marginBottom: 3 }}>{r.userNaam}</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold)' }}>{r.waarde}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{r.sub}</div>
+                <div key={r.categorie} style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.08),var(--surface))', border: '1px solid rgba(240,192,96,0.2)', borderRadius: 16, padding: '16px 14px' }}>
+                  <div style={{ fontSize: 20, marginBottom: 8 }}>{r.icoon}</div>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 6 }}>{r.categorie}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--white)' }}>{r.userNaam}</div>
+                  <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 2 }}>{r.waarde} · {r.sub}</div>
                 </div>
               ))}
             </div>
@@ -71,30 +70,48 @@ function HallOfFameContent() {
           </div>
         )}
 
-        {/* Top deelnemers */}
-        {topLeden.length > 0 && (
-          <div style={{ padding: '0 20px', marginBottom: 24 }}>
-            <div className="section-title">All-time top deelnemers</div>
-            {topLeden.map((entry, i) => (
-              <div key={entry.user.id} style={{ background: i === 0 ? 'linear-gradient(135deg,rgba(240,192,96,0.08),var(--surface))' : 'var(--surface)', border: `1px solid ${i === 0 ? 'rgba(240,192,96,0.2)' : 'var(--border)'}`, borderRadius: 18, padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <span style={{ fontSize: 24, width: 36, textAlign: 'center', flexShrink: 0 }}>{['🥇', '🥈', '🥉'][i]}</span>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#1a2f45', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: `2px solid ${i === 0 ? 'rgba(240,192,96,0.4)' : 'var(--border)'}`, flexShrink: 0, overflow: 'hidden' }}>
-                  {entry.user.foto ? <img src={entry.user.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
+        {/* Race naar 6 — bewust kleiner/lichter dan de hoofdkaarten */}
+        {data && data.raceNaarZes.some(r => r.userNaam) && (
+          <div style={{ padding: '0 20px', marginBottom: 20 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 8 }}>🏁 Race naar 6</div>
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, padding: '12px 14px', display: 'flex', justifyContent: 'space-between' }}>
+              {data.raceNaarZes.map((r, i) => (
+                <div key={r.drempel} style={{ textAlign: 'center', flex: 1, borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4 }}>{DREMPEL_LABEL[r.drempel]}</div>
+                  {r.userNaam ? (
+                    <>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.userNaam.split(' ')[0]}</div>
+                      <div style={{ fontSize: 9.5, color: '#5c7188' }}>trekking {r.aantalTrekkingen}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>—</div>
+                  )}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{entry.user.naam}</div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>🏆 <span style={{ color: 'var(--white)', fontWeight: 600 }}>{entry.aantalGewonnen}</span> gewonnen</span>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>📊 <span style={{ color: 'var(--white)', fontWeight: 600 }}>{entry.aantalDeelnames}</span> rondes</span>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>🎯 gem. <span style={{ color: 'var(--white)', fontWeight: 600 }}>{entry.gemiddeldeScore}</span></span>
-                  </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* De getallen */}
+        {data && (data.meestGevallenNummer || data.minstGevallenNummer) && (
+          <div style={{ padding: '0 20px', marginBottom: 20 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 8 }}>🎱 De getallen</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {data.meestGevallenNummer && (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 14, textAlign: 'center' }}>
+                  <div style={{ fontSize: 9.5, color: 'var(--muted)', marginBottom: 8 }}>Meest gevallen</div>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(240,192,96,0.18)', border: '1.5px solid var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: 'var(--gold)', margin: '0 auto 6px' }}>{data.meestGevallenNummer.nummer}</div>
+                  <div style={{ fontSize: 11, color: 'var(--gold)', fontWeight: 600 }}>{data.meestGevallenNummer.aantal}× gevallen</div>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--gold)', letterSpacing: -0.5 }}>{entry.totaalPunten}</div>
-                  <div style={{ fontSize: 10, color: 'var(--muted)' }}>punten</div>
+              )}
+              {data.minstGevallenNummer && (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 14, textAlign: 'center' }}>
+                  <div style={{ fontSize: 9.5, color: 'var(--muted)', marginBottom: 8 }}>Minst gevallen</div>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1.5px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#9db0c4', margin: '0 auto 6px' }}>{data.minstGevallenNummer.nummer}</div>
+                  <div style={{ fontSize: 11, color: '#9db0c4', fontWeight: 600 }}>{data.minstGevallenNummer.aantal}× gevallen</div>
                 </div>
-              </div>
-            ))}
+              )}
+            </div>
           </div>
         )}
       </div>
