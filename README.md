@@ -131,7 +131,9 @@ Trekking 3:    18 - 23 - 31 - 40 - 42 - 45  →  3 nieuw   → totaal 6/6 → WI
 
 ### Correctietools (Beheerder)
 - **Financieel → LottoSaldo → potloodje (✎)** → saldo direct zetten, geen kasmutatie.
-- **Financieel → Betaling corrigeren** → status naar `'gecorrigeerd'`, met **"↺ Herstel"**. Nooit door elkaar gebruiken met de saldo-correctie voor hetzelfde incident. **Corrigeert alléén de betaalstatus, nooit het saldo of de kas** — zie architectuurregel 12.
+- **`/beheerder/admin` → tab 💳 Betalingen** (verplaatst vanaf Financieel, 23 september 2026) → twee acties, niet met elkaar verwarren:
+  - **Bedrag corrigeren** (`corrigeerBetalingBedrag`, nieuw) — verandert het `bedrag`-veld van de betaling zelf. Dit is het veld dat de prijzenpot optelt, dus gebruik dit als het geregistreerde bedrag zelf fout was (bijv. een prijswijziging die halverwege een week inging). Verschil wordt bijgeschreven op LottoSaldo, kas blijft ongemoeid.
+  - **`markeerBetalingGecorrigeerd`** (bestond al, ongewijzigd) → zet status naar `'gecorrigeerd'`, met **"↺ Herstel"**. Voor een betaling die volledig ongeldig was (dubbele boeking e.d.) — **verandert nooit het bedrag of het saldo.**
 - **Financieel → Openstaand → 🔁 Verreken** (nieuw, 22 september 2026) → verrekent bestaand LottoSaldo met een openstaande week, boekt géén nieuw geld. Voor als een lid al genoeg saldo heeft liggen maar een eerdere verrekening naar de verkeerde week ging (zie het Kees-incident, `docs/changelog.md`).
 - **Beheer → Admin → Historisch prijsbedrag invullen / Alle winnaars herberekenen / Bekijk berekening laatste winnaar** (nieuw, 20-22 september 2026) — zie "Prijsbedrag bij winst" hieronder.
 - **`/leden/[id]` → Acties** (nieuw, 23 september 2026) — dezelfde Storten/Verreken als hierboven, plus een vrij-bedrag-storting en Saldo corrigeren, nu allemaal **per lid**, zonder tussen Leden en Financieel te hoeven schakelen. Toont alleen wat er echt te doen is — "Betaalstatus deze week" checkt eerst of er al `'betaald'` is (club-breed bepaald) vóórdat Storten/Verreken überhaupt zichtbaar worden.
@@ -243,6 +245,20 @@ Zie `docs/changelog.md` voor de volledige, gefaseerde toelichting (fase A/C, elk
 **Bekende, nog openstaande kwestie:** de zelfhelende vrijdagherinnering-fix (uit een eerdere sessie) bleek bij audit **nooit gedeployed**, ondanks een aangeleverde zip. Bewust niet alsnog meegenomen in deze sessie om scope-vermenging te voorkomen — staat apart gepland, eerst een losse audit tegen de dan-actuele live-versie.
 
 ---
+
+## Eigen bevestigingsscherm, i.p.v. `window.confirm()` (23 september 2026)
+
+`window.confirm()` kan op een als PWA geïnstalleerde iPhone-app onzichtbaar blijven hangen — de app lijkt dan vast te lopen, terwijl hij stil op een niet-zichtbare knop wacht. Nieuw, herbruikbaar `components/ConfirmDialog.tsx`, zelfde stijl als de rest van de app. Vervangt `window.confirm()` op alle 11 plekken (`/leden/[id]`, `/kashouder`, `/kashouder/financieel`, `/beheerder/admin`) — zoekterm die je in de code kunt gebruiken om te checken of er nog ergens een gemist is: `window.confirm`.
+
+## Onboarding-vangrail in `ProtectedRoute` (23 september 2026)
+
+De verplichte onboarding (telefoon + ticket, 22 september) had maar één poort: een eenmalige redirect naar `/welkom` direct na het verzilveren van een uitnodiging. Bleek omzeilbaar — sluit iemand de app af op het verkeerde moment, dan komt hij via een andere route de app in zonder ooit die stap te voltooien (het "Neeltje-incident", zie changelog voor de volledige analyse). `ProtectedRoute` controleert nu bij **elke** pagina-load `profile.onboardingCompleted === false` (expliciet — een ontbrekend veld bij oudere accounts betekent "niet van toepassing") en stuurt dan altijd naar `/welkom`, voor alle rollen, met `/welkom` zelf uitgezonderd. Twee losse bugs in `/welkom` zelf zijn in dezelfde ronde gefixt: navigeerde eerder ook door bij een mislukte opslag (nu niet meer), en velden begonnen altijd leeg (vullen zich nu vooraf in vanuit bestaande profielgegevens).
+
+## Geen puntensysteem — Ranglijst, Hall of Fame, Profiel (23 september 2026)
+
+LottoClub heeft nooit een puntensysteem gecommuniceerd naar leden ("6 goed = winnen" is de hele regel), maar `ranglijstPunten` (`nieuwe treffers × 10 + bonusbal-bonus`) dreef wel de hele Ranglijst-pagina aan — een onuitgelegd getal. Vervangen door `totaalTreffers`: een eerlijke, direct navolgbare som van nieuwe treffers dit seizoen (`lib/firestore-ranglijst.ts`). Het `ranglijstPunten`-veld blijft server-side bestaan (niet aangeraakt), alleen de UI toont en sorteert er niet meer op.
+
+Hall of Fame is herbouwd rond kleine, concrete records i.p.v. een tweede punten-ranglijst: Snelste winnaar, Meeste overwinningen, Grootste treffer, **Op het randje** (nieuw — vaakst op 5/6 gestaan zonder te winnen), **Race naar 6** (eerste op 3/6, 4/6, 5/6), **De getallen** (meest/minst gevallen nummer all-time). Bewust weggelaten na overleg: "Lucky number" (niet betrouwbaar te berekenen uit de beschikbare data) en "Meeste treffers dit seizoen" als los record (zou Ranglijst #1 herhalen).
 
 ## Geplande notificaties — beheerder maakt zelf meldingen (15 augustus 2026)
 
@@ -459,7 +475,7 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `/trekkingen`, `/trekkingen/[id]` | Lid+ — invoerformulier (beheerder) ondersteunt sinds 22 september plakken van de volledige uitslag in één keer |
 | `/startinfo` | Lid — samengevoegde informatiepagina (8 tabs) |
 | `/spelregels`, `/help`, `/debug-fcm` | Redirects (naar `/startinfo` resp. `/profiel/notificaties`) |
-| `/profiel` | Lid — naam, ticket (wijzigen op slot buiten het sluitingsvenster, zie hierboven), telefoon, link naar Notificaties |
+| `/profiel` | Lid — naam, ticket (wijzigen op slot buiten het sluitingsvenster, zie hierboven), telefoon, link naar Notificaties. Toont "Treffers dit seizoen" (was: rauw puntengetal, zie STATUS/changelog 23 sep) |
 | `/profiel/notificaties` | Lid — Instellingen-tab (per categorie, voor iedereen). Test-tab: beheerder-only |
 | `/profiel/voorwaarden` | Lid — Voorwaarden & Privacy, dynamisch bedrag en namen |
 | `/kas` | Alle rollen — alleen-lezen kasoverzicht |
@@ -468,8 +484,9 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 | `/deelnemers/[id]` | **Nieuw** — detailpagina per lid: ticket, historische winst-stats (`subscribeUserResultaten`), recente resultaten, Bericht sturen |
 | `/leden` | Kashouder+ — herontworpen: tegel-als-knop-rijen, wachtrij-filter en -badge. Rol wijzigen/verwijderen zijn verhuisd naar `/leden/[id]` |
 | `/leden/[id]` | **Nieuw** — 4 tabs: Overzicht (incl. bewerkbaar telefoonnummer), Ticket, Betalingen, Acties (Storten, Verreken, vrij-bedrag storten, Saldo corrigeren, Rol wijzigen, Verwijderen/Heractiveren) |
-| `/beheerder/admin` | Beheerder — Instellingen, Spel, Prijzen, Seizoen, Notificaties, Audit log |
-| `/ranglijst`, `/hall-of-fame` | Alle rollen |
+| `/beheerder/admin` | Beheerder — Instellingen, Spel, Prijzen, Seizoen, Notificaties, **💳 Betalingen (nieuw)**, Audit log |
+| `/ranglijst` | Alle rollen — sinds 23 september: "treffers dit seizoen" i.p.v. punten, zie hieronder |
+| `/hall-of-fame` | Alle rollen — herbouwd rond kleine, zelf-verklarende records i.p.v. een tweede punten-ranglijst, zie hieronder |
 | `/offline`, `/serwist/[path]` | PWA-ondersteuning, geen UI |
 
 ---
@@ -500,7 +517,9 @@ Regels moeten kloppen met wíe de schrijfactie daadwerkelijk uitvoert, niet alle
 - **Volgende winnaar, volledig live** (zonder handmatige backfill-tussenkomst) nog niet meegemaakt — Ing was de enige tot nu toe, en die liep via de reconstructietool, niet het live pad zelf
 - **Ticket-wijzigen-sluitingsvenster** — code compileert schoon (strict, echte project-types), maar nog niet in de praktijk bevestigd rond een echte reeks-grens (nieuwe winnaar → eerste week open → trekking → op slot)
 - **Dashboard/Deelnemers/Leden-herontwerp en de "Vereist aandacht"-kaart** — allemaal schoon gecompileerd met de echte project-types, maar nog niet in de praktijk doorlopen op een telefoon (elke route, elke tab, elke actieknop)
-- **De verplichte onboarding-stap** — nog niet bevestigd met een echte, nieuwe uitnodiging die iemand doorloopt
+- **De verplichte onboarding-stap** — inmiddels wél een echt incident meegemaakt (het "Neeltje-incident", zie changelog 23 september) en naar aanleiding daarvan twee bugs gevonden en gefixt (`ProtectedRoute`-vangrail, sequentiële opslag + prefill in `/welkom`) — maar de fix zelf nog niet opnieuw in de praktijk bevestigd met een compleet nieuw geval
+- **Betaling-bedrag-correctie (`/beheerder/admin` → Betalingen)** en **ConfirmDialog** — schoon gecompileerd en (bij de correctietool) al één keer succesvol gebruikt in productie (na een eerste, foutieve poging op de verkeerde week-rij, daarna hersteld), maar geen van beide is verder stap-voor-stap doorlopen op alle plekken
+- **Ranglijst/Hall of Fame/Profiel zonder punten** — schoon gecompileerd, nog niet in de praktijk bekeken met echte seizoensdata (met name "Op het randje" en "Race naar 6" — die vereisen genoeg trekkingen/reeksen om een zinnig record te tonen, kunnen bij weinig data leeg/onopvallend blijven)
 - Geen automatische tests — alles handmatig, stap-voor-stap getest
 
 ---

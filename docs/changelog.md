@@ -4,6 +4,39 @@ Nieuwste bovenaan. Elke sessie voegt een nieuwe sectie toe.
 
 ---
 
+## 23 september 2026 (later die dag) — Eigen bevestigingsscherm, betaling-bedrag-correctie, onboarding-vangrail, geen punten meer
+
+### `window.confirm()` vervangen door een eigen `ConfirmDialog`
+Aanleiding: een kashouder drukte op "Verreken", de app leek vast te lopen — bleek het systeem-bevestigingsvenstertje te zijn dat op een als PWA geïnstalleerde iPhone-app onzichtbaar kan blijven hangen, terwijl de app er stilletjes op wacht te wachten. Nieuw, herbruikbaar `components/ConfirmDialog.tsx`, zelfde stijl als de rest van de app. Vervangen op alle 11 plekken die `window.confirm()` gebruikten: `/leden/[id]` (Storten, Verreken, Verwijderen, Definitief verwijderen), `/kashouder` en `/kashouder/financieel` (Storten, Verreken), `/beheerder/admin` (Herbereken speelreeks, Prijsbedrag herberekenen, Notificatie verwijderen).
+
+### Betaling-bedrag-correctie — nieuw, en verplaatst naar Beheer → Admin
+Aanleiding: een prijswijziging (€4 → €2) die halverwege een week inging, waardoor sommige leden nog het oude bedrag betaalden. De bestaande "Betaling corrigeren" op Financieel bleek daar niet geschikt voor — die verandert alleen een statusvlag (`markeerBetalingGecorrigeerd`), nooit het bedrag zelf, en **de prijzenpot-berekening leest precies dat bedrag-veld**. Saldo corrigeren (bestond al) raakt dat veld ook niet aan.
+
+Nieuw: `corrigeerBetalingBedrag()` in `lib/firestore-payments.ts` — wijzigt het `bedrag`-veld van een betaling zelf (fixt de prijzenpot direct), schrijft het verschil bij op LottoSaldo, laat de kas ongemoeid (het geld kwam echt binnen, alleen welke week het dekt verandert), en triggert de bekende verreken-check. De oude "Betaling corrigeren"-sectie (inclusief het "Herstel"-lijstje) is van Financieel verwijderd en herbouwd als nieuwe tab **"💳 Betalingen"** op `/beheerder/admin`, zoals gevraagd — alle correcties op één, beheerder-only plek in plaats van verspreid.
+
+**Bekend, opgelost incident tijdens gebruik:** een correctie werd per ongeluk op de verkeerde week-rij toegepast (2026-W37 i.p.v. W39) — geen bug, wel een aanwijzing om bij het zoeken eerst op naam te filteren zodat er geen andere rij per ongeluk binnen bereik ligt.
+
+### `ProtectedRoute` — permanente onboarding-vangrail
+Aanleiding (het "Neeltje-incident"): een lid met de verplichte onboarding (telefoon + ticket, 22 september) kwam alsnog zonder die gegevens de app in. Bleek: de navigatie naar `/welkom` bestond maar op één plek — een eenmalige redirect direct na het verzilveren van een uitnodiging, beveiligd met een `useRef`-vlaggetje tegen een bekende race-conditie. Die bescherming werkt alleen binnen dezelfde paginasessie; sluit iemand de app af vlak vóór die ene redirect vuurt, dan bestaat het profiel al (`onboardingCompleted: false`) en stuurde niets hem alsnog naar `/welkom`. Bevestigd via codecontrole: nergens anders in de app werd dit veld ooit gecheckt.
+
+Fix: `ProtectedRoute` (de wrapper om elke beveiligde pagina) controleert nu bij **elke** pagina-load `profile.onboardingCompleted === false` (expliciet, nooit `!profile.onboardingCompleted` — een ontbrekend veld bij elk ouder account betekent "niet van toepassing", niet "nog niet afgerond") en stuurt dan altijd naar `/welkom`, voor alle rollen. `/welkom` zelf is uitgezonderd (anders een redirect-lus). Spinner tijdens het laden, nooit een flits van de echte pagina.
+
+### `/welkom` — twee bugs gevonden tijdens het herstellen van Neeltje's geval
+1. **Navigeerde altijd door, ook bij een mislukte opslag.** `handleAfronden` deed drie opslag-stappen (telefoon, ticket, `onboardingCompleted: true`) in een `try`, maar navigeerde in de `finally` — dus ook als de laatste stap (het vlaggetje) mislukte door bijv. een netwerkhapering. Precies wat er bij Neeltje gebeurde: telefoon en ticket stonden goed, het vlaggetje niet. Fix: navigeert alleen nog bij een volledig geslaagde `try`; bij een fout blijft de gebruiker op de pagina met een duidelijke melding.
+2. **Velden begonnen altijd leeg**, ook als er al een telefoonnummer/ticket bekend was (zoals bij iedereen die door bug 1 werd geraakt). Fix: een `useEffect` vult telefoon en ticketnummers nu vooraf in vanuit het profiel, indien aanwezig — wie alles al had ingevuld, hoeft nu alleen nog te bevestigen.
+
+### Geen puntensysteem meer — Ranglijst, Hall of Fame, Profiel
+Aanleiding: LottoClub heeft nooit een puntensysteem gecommuniceerd naar leden — "6 goed = winnen" is de hele regel. Het bestaande `ranglijstPunten`-veld (`nieuwe treffers × 10 + bonusbal-bonus`, server-side bijgehouden) was dus een onuitgelegd getal dat nergens bij hoorde, en leverde precies de vraag op die je bij zoiets verwacht: "waarom heeft Ing 60 punten?"
+
+- **Ranglijst** (`totaalTreffers` i.p.v. `totaalPunten`, `lib/firestore-ranglijst.ts`) — eerlijke, direct navolgbare telling: som van nieuwe treffers dit seizoen, dezelfde onderliggende data (`nummersGoed`) die al voor `besteScore`/`gemiddeldeScore` werd gebruikt. Het `ranglijstPunten`-veld zelf blijft server-side bestaan (niet aangeraakt, buiten scope), alleen deze pagina's tonen en sorteren er niet meer op.
+- **Hall of Fame** — herbouwd rond kleine, concrete, zelf-verklarende records i.p.v. een tweede punten-ranglijst: Snelste winnaar, Meeste overwinningen, Grootste treffer (nieuw samengevoegd — was eerder los "meeste nummers in één trekking"), **Op het randje** (nieuw — vaakst op 5/6 gestaan zonder die reeks te winnen, geeft ook wie nooit wint iets om trots op te zijn), een lichter **"Race naar 6"**-blokje (eerste op 3/6, 4/6, 5/6 — sluit aan bij het 6-goed-wint-principe), en **De getallen** (meest/minst gevallen nummer, all-time). De oude "All-time top deelnemers"-lijst (dupliceerde Ranglijst) is verwijderd.
+- **Profiel** toonde ook nog het rauwe puntengetal — vervangen door hetzelfde "treffers dit seizoen", opgehaald via `subscribeRanglijst()`.
+- **Startinfo** (`/startinfo`, tabs Schermen en FAQ) — twee tekstblokken die de oude puntenberekening uitlegden, herschreven naar de treffers-uitleg.
+
+**Bewust overwogen en afgewezen tijdens het ontwerp** (zie eerdere Overleg-rondes): "Lucky number" (niet betrouwbaar te berekenen — resultaten slaan alleen nieuwe treffers per trekking op, een al eerder geraakt nummer telt dus niet opnieuw mee ook al staat het nog op iemands ticket) en "Meeste treffers dit seizoen" als apart Hall-of-Fame-record (zou gewoon "nummer 1 van Ranglijst" herhalen).
+
+---
+
 ## 23 september 2026 — Harde stort-deadline (zaterdag 18:00), drie nieuwe meldingen
 
 Aanleiding: een vraag over of leden nog "de ballen konden zien" vóórdat de trekking werd ingevoerd, en dan snel nog konden storten om alsnog mee te tellen — een maas die kon ontstaan omdat er voorheen geen harde grens was, alleen "wanneer de beheerder toevallig invoert". Uitgewerkt in expliciet afgebakende fases, elke fase eerst geaudit en getest vóór de volgende begon.

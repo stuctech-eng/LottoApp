@@ -14,6 +14,7 @@ import { Ticket, Trekking, Resultaat } from '@/lib/types';
 import { subscribeVerenigingConfig, DEFAULT_VERENIGING_CONFIG } from '@/lib/firestore-vereniging';
 import { subscribeAlleTrekkingen, subscribeResultaten } from '@/lib/firestore-trekkingen';
 import { magTicketWijzigenOpDezeDag } from '@/lib/constants';
+import { subscribeRanglijst } from '@/lib/firestore-ranglijst';
 
 const NAV_LID = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
@@ -83,6 +84,20 @@ function ProfielPageContent() {
     const unsub = subscribeVerenigingConfig(cfg => setStandaardInleg(cfg.standaardInleg));
     return unsub;
   }, []);
+
+  // Vervangt het vroegere ranglijstPunten-getal (23 september 2026)
+  // — LottoClub speelt zonder puntensysteem, dus geen "60 punten"
+  // meer laten zien zonder uitleg. Zelfde telling als op Ranglijst/
+  // Hall of Fame: aantal nieuwe treffers dit seizoen.
+  const [mijnTreffers, setMijnTreffers] = useState(0);
+
+  useEffect(() => {
+    const unsub = subscribeRanglijst(entries => {
+      const eigenEntry = entries.find(e => e.user.id === user?.uid);
+      setMijnTreffers(eigenEntry?.totaalTreffers ?? 0);
+    });
+    return unsub;
+  }, [user?.uid]);
 
   // Voor "mag ticket wijzigen": alleen toegestaan in de eerste week
   // van een speelreeks (nog geen trekking geweest sinds de laatste
@@ -217,8 +232,8 @@ function ProfielPageContent() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 20 }}>
             <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 13, padding: '11px 8px', textAlign: 'center' }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gold)', letterSpacing: -0.5 }}>{profile?.ranglijstPunten ?? 0}</div>
-              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>Ranglijst punten</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gold)', letterSpacing: -0.5 }}>{mijnTreffers}</div>
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>Treffers dit seizoen</div>
             </div>
             <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', borderRadius: 13, padding: '11px 8px', textAlign: 'center' }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--white)', letterSpacing: -0.5 }}>{tickets.length}</div>

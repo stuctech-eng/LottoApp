@@ -180,7 +180,7 @@ function StartinfoContent() {
                 <Info tekst="Alle trekkingen op een rij, met per trekking welke nummers zijn gevallen en welke daarvan jij al had verzameld. Is er gewonnen, dan blijft het gewonnen bedrag hier permanent zichtbaar naast de winnaar(s)." />
               </Blok>
               <Blok titel="📈 Ranglijst & Hall of Fame">
-                <Info tekst="De ranglijst toont iedereens punten in de huidige speelreeks. De Hall of Fame houdt all-time records bij, zoals de snelste winnaar ooit." />
+                <Info tekst="De ranglijst toont hoeveel verschillende nummers iedereen dit seizoen al goed heeft gehad — geen puntensysteem, gewoon een eerlijke telling. De Hall of Fame houdt all-time records bij, zoals de snelste winnaar ooit." />
               </Blok>
               <Blok titel="💰 Kas">
                 <Info tekst="Alleen-lezen inzage in het kassaldo en de volledige lijst van kasmutaties — voor iedereen open en transparant." />
@@ -259,7 +259,7 @@ function StartinfoContent() {
                 <Info tekst="Ga naar Profiel → Telefoonnummer → vul in → sla op. Dit is nodig voor WhatsApp-herinneringen van de kashouder." />
               </Blok>
               <Blok titel="Hoe werkt de ranglijst?">
-                <Info tekst="Na elke trekking krijg je punten op basis van hoeveel nummers je die trekking nieuw goed had. De ranglijst toont iedereen gesorteerd op totaal punten in de huidige speelreeks." />
+                <Info tekst="LottoClub werkt zonder puntensysteem. Elke trekking tellen je nieuwe treffers gewoon op bij je totaal dit seizoen — de ranglijst toont iedereen gesorteerd op dat totaal aantal treffers." />
               </Blok>
             </>
           )}
