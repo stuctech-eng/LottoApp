@@ -4,9 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { subscribeSeizoen } from '@/lib/firestore-seizoenen';
-import { subscribeAlleTrekkingen, slaaTrekkingOpEnVerwerk } from '@/lib/firestore-trekkingen';
+import { subscribeAlleTrekkingen, subscribeResultaten, slaaTrekkingOpEnVerwerk } from '@/lib/firestore-trekkingen';
+import { subscribeAllUsers } from '@/lib/firestore-users';
 import { subscribeSpelConfig, DEFAULT_SPELCONFIG } from '@/lib/firestore-spelconfig';
-import { Trekking, Seizoen, SpelConfig } from '@/lib/types';
+import { Trekking, Seizoen, SpelConfig, Resultaat, User } from '@/lib/types';
 
 const LOTTO_UITSLAG_URL = 'https://lotto.nederlandseloterij.nl/trekkingsuitslag';
 
@@ -49,6 +50,83 @@ function TrekkingBallen({ nummers, bonusBal }: { nummers: number[]; bonusBal: nu
       {bonusBal !== null && (
         <div className="bal bal-bonus" style={{ width: 36, height: 36, fontSize: 11 }}>B·{bonusBal}</div>
       )}
+    </div>
+  );
+}
+
+/**
+ * "Laatste"-tab — alles in één scroll: getrokken nummers, winnaar
+ * (alleen bij écht 6/6 — nooit een tussenstand als "winst" tonen),
+ * en elke deelnemer met zijn eigen ticket + highlighting. Bewust
+ * eenvoudig gehouden: trekking → winnaar → deelnemers → geraakte
+ * nummers, verder niks — geen extra samenvattingen of statistieken.
+ */
+function LaatsteTrekkingView({ trekking, resultaten, leden }: { trekking: Trekking; resultaten: Resultaat[]; leden: User[] }) {
+  const winnaars = resultaten.filter(r => r.isWinnaar);
+
+  // Sortering: winnaar(s) eerst, dan op aantalGoed aflopend.
+  const gesorteerd = [...resultaten].sort((a, b) => {
+    if (a.isWinnaar !== b.isWinnaar) return a.isWinnaar ? -1 : 1;
+    return b.aantalGoed - a.aantalGoed;
+  });
+
+  return (
+    <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 8 }}>
+      <div style={{ background: 'linear-gradient(135deg,rgba(240,192,96,0.14),rgba(240,192,96,0.03)), var(--surface)', border: '1px solid rgba(240,192,96,0.32)', borderRadius: 16, padding: '16px 18px', textAlign: 'center' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 4 }}>{formatDatum(trekking.datum)}</div>
+        <div style={{ display: 'flex', gap: 7, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
+          {trekking.nummers.map(n => (
+            <div key={n} className="bal bal-normal" style={{ width: 36, height: 36, fontSize: 13, background: 'rgba(240,192,96,0.18)', borderColor: 'var(--gold)', color: 'var(--gold)' }}>{n}</div>
+          ))}
+        </div>
+      </div>
+
+      {winnaars.length > 0 && (
+        <div style={{ background: 'var(--gold-soft)', border: '1px solid rgba(240,192,96,0.3)', borderRadius: 14, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 20 }}>🏆</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)' }}>
+            {winnaars.map(w => `${w.userNaam} — 6/6 goed${w.prijsBedrag != null ? ` — €${w.prijsBedrag.toFixed(0)}` : ''}`).join(' · ')}
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, color: 'var(--muted)', textTransform: 'uppercase' }}>Deelnemers — {resultaten.length}</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {gesorteerd.map(r => {
+          const lid = leden.find(l => l.id === r.userId);
+          const ticket = lid?.tickets?.find(t => t.id === r.ticketId) ?? lid?.tickets?.[0];
+          const matchedSet = new Set(r.matchedNumbers);
+          return (
+            <div
+              key={r.id}
+              style={{
+                background: r.isWinnaar ? 'linear-gradient(135deg,rgba(240,192,96,0.1),rgba(240,192,96,0.02)), var(--surface)' : 'var(--surface)',
+                border: `1px solid ${r.isWinnaar ? 'rgba(240,192,96,0.32)' : 'var(--border)'}`,
+                borderRadius: 14, padding: '12px 14px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: r.isWinnaar ? 700 : 600, color: r.isWinnaar ? 'var(--gold)' : 'var(--white)' }}>
+                  {r.isWinnaar ? `🏆 ${r.userNaam}` : r.userNaam}
+                </div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: r.isWinnaar ? 'var(--gold)' : 'var(--muted)' }}>
+                  {r.aantalGoed}/6{r.isWinnaar && r.prijsBedrag != null ? ` · €${r.prijsBedrag.toFixed(0)}` : ''}
+                </div>
+              </div>
+              {ticket ? (
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {ticket.nummers.map(n => (
+                    <div key={n} className={`bal ${matchedSet.has(n) ? 'bal-hit' : 'bal-normal'}`} style={{ width: 24, height: 24, fontSize: 10 }}>{n}</div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Geen ticket bekend</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -326,6 +404,9 @@ function TrekkingPageContent() {
   const [spelConfig, setSpelConfig] = useState<SpelConfig>(DEFAULT_SPELCONFIG);
   const [laden, setLaden] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [tab, setTab] = useState<'laatste' | 'seizoen' | 'alle'>('laatste');
+  const [leden, setLeden] = useState<User[]>([]);
+  const [laatsteResultaten, setLaatsteResultaten] = useState<Resultaat[]>([]);
 
   const kanInvoeren = profile?.rol === 'beheerder';
 
@@ -333,8 +414,20 @@ function TrekkingPageContent() {
     const u1 = subscribeAlleTrekkingen(data => { setTrekkingen(data); setLaden(false); });
     const u2 = subscribeSeizoen(setSeizoen);
     const u3 = subscribeSpelConfig(setSpelConfig);
-    return () => { u1(); u2(); u3(); };
+    const u4 = subscribeAllUsers(setLeden);
+    return () => { u1(); u2(); u3(); u4(); };
   }, []);
+
+  const laatsteTrekking = trekkingen[0] ?? null;
+
+  useEffect(() => {
+    if (!laatsteTrekking) { setLaatsteResultaten([]); return; }
+    const unsub = subscribeResultaten(laatsteTrekking.id, setLaatsteResultaten);
+    return unsub;
+  }, [laatsteTrekking?.id]);
+
+  const trekkingenDitSeizoen = seizoen ? trekkingen.filter(t => t.seizoenId === seizoen.id) : trekkingen;
+  const zichtbareTrekkingen = tab === 'seizoen' ? trekkingenDitSeizoen : trekkingen;
 
   return (
     <>
@@ -365,6 +458,19 @@ function TrekkingPageContent() {
           </div>
         )}
 
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 8, padding: '0 20px 16px' }}>
+          {([['laatste', 'Laatste'], ['seizoen', 'Dit seizoen'], ['alle', 'Alle']] as [typeof tab, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{ flex: 1, textAlign: 'center', padding: '10px 4px', borderRadius: 12, fontSize: 12.5, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: "'DM Sans',sans-serif", background: tab === key ? 'var(--accent-soft)' : 'rgba(255,255,255,0.05)', color: tab === key ? 'var(--accent)' : 'var(--muted)' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {laden && (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
             <div style={{ width: 32, height: 32, border: '3px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -377,25 +483,34 @@ function TrekkingPageContent() {
           </div>
         )}
 
-        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
-          {trekkingen.map(t => (
-            <Link key={t.id} href={`/trekkingen/${t.id}`} style={{ textDecoration: 'none' }}>
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>{formatDatum(t.datum)}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Ingevoerd door {t.ingevoerdDoorNaam}</div>
+        {!laden && trekkingen.length > 0 && tab === 'laatste' && laatsteTrekking && (
+          <LaatsteTrekkingView trekking={laatsteTrekking} resultaten={laatsteResultaten} leden={leden} />
+        )}
+
+        {!laden && tab !== 'laatste' && (
+          <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
+            {zichtbareTrekkingen.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--muted)', fontSize: 13 }}>Nog geen trekkingen dit seizoen.</div>
+            )}
+            {zichtbareTrekkingen.map(t => (
+              <Link key={t.id} href={`/trekkingen/${t.id}`} style={{ textDecoration: 'none' }}>
+                <div className="card" style={{ padding: '16px 18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--white)' }}>{formatDatum(t.datum)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Ingevoerd door {t.ingevoerdDoorNaam}</div>
+                    </div>
+                    <span className={`badge ${t.verwerkt ? 'badge-green' : 'badge-warning'}`}>
+                      {t.verwerkt ? '✓ Verwerkt' : '⏳ Bezig'}
+                    </span>
                   </div>
-                  <span className={`badge ${t.verwerkt ? 'badge-green' : 'badge-warning'}`}>
-                    {t.verwerkt ? '✓ Verwerkt' : '⏳ Bezig'}
-                  </span>
+                  <TrekkingBallen nummers={t.nummers} bonusBal={t.bonusBal} />
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10 }}>Bekijk resultaten →</div>
                 </div>
-                <TrekkingBallen nummers={t.nummers} bonusBal={t.bonusBal} />
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 10 }}>Bekijk resultaten →</div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <nav className="bottom-nav">
