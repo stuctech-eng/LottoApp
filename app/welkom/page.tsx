@@ -34,6 +34,18 @@ function WelkomPageContent() {
   const [nummers, setNummers] = useState<string[]>(Array(TICKET_CONFIG.aantalNummers).fill(''));
   const [afrondenFout, setAfrondenFout] = useState<string | null>(null);
 
+  // Vult stap 6 vooraf in met wat er al bekend is — voor iemand die
+  // (zoals door de bug hierboven) al eerder telefoon/ticket had
+  // opgeslagen, maar bij wie alleen het laatste vlaggetje niet
+  // doorkwam. Die hoeft dan alleen nog te bevestigen, niet opnieuw
+  // te typen.
+  useEffect(() => {
+    if (profile?.telefoon) setTelefoon(profile.telefoon);
+    if (profile?.tickets?.[0]?.nummers?.length) {
+      setNummers(profile.tickets[0].nummers.map(n => String(n)));
+    }
+  }, [profile]);
+
   // Ontbrekend veld = true (bestaand lid) — nooit de onboarding
   // opnieuw tonen, ook niet bij een handmatig bezoek aan deze URL.
   const onboardingNodig = profile?.onboardingCompleted === false;
@@ -67,12 +79,19 @@ function WelkomPageContent() {
     }
     setAfrondenFout(null);
     setBezig(true);
+    // BUGFIX: navigeerde eerder altijd door, ook als een van de drie
+    // opslag-stappen mislukte (bijv. bij een netwerkhapering) — het
+    // vlaggetje onboardingCompleted bleef dan permanent op false
+    // hangen, terwijl telefoon/ticket soms al wél waren opgeslagen.
+    // Nu navigeert de pagina uitsluitend als alle drie zijn gelukt.
     try {
       await updateUserTelefoon(user.uid, telefoon.trim());
       await updateUserTickets(user.uid, [{ id: `ticket-${Date.now()}`, naam: 'Mijn ticket', nummers: nummersAlsGetallen }]);
       await updateDoc(doc(db, 'users', user.uid), { onboardingCompleted: true });
-    } finally {
       router.push('/dashboard');
+    } catch {
+      setAfrondenFout('Opslaan is niet gelukt — waarschijnlijk een netwerkhapering. Probeer het nog eens; wat al wel is opgeslagen, hoef je niet opnieuw in te vullen.');
+      setBezig(false);
     }
   };
 
